@@ -6,7 +6,8 @@ import javax.tools.JavaFileObject;
 import javax.tools.StandardJavaFileManager;
 import javax.tools.ToolProvider;
 import java.io.File;
-import java.io.FileWriter;
+import java.io.FileOutputStream;
+import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.lang.reflect.Method;
 import java.net.URL;
@@ -192,7 +193,8 @@ public final class DynamicOomClassGenerator {
         File sourceFile = new File(pkgDir, simpleName + ".java");
 
         // Emit source code lines
-        try (PrintWriter pw = new PrintWriter(new FileWriter(sourceFile))) {
+        try (PrintWriter pw = new PrintWriter(new OutputStreamWriter(
+                new FileOutputStream(sourceFile), StandardCharsets.UTF_8))) {
             pw.println("package " + pkg + ";");
             pw.println();
             pw.println("import java.util.ArrayList;");

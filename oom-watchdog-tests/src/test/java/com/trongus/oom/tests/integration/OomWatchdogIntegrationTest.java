@@ -124,7 +124,7 @@ public class OomWatchdogIntegrationTest {
     @Before
     public void setUp() {
         config = WatchdogConfig.defaults()
-                .pollIntervalMs(50L)        // fast polling for tests
+                .pollIntervalMs(100L)       // minimum allowed; fast enough for tests
                 .warningHeapThreshold(0.80)
                 .criticalHeapThreshold(0.90)
                 .dumpTypes(EnumSet.of(DumpType.THREAD))

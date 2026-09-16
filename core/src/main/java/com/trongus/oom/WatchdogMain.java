@@ -431,6 +431,34 @@ public final class WatchdogMain {
                 c.warnThreshold = 0.80;
                 c.critThreshold = 0.90;
             }
+            // Clamp poll interval to safe minimum
+            if (c.pollMs < 100L) {
+                System.err.println("[OomWatchdog] poll-ms must be >= 100; clamping to 100.");
+                c.pollMs = 100L;
+            }
+            // Validate port range
+            if (c.qradarPort < 1 || c.qradarPort > 65535) {
+                System.err.println("[OomWatchdog] qradar-port must be 1–65535; using default 514.");
+                c.qradarPort = 514;
+            }
+            // Validate threshold bounds (0.0, 1.0)
+            if (c.warnThreshold <= 0.0 || c.warnThreshold >= 1.0) {
+                System.err.println("[OomWatchdog] warn-threshold out of (0,1) range; using default 0.80.");
+                c.warnThreshold = 0.80;
+            }
+            if (c.critThreshold <= 0.0 || c.critThreshold >= 1.0) {
+                System.err.println("[OomWatchdog] crit-threshold out of (0,1) range; using default 0.90.");
+                c.critThreshold = 0.90;
+            }
+            if (c.gcThreshold <= 0.0 || c.gcThreshold >= 1.0) {
+                System.err.println("[OomWatchdog] gc-threshold out of (0,1) range; using default 0.50.");
+                c.gcThreshold = 0.50;
+            }
+            // Validate dump directory is non-blank
+            if (c.dumpDir == null || c.dumpDir.trim().isEmpty()) {
+                System.err.println("[OomWatchdog] dump-dir must not be blank; using default ./dumps.");
+                c.dumpDir = "./dumps";
+            }
             return c;
         }
 

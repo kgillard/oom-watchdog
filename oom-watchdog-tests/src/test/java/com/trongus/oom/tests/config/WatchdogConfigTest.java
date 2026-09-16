@@ -170,6 +170,90 @@ public class WatchdogConfigTest {
                 .build();
     }
 
+    /** Warning threshold of 0.0 (inclusive boundary) must be rejected. */
+    @Test(expected = IllegalArgumentException.class)
+    public void testValidationWarningThresholdZeroIsInvalid() {
+        WatchdogConfig.defaults()
+                .warningHeapThreshold(0.0)
+                .build();
+    }
+
+    /** Warning threshold of 1.0 (inclusive boundary) must be rejected. */
+    @Test(expected = IllegalArgumentException.class)
+    public void testValidationWarningThresholdOneIsInvalid() {
+        WatchdogConfig.defaults()
+                .warningHeapThreshold(1.0)
+                .criticalHeapThreshold(1.0)
+                .build();
+    }
+
+    /** Poll interval below 100 ms must be rejected. */
+    @Test(expected = IllegalArgumentException.class)
+    public void testValidationPollIntervalBelowMinimumIsInvalid() {
+        WatchdogConfig.defaults()
+                .pollIntervalMs(99L)
+                .build();
+    }
+
+    /** Poll interval of exactly 100 ms must be accepted. */
+    @Test
+    public void testValidationPollIntervalAtMinimumIsValid() {
+        WatchdogConfig cfg = WatchdogConfig.defaults()
+                .pollIntervalMs(100L)
+                .build();
+        assertEquals(100L, cfg.getPollIntervalMs());
+    }
+
+    /** QRadar port 0 must be rejected. */
+    @Test(expected = IllegalArgumentException.class)
+    public void testValidationQradarPortZeroIsInvalid() {
+        WatchdogConfig.defaults()
+                .qradarPort(0)
+                .build();
+    }
+
+    /** QRadar port 65536 must be rejected. */
+    @Test(expected = IllegalArgumentException.class)
+    public void testValidationQradarPort65536IsInvalid() {
+        WatchdogConfig.defaults()
+                .qradarPort(65536)
+                .build();
+    }
+
+    /** QRadar port 65535 (maximum valid port) must be accepted. */
+    @Test
+    public void testValidationQradarPortMaxValid() {
+        WatchdogConfig cfg = WatchdogConfig.defaults()
+                .qradarPort(65535)
+                .build();
+        assertEquals(65535, cfg.getQradarPort());
+    }
+
+    /** Blank dump directory must be rejected. */
+    @Test(expected = IllegalArgumentException.class)
+    public void testValidationBlankDumpDirectoryIsInvalid() {
+        WatchdogConfig.defaults()
+                .heapDumpDirectory("   ")
+                .build();
+    }
+
+    /** Leak detection window size of 1 must be rejected. */
+    @Test(expected = IllegalArgumentException.class)
+    public void testValidationLeakWindowSizeOneIsInvalid() {
+        WatchdogConfig.defaults()
+                .leakDetectionWindowSize(1)
+                .build();
+    }
+
+    /** Leak detection window size of 2 (minimum) must be accepted. */
+    @Test
+    public void testValidationLeakWindowSizeTwoIsValid() {
+        WatchdogConfig cfg = WatchdogConfig.defaults()
+                .leakDetectionWindowSize(2)
+                .build();
+        assertEquals(2, cfg.getLeakDetectionWindowSize());
+    }
+
     // ── dumpTypesFromString ───────────────────────────────────────────────────
 
     /** Single type lowercase CSV must parse to the correct singleton set. */

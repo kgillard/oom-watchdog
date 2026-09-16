@@ -5,11 +5,13 @@ import com.trongus.oom.model.JvmSnapshot;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.Locale;
 import java.util.TimeZone;
@@ -47,6 +49,13 @@ public final class QRadarAlertChannel implements AlertChannel {
 
     // Syslog facility 1 (user-level) + severity 5 (notice) = priority 13
     private static final int SYSLOG_PRIORITY = 13;
+
+    /** Maximum safe UDP syslog payload (bytes). IPv4 min MTU 576 − IP/UDP headers = 548;
+     *  practical Ethernet MTU gives ~65007 but we cap conservatively at 64 KB. */
+    private static final int MAX_UDP_PAYLOAD = 65_007;
+
+    /** TCP socket connect and read timeout in milliseconds (5 s). */
+    private static final int TCP_TIMEOUT_MS = 5_000;
 
     private final String    qradarHost;
     private final int       qradarPort;
@@ -153,16 +162,24 @@ public final class QRadarAlertChannel implements AlertChannel {
     // -------------------------------------------------------------------------
 
     private void sendUdp(byte[] payload) throws IOException {
+        // Truncate oversized payloads to the safe UDP limit to avoid silent fragmentation/drop.
+        byte[] safe = payload.length > MAX_UDP_PAYLOAD
+                ? Arrays.copyOf(payload, MAX_UDP_PAYLOAD)
+                : payload;
         try (DatagramSocket socket = new DatagramSocket()) {
-            InetAddress addr   = InetAddress.getByName(qradarHost);
-            DatagramPacket pkt = new DatagramPacket(payload, payload.length, addr, qradarPort);
+            InetAddress    addr = InetAddress.getByName(qradarHost);
+            DatagramPacket pkt  = new DatagramPacket(safe, safe.length, addr, qradarPort);
             socket.send(pkt);
         }
     }
 
     private void sendTcp(byte[] payload) throws IOException {
-        try (Socket socket = new Socket(qradarHost, qradarPort);
-             OutputStream out = socket.getOutputStream()) {
+        // Use an explicit connect timeout and SO_TIMEOUT to prevent the watchdog
+        // poll thread from blocking indefinitely on a slow or unreachable QRadar host.
+        try (Socket socket = new Socket()) {
+            socket.connect(new InetSocketAddress(qradarHost, qradarPort), TCP_TIMEOUT_MS);
+            socket.setSoTimeout(TCP_TIMEOUT_MS);
+            OutputStream out = socket.getOutputStream();
             out.write(payload);
             // Syslog over TCP uses newline as frame delimiter (RFC 6587 non-transparent framing)
             out.write('\n');

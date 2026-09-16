@@ -110,9 +110,37 @@ public final class WatchdogConfig {
         }
 
         public WatchdogConfig build() {
+            if (warningHeapThreshold <= 0.0 || warningHeapThreshold >= 1.0) {
+                throw new IllegalArgumentException(
+                    "warningHeapThreshold must be in (0.0, 1.0)");
+            }
+            if (criticalHeapThreshold <= 0.0 || criticalHeapThreshold >= 1.0) {
+                throw new IllegalArgumentException(
+                    "criticalHeapThreshold must be in (0.0, 1.0)");
+            }
             if (warningHeapThreshold >= criticalHeapThreshold) {
                 throw new IllegalArgumentException(
                     "warningHeapThreshold must be < criticalHeapThreshold");
+            }
+            if (gcOverheadThreshold <= 0.0 || gcOverheadThreshold >= 1.0) {
+                throw new IllegalArgumentException(
+                    "gcOverheadThreshold must be in (0.0, 1.0)");
+            }
+            if (pollIntervalMs < 100L) {
+                throw new IllegalArgumentException(
+                    "pollIntervalMs must be >= 100 ms");
+            }
+            if (leakDetectionWindowSize < 2) {
+                throw new IllegalArgumentException(
+                    "leakDetectionWindowSize must be >= 2");
+            }
+            if (qradarPort < 1 || qradarPort > 65535) {
+                throw new IllegalArgumentException(
+                    "qradarPort must be in [1, 65535]");
+            }
+            if (heapDumpDirectory == null || heapDumpDirectory.trim().isEmpty()) {
+                throw new IllegalArgumentException(
+                    "heapDumpDirectory must not be null or blank");
             }
             return new WatchdogConfig(this);
         }
