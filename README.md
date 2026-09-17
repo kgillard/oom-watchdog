@@ -4,8 +4,21 @@
 
 [![Build](https://img.shields.io/badge/build-passing-brightgreen)]()
 [![Tests](https://img.shields.io/badge/tests-189%20passing-brightgreen)]()
+[![Security Audit](https://img.shields.io/badge/security%20audit-3%20passes%20clean-brightgreen)]()
 [![JDK](https://img.shields.io/badge/JDK-8%20%E2%80%93%2026%2B-blue)]()
 [![Vendors](https://img.shields.io/badge/JVM-HotSpot%20%7C%20OpenJ9%20%7C%20GraalVM-blue)]()
+[![Release](https://img.shields.io/badge/release-v1.0.0-blue)](https://github.com/kgillard/oom-watchdog/releases/tag/v1.0.0)
+
+---
+
+## Download
+
+Pre-built JARs are available in the [v1.0.0 release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.0.0):
+
+| Artefact | Description | Size |
+|----------|-------------|------|
+| [`oom-watchdog.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.0.0/oom-watchdog.jar) | Fat JAR — monitoring agent + CLI entry point | ~79 KB |
+| [`test-harness.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.0.0/test-harness.jar) | Fat JAR — interactive OOM test harness | ~92 KB |
 
 ---
 
@@ -29,17 +42,22 @@ prevent dump storms.
 
 ## Quick start
 
-### 1 — Add to your project (jar on classpath)
+### 1 — Download and run
 
 ```bash
-java -cp oom-watchdog.jar:your-app.jar com.trongus.oom.WatchdogMain \
-    --heap-warning  0.80          \
-    --heap-critical 0.90          \
-    --gc-overhead   0.50          \
-    --poll-ms       5000          \
-    --dump-dir      /var/dumps    \
-    --dump-types    HEAP,THREAD   \
-    --log-file      /var/log/oom-watchdog.log
+# Download the release JAR
+curl -L -o oom-watchdog.jar \
+  https://github.com/kgillard/oom-watchdog/releases/download/v1.0.0/oom-watchdog.jar
+
+# Run against a target JVM process (monitoring mode)
+java -jar oom-watchdog.jar \
+    --warn-threshold 0.80          \
+    --crit-threshold 0.90          \
+    --gc-threshold   0.50          \
+    --poll-ms        5000          \
+    --dump-dir       /var/dumps    \
+    --dump-types     HEAP,THREAD   \
+    --log-file       /var/log/oom-watchdog.log
 ```
 
 ### 2 — Embed in your application
@@ -61,7 +79,7 @@ OomWatchdog watchdog = new OomWatchdog(
     Arrays.asList(
         new ConsoleAlertChannel(),
         new FileLogAlertChannel("/var/log/oom.log"),
-        new QRadarAlertChannel("siem.corp.com", 514, "UDP")
+        new QRadarAlertChannel("siem.corp.com", 514, Transport.UDP)
     ),
     new CompositeDumpService(config)
 );
@@ -84,18 +102,18 @@ chmod +x oom-watchdog-installer.sh
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--heap-warning <0.0–1.0>` | `0.80` | Heap usage fraction that triggers WARNING |
-| `--heap-critical <0.0–1.0>` | `0.90` | Heap usage fraction that triggers CRITICAL |
-| `--gc-overhead <0.0–1.0>` | `0.50` | GC CPU fraction that triggers WARNING |
-| `--poll-ms <ms>` | `5000` | Poll interval in milliseconds |
+| `--warn-threshold <0.0–1.0>` | `0.80` | Heap usage fraction that triggers WARNING |
+| `--crit-threshold <0.0–1.0>` | `0.90` | Heap usage fraction that triggers CRITICAL |
+| `--gc-threshold <0.0–1.0>` | `0.50` | GC CPU fraction that triggers WARNING |
+| `--poll-ms <ms>` | `5000` | Poll interval in milliseconds (minimum: 100) |
 | `--dump-dir <path>` | `./dumps` | Output directory for dump artefacts |
 | `--dump-types <list>` | _(none)_ | Comma-separated: `HEAP,THREAD,CLASS_HISTOGRAM,CORE` |
-| `--log-file <path>` | _(none)_ | Append structured alerts to this file |
-| `--qradar-host <host>` | `localhost` | QRadar / syslog target hostname |
-| `--qradar-port <port>` | `514` | QRadar / syslog target port |
-| `--qradar-proto <UDP\|TCP>` | `UDP` | Transport for QRadar LEEF 2.0 |
-| `--leak-window <n>` | `5` | Rolling window size for OLS leak-trend slope |
+| `--log-file <path>` | `./oom-watchdog.log` | Append structured alerts to this file |
+| `--qradar-host <host>` | _(disabled)_ | QRadar / syslog target hostname |
+| `--qradar-port <port>` | `514` | QRadar / syslog target port (1–65535) |
+| `--qradar-tcp` | _(off)_ | Use TCP instead of UDP for QRadar |
 | `--test-mode` | _(off)_ | Run OomSimulator and exit |
+| `--test-leak-secs <s>` | `20` | Slow-leak phase duration in test mode |
 | `--help` | | Print usage and exit |
 
 ---
@@ -110,7 +128,7 @@ OK  →  WARNING  →  CRITICAL  →  OOM_FIRING
 |-------|-----------|
 | `OK` | All metrics below thresholds |
 | `WARNING` | Heap > warning threshold **or** GC overhead > threshold **or** positive post-GC growth slope |
-| `CRITICAL` | Heap > critical threshold **or** GC overhead very high |
+| `CRITICAL` | Heap > critical threshold **or** (GC overhead > threshold **and** heap ≥ warning threshold) |
 | `OOM_FIRING` | `java.lang.OutOfMemoryError` imminent (reserved for future hooks) |
 
 ---
@@ -249,7 +267,7 @@ oom-watchdog/
 │       ├── DynamicOomClassGenerator.java
 │       ├── BuiltInHeapExhauster.java
 │       └── HarnessAlertRecorder.java
-└── oom-watchdog-tests/              JUnit 4 + Mockito 4 test suite (189 tests)
+└── oom-watchdog-tests/              JUnit 4 test suite (189 tests)
 ```
 
 ---
@@ -276,20 +294,21 @@ post-GC heap used
 
 ## Security
 
-Two security audit passes were performed against the full source tree.
-All 11 issues found were fixed; see [`ARCHITECTURE.md`](ARCHITECTURE.md#security-hardening-summary)
-for the complete per-issue table.  Highlights:
+Three security audit passes were performed against the full source tree.
+All 11 issues found were fixed in passes 1 and 2; pass 3 confirmed no further issues.
+See [`ARCHITECTURE.md`](ARCHITECTURE.md#security-hardening-summary) for the complete
+per-issue table.  Highlights:
 
 | Area | Hardening applied |
 |------|-------------------|
-| Config validation | `WatchdogConfig.build()` rejects all out-of-range values (thresholds, port, poll interval, etc.) |
-| QRadar TCP | 5-second connect + read timeout prevents poll-thread blocking |
-| QRadar UDP | Payload capped at 65 007 bytes to prevent datagram truncation |
-| `gcore` execution | Output path canonicalized; 60-second timeout + `destroyForcibly` |
-| Alert formatting | `AlertFormatter` sanitises all free-text fields before embedding |
-| Snapshot integrity | `JvmSnapshot.Builder` map setters take defensive copies |
-| Charset safety | All file writes use explicit `StandardCharsets.UTF_8` |
-| Thread safety | `HarnessAlertRecorder` counters use `AtomicInteger` |
+| Config validation | `WatchdogConfig.build()` rejects all out-of-range values (thresholds, port, poll interval, window size, dump directory) |
+| QRadar TCP | 5-second connect + read timeout prevents poll-thread blocking on unreachable hosts |
+| QRadar UDP | Payload capped at 65 007 bytes to prevent silent datagram truncation |
+| `gcore` execution | Output path canonicalized (`getCanonicalPath()`); 60-second timeout + `destroyForcibly()`; output capped at 4 096 bytes |
+| Alert formatting | `AlertFormatter.sanitiseMultiLine()` / `sanitiseSingleLine()` strip control characters and quote injection |
+| Snapshot integrity | `JvmSnapshot.Builder` map setters take defensive `LinkedHashMap` copies |
+| Charset safety | All file writes use explicit `StandardCharsets.UTF_8` — no platform-default charset risk |
+| Thread safety | `HarnessAlertRecorder` alert counters use `AtomicInteger.incrementAndGet()` |
 
 ---
 

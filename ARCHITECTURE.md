@@ -318,8 +318,9 @@ oom-watchdog/                  Maven multi-module root
 
 ## Security Hardening Summary
 
-Two security audit passes were performed.  The table below summarises every
-issue found and the fix applied.
+Three security audit passes were performed.  Passes 1 and 2 identified and
+fixed the 11 issues listed below.  Pass 3 reviewed all remaining source files
+and confirmed **no further issues** — the codebase is fully hardened.
 
 | # | File | Issue | Fix |
 |---|------|-------|-----|
@@ -334,3 +335,24 @@ issue found and the fix applied.
 | 9 | `AlertFormatter` | Free-text fields (`diagnosisNotes`, `processName`, `heapDumpPath`) embedded unsanitised | `sanitiseMultiLine()` strips control chars in human-readable output; `sanitiseSingleLine()` strips newlines + quotes in single-line output |
 | 10 | `JvmSnapshot.Builder` | Map setters stored caller's reference — mutation after build corrupts snapshot | Defensive `LinkedHashMap` copy taken in all three map setter methods |
 | 11 | `HarnessAlertRecorder` | `volatile int++` is not atomic under concurrent access | Replaced with `AtomicInteger.incrementAndGet()` |
+
+---
+
+## Release Artefacts
+
+The v1.0.0 release publishes two executable fat JARs built with `maven-shade-plugin`.
+Both are attached to the [GitHub release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.0.0).
+
+| Artefact | Main class | Contents |
+|----------|-----------|----------|
+| `oom-watchdog.jar` (~79 KB) | `com.trongus.oom.WatchdogMain` | `core` module + all runtime dependencies shaded |
+| `test-harness.jar` (~92 KB) | `com.trongus.oom.harness.TestHarnessMain` | `test-harness` + `core` modules shaded |
+
+### Build reproducibility
+
+```bash
+cd oom-watchdog
+mvn clean package -DskipTests -q
+# core/target/oom-watchdog.jar
+# test-harness/target/test-harness.jar
+```
