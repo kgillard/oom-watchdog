@@ -280,7 +280,7 @@ oom-watchdog/                  Maven multi-module root
 │       ├── BuiltInHeapExhauster.java
 │       └── HarnessAlertRecorder.java
 │
-└── oom-watchdog-tests/        JUnit 4 test suite (179 tests)
+└── oom-watchdog-tests/        JUnit 4 test suite (189 tests)
     └── src/test/java/com/trongus/oom/tests/
         ├── model/             OomRiskLevelTest, JvmSnapshotTest
         ├── config/            WatchdogConfigTest
@@ -303,6 +303,34 @@ oom-watchdog/                  Maven multi-module root
 | OLS slope on post-GC heap samples | Detects slow leaks that thresholds alone miss |
 | Episode deduplication in `OomWatchdog` | Prevents dump storms during a sustained critical episode |
 | Immutable `JvmSnapshot` with `withHeapDumpPath()` copy | Thread-safe, trivially testable, no shared mutable state |
+| Defensive copies in `JvmSnapshot.Builder` map setters | Caller-mutated maps cannot corrupt in-flight snapshots |
+| `AlertFormatter` sanitises all free-text fields | Prevents control-character injection into log/syslog output |
 | `AlertFormatter` package-private | Formatting is an implementation detail; only alert channels need it |
-| `WatchdogConfig` immutable builder | Config cannot drift at runtime; safe to pass across threads |
+| `WatchdogConfig` immutable builder with full validation | Config cannot drift at runtime; rejects out-of-range values at construction |
 | LEEF 2.0 for QRadar | Native IBM SIEM format; field-indexed for high-speed correlation |
+| TCP socket connect + read timeout (5 s) | Slow/unreachable QRadar host cannot block the watchdog poll thread |
+| UDP payload capped at 65 007 bytes | Prevents silent datagram truncation on standard Ethernet MTUs |
+| `gcore` path canonicalization + 60 s timeout | Prevents path-traversal; avoids hung dump process blocking the JVM |
+| `AtomicInteger` counters in `HarnessAlertRecorder` | Thread-safe read-modify-write without external synchronisation |
+| All file writes use explicit `StandardCharsets.UTF_8` | Consistent output across all platforms; no platform-default charset risk |
+
+---
+
+## Security Hardening Summary
+
+Two security audit passes were performed.  The table below summarises every
+issue found and the fix applied.
+
+| # | File | Issue | Fix |
+|---|------|-------|-----|
+| 1 | `WatchdogConfig` | No range validation on numeric fields | `build()` rejects thresholds outside `(0,1)`, `pollIntervalMs < 100`, `leakDetectionWindowSize < 2`, `qradarPort` outside `[1,65535]`, blank `heapDumpDirectory` |
+| 2 | `WatchdogMain` | CLI values passed to builder without validation | Parser clamps/rejects out-of-range values before calling `build()` |
+| 3 | `QRadarAlertChannel` | TCP socket had no timeout | `socket.connect()` + `setSoTimeout()` both set to 5 s |
+| 4 | `QRadarAlertChannel` | UDP payload not length-checked | Payload truncated to `MAX_UDP_PAYLOAD = 65 007` bytes before send |
+| 5 | `CoreDumpStrategy` (+ `HotSpotHeapDumpService`) | `gcore` had no timeout; unbounded output accumulation | `waitFor(60, SECONDS)` + `destroyForcibly()`; output capped at 4 096 bytes |
+| 6 | `CoreDumpStrategy` (+ `HotSpotHeapDumpService`) | `outputPath` not canonicalized — path-traversal risk | `File.getCanonicalPath()` applied before passing to `ProcessBuilder` |
+| 7 | `DynamicOomClassGenerator` | `FileWriter` used platform default charset | Replaced with `OutputStreamWriter(…, UTF_8)` |
+| 8 | `HotSpotHeapDumpService` | All three `FileWriter` usages used platform default charset | Replaced with `OutputStreamWriter(…, UTF_8)` |
+| 9 | `AlertFormatter` | Free-text fields (`diagnosisNotes`, `processName`, `heapDumpPath`) embedded unsanitised | `sanitiseMultiLine()` strips control chars in human-readable output; `sanitiseSingleLine()` strips newlines + quotes in single-line output |
+| 10 | `JvmSnapshot.Builder` | Map setters stored caller's reference — mutation after build corrupts snapshot | Defensive `LinkedHashMap` copy taken in all three map setter methods |
+| 11 | `HarnessAlertRecorder` | `volatile int++` is not atomic under concurrent access | Replaced with `AtomicInteger.incrementAndGet()` |

@@ -5,9 +5,22 @@ import com.trongus.oom.model.JvmSnapshot;
 import java.util.Map;
 
 /**
- * Shared formatting utilities for alert messages.
- * All alert channels produce a consistent human-readable event summary from
- * a {@link JvmSnapshot} without duplicating formatting logic.
+ * Shared, stateless formatting utilities for OOM alert messages.
+ *
+ * <p>Both {@link #toHumanReadable(JvmSnapshot)} and {@link #toSingleLine(JvmSnapshot)}
+ * sanitise all free-text fields (diagnosis notes, process name, heap dump path) before
+ * embedding them so that special characters cannot break the output format.
+ *
+ * <p>This class is package-private; only alert-channel implementations within this
+ * package may use it directly.
+ *
+ * @author Trongus OOM Watchdog
+ * @version 1.0.0
+ * @since 1.0.0
+ * @see AlertChannel
+ * @see FileLogAlertChannel
+ * @see ConsoleAlertChannel
+ * @see QRadarAlertChannel
  */
 final class AlertFormatter {
 
@@ -16,14 +29,47 @@ final class AlertFormatter {
     private static final long MB = 1024L * 1024L;
 
     /**
+     * Sanitises a free-text field for safe embedding in human-readable multi-line output.
+     * Strips ASCII control characters (except horizontal space) that could spoof
+     * section boundaries or corrupt log parsing.
+     *
+     * @param input raw field value; {@code null} is treated as empty
+     * @return sanitised string
+     */
+    private static String sanitiseMultiLine(String input) {
+        if (input == null) return "";
+        // Replace control chars (0x00-0x1F except 0x20 space) and DEL with space
+        return input.replaceAll("[\\x00-\\x1F\\x7F]", " ");
+    }
+
+    /**
+     * Sanitises a free-text field for safe embedding in a single-line structured record.
+     * Removes newlines, carriage returns, and double-quote characters so that
+     * key=value parsers are not confused.
+     *
+     * @param input raw field value; {@code null} is treated as empty
+     * @return sanitised string (single-line, no quotes)
+     */
+    private static String sanitiseSingleLine(String input) {
+        if (input == null) return "";
+        return input.replace('\n', ' ').replace('\r', ' ').replace('"', '\'');
+    }
+
+    /**
      * Returns a multi-line, human-readable summary of the snapshot suitable
      * for console output, log files, or email bodies.
+     *
+     * <p>All free-text fields (process name, diagnosis notes, heap dump path) are
+     * sanitised via {@link #sanitiseMultiLine(String)} before embedding.
+     *
+     * @param snap the snapshot to format; must not be {@code null}
+     * @return formatted multi-line string
      */
     static String toHumanReadable(JvmSnapshot snap) {
         StringBuilder sb = new StringBuilder();
         sb.append("=== JVM OOM Alert ===\n");
         sb.append(String.format("  Severity   : %s%n",  snap.getRiskLevel()));
-        sb.append(String.format("  Process    : %s%n",  snap.getProcessName()));
+        sb.append(String.format("  Process    : %s%n",  sanitiseMultiLine(snap.getProcessName())));
         sb.append(String.format("  Timestamp  : %tc%n", snap.getTimestampMs()));
         sb.append("\n-- Heap --\n");
         sb.append(String.format("  Used       : %d MB%n",      snap.getHeapUsedBytes()      / MB));
@@ -65,10 +111,10 @@ final class AlertFormatter {
             sb.append(String.format("  Growth rate    : %.2f MB/hour%n", mbPerHour));
         }
         sb.append("\n-- Diagnosis --\n");
-        sb.append("  ").append(snap.getDiagnosisNotes()).append("\n");
+        sb.append("  ").append(sanitiseMultiLine(snap.getDiagnosisNotes())).append("\n");
         if (snap.getHeapDumpPath() != null) {
             sb.append("\n-- Heap Dump --\n");
-            sb.append("  Path: ").append(snap.getHeapDumpPath()).append("\n");
+            sb.append("  Path: ").append(sanitiseMultiLine(snap.getHeapDumpPath())).append("\n");
         }
         sb.append("=====================\n");
         return sb.toString();
@@ -77,6 +123,13 @@ final class AlertFormatter {
     /**
      * Returns a compact single-line summary suitable for syslog payloads or
      * structured log entries.
+     *
+     * <p>All free-text fields are sanitised via {@link #sanitiseSingleLine(String)}:
+     * newlines are replaced with spaces and double-quotes are replaced with single-quotes
+     * so that the {@code diagnosis="..."} field is never broken by content.
+     *
+     * @param snap the snapshot to format; must not be {@code null}
+     * @return single-line key=value string
      */
     static String toSingleLine(JvmSnapshot snap) {
         double slope  = snap.getPostGcHeapGrowthRatePerMs();
@@ -89,7 +142,7 @@ final class AlertFormatter {
           + "nonHeapUsedMB=%d gcOverheadPct=%.1f totalGcTimeMs=%d postGcGrowth=%s "
           + "diagnosis=\"%s\"%s",
             snap.getRiskLevel(),
-            snap.getProcessName(),
+            sanitiseSingleLine(snap.getProcessName()),
             snap.getHeapUsedBytes()     / MB,
             snap.getHeapMaxBytes()      / MB,
             snap.getHeapUsedRatio()     * 100,
@@ -97,7 +150,8 @@ final class AlertFormatter {
             snap.getGcOverheadRatio()   * 100,
             snap.getTotalGcTimeMs(),
             growth,
-            snap.getDiagnosisNotes(),
-            snap.getHeapDumpPath() != null ? " heapDump=" + snap.getHeapDumpPath() : "");
+            sanitiseSingleLine(snap.getDiagnosisNotes()),
+            snap.getHeapDumpPath() != null
+                    ? " heapDump=" + sanitiseSingleLine(snap.getHeapDumpPath()) : "");
     }
 }

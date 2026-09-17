@@ -207,8 +207,8 @@ public final class TestHarnessMain {
     private static void printResults(HarnessAlertRecorder recorder) {
         System.out.println();
         System.out.println("[Harness] === Test Results ===");
-        System.out.printf("[Harness]   WARNING alerts fired   : %d%n", recorder.warnCount);
-        System.out.printf("[Harness]   CRITICAL alerts fired  : %d%n", recorder.critCount);
+        System.out.printf("[Harness]   WARNING alerts fired   : %d%n", recorder.warnCount.get());
+        System.out.printf("[Harness]   CRITICAL alerts fired  : %d%n", recorder.critCount.get());
         System.out.printf("[Harness]   Dump paths recorded    : %s%n", recorder.dumpPaths);
         System.out.println("[Harness] ====================");
     }

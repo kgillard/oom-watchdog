@@ -6,6 +6,7 @@ import com.trongus.oom.alert.AlertChannel;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Thread-safe, in-memory {@link AlertChannel} implementation used by the test harness
@@ -28,11 +29,17 @@ import java.util.List;
  */
 final class HarnessAlertRecorder implements AlertChannel {
 
-    /** Cumulative tally of {@link OomRiskLevel#WARNING} alerts received during the test run. */
-    volatile int warnCount = 0;
+    /**
+     * Cumulative tally of {@link OomRiskLevel#WARNING} alerts received during the test run.
+     * Uses {@link AtomicInteger} for thread-safe increment-and-read without external locking.
+     */
+    final AtomicInteger warnCount = new AtomicInteger(0);
 
-    /** Cumulative tally of {@link OomRiskLevel#CRITICAL} alerts received during the test run. */
-    volatile int critCount = 0;
+    /**
+     * Cumulative tally of {@link OomRiskLevel#CRITICAL} alerts received during the test run.
+     * Uses {@link AtomicInteger} for thread-safe increment-and-read without external locking.
+     */
+    final AtomicInteger critCount = new AtomicInteger(0);
 
     /** Synchronized list of file paths where diagnostic dumps were written upon escalation. */
     final List<String> dumpPaths = new ArrayList<>();
@@ -51,13 +58,12 @@ final class HarnessAlertRecorder implements AlertChannel {
      */
     @Override
     public void alert(JvmSnapshot snapshot) {
-        // Increment warning alert count if snapshot escalated to WARNING
+        // Atomically increment the appropriate counter
         if (snapshot.getRiskLevel() == OomRiskLevel.WARNING) {
-            warnCount++;
+            warnCount.incrementAndGet();
         }
-        // Increment critical alert count if snapshot escalated to CRITICAL
         if (snapshot.getRiskLevel() == OomRiskLevel.CRITICAL) {
-            critCount++;
+            critCount.incrementAndGet();
         }
         // Store any recorded dump artifact paths in the synchronized collection
         if (snapshot.getHeapDumpPath() != null) {

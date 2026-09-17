@@ -2,25 +2,30 @@ package com.trongus.oom.dump;
 
 import com.trongus.oom.config.WatchdogConfig;
 import com.trongus.oom.model.JvmSnapshot;
+import com.trongus.oom.platform.JvmPlatform;
 
 import javax.management.MBeanServer;
 import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileWriter;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
 import java.lang.management.LockInfo;
 import java.lang.management.ManagementFactory;
 import java.lang.management.MonitorInfo;
 import java.lang.management.ThreadInfo;
 import java.lang.management.ThreadMXBean;
 import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Cross-vendor, multi-type diagnostic dump service.
@@ -187,34 +192,56 @@ public final class HotSpotHeapDumpService implements HeapDumpService {
     }
 
     private String tryGcore(JvmSnapshot snapshot) {
-        // Extract numeric PID from "pid@host"
-        String pidToken = ManagementFactory.getRuntimeMXBean().getName().split("@")[0];
-        String outPath  = buildPath(snapshot, "core", ".core");
+        // Use the reliable PID from JvmPlatform rather than parsing the MXBean name
+        long pid = JvmPlatform.PID;
+        if (pid < 0) {
+            System.err.println("[OomWatchdog][Dump] CORE: cannot determine PID, skipping gcore.");
+            return null;
+        }
+        String outPath = buildPath(snapshot, "core", ".core");
+
+        // Canonicalize to prevent path-traversal via user-supplied dump directory
+        String safePath;
         try {
-            // gcore writes to <outPath>.<pid> but we specify the base
-            ProcessBuilder pb = new ProcessBuilder("gcore", "-o", outPath, pidToken);
+            safePath = new File(outPath).getCanonicalPath();
+        } catch (IOException e) {
+            System.err.println("[OomWatchdog][Dump] CORE: invalid output path: " + e.getMessage());
+            return null;
+        }
+
+        try {
+            // Arguments as list — no shell interpolation, no injection risk
+            ProcessBuilder pb = new ProcessBuilder("gcore", "-o", safePath, String.valueOf(pid));
             pb.redirectErrorStream(true);
             Process proc = pb.start();
 
-            // Drain output so the child does not block
+            // Drain output; cap at 4096 bytes to prevent unbounded accumulation
             StringBuilder output = new StringBuilder();
             try (BufferedReader br = new BufferedReader(new InputStreamReader(proc.getInputStream()))) {
                 String line;
                 while ((line = br.readLine()) != null) {
                     output.append(line).append('\n');
+                    if (output.length() > 4096) break;
                 }
             }
 
-            int exit = proc.waitFor();
+            // 60-second hard timeout; destroyForcibly if hung
+            boolean finished = proc.waitFor(60, TimeUnit.SECONDS);
+            if (!finished) {
+                proc.destroyForcibly();
+                System.err.println("[OomWatchdog][Dump] gcore timed out after 60 s.");
+                return null;
+            }
+            int exit = proc.exitValue();
             if (exit == 0) {
-                System.out.println("[OomWatchdog][Dump] CORE (gcore): " + outPath);
-                return new File(outPath).getAbsolutePath();
+                System.out.println("[OomWatchdog][Dump] CORE (gcore): " + safePath);
+                return new File(safePath).getAbsolutePath();
             } else {
                 System.err.println("[OomWatchdog][Dump] CORE gcore exit " + exit + ": " + output);
                 return null;
             }
         } catch (IOException e) {
-            // gcore not on PATH
+            // gcore not on PATH — expected on many systems
             return null;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -233,15 +260,16 @@ public final class HotSpotHeapDumpService implements HeapDumpService {
                 threadMx.isObjectMonitorUsageSupported(),
                 threadMx.isSynchronizerUsageSupported());
 
-        try (FileWriter fw = new FileWriter(path)) {
-            fw.write("=== Thread Dump ===\n");
-            fw.write("Process : " + snapshot.getProcessName() + "\n");
-            fw.write("Time    : " + new Date(snapshot.getTimestampMs()) + "\n");
-            fw.write("Threads : " + threads.length + "\n\n");
+        try (PrintWriter pw = new PrintWriter(new OutputStreamWriter(
+                new FileOutputStream(path), StandardCharsets.UTF_8))) {
+            pw.write("=== Thread Dump ===\n");
+            pw.write("Process : " + snapshot.getProcessName() + "\n");
+            pw.write("Time    : " + new Date(snapshot.getTimestampMs()) + "\n");
+            pw.write("Threads : " + threads.length + "\n\n");
 
             for (ThreadInfo ti : threads) {
-                fw.write(formatThreadInfo(ti));
-                fw.write("\n");
+                pw.write(formatThreadInfo(ti));
+                pw.write("\n");
             }
         } catch (IOException e) {
             System.err.println("[OomWatchdog][Dump] THREAD write error: " + e.getMessage());
@@ -320,11 +348,12 @@ public final class HotSpotHeapDumpService implements HeapDumpService {
                     new Object[]{ new String[0] },
                     new String[]{ String[].class.getName() });
 
-            try (FileWriter fw = new FileWriter(path)) {
-                fw.write("=== Class Histogram ===\n");
-                fw.write("Process : " + snapshot.getProcessName() + "\n");
-                fw.write("Time    : " + new Date(snapshot.getTimestampMs()) + "\n\n");
-                if (result != null) fw.write(result);
+            try (PrintWriter pw = new PrintWriter(new OutputStreamWriter(
+                    new FileOutputStream(path), StandardCharsets.UTF_8))) {
+                pw.write("=== Class Histogram ===\n");
+                pw.write("Process : " + snapshot.getProcessName() + "\n");
+                pw.write("Time    : " + new Date(snapshot.getTimestampMs()) + "\n\n");
+                if (result != null) pw.write(result);
             }
             System.out.println("[OomWatchdog][Dump] CLASS_HISTOGRAM (HotSpot DiagnosticCommand): " + path);
             return new File(path).getAbsolutePath();
@@ -349,14 +378,15 @@ public final class HotSpotHeapDumpService implements HeapDumpService {
     }
 
     private String writePoolSummary(String path, JvmSnapshot snapshot) {
-        try (FileWriter fw = new FileWriter(path)) {
-            fw.write("=== Memory Pool Summary (class histogram not available) ===\n");
-            fw.write("Process : " + snapshot.getProcessName() + "\n");
-            fw.write("Time    : " + new Date(snapshot.getTimestampMs()) + "\n\n");
-            fw.write(String.format("%-45s  %12s%n", "Pool", "Used (bytes)"));
-            fw.write(String.format("%-45s  %12s%n", "----", "------------"));
+        try (PrintWriter pw = new PrintWriter(new OutputStreamWriter(
+                new FileOutputStream(path), StandardCharsets.UTF_8))) {
+            pw.write("=== Memory Pool Summary (class histogram not available) ===\n");
+            pw.write("Process : " + snapshot.getProcessName() + "\n");
+            pw.write("Time    : " + new Date(snapshot.getTimestampMs()) + "\n\n");
+            pw.write(String.format("%-45s  %12s%n", "Pool", "Used (bytes)"));
+            pw.write(String.format("%-45s  %12s%n", "----", "------------"));
             for (java.util.Map.Entry<String, Long> e : snapshot.getPoolUsedBytes().entrySet()) {
-                fw.write(String.format("%-45s  %,12d%n", e.getKey(), e.getValue()));
+                pw.write(String.format("%-45s  %,12d%n", e.getKey(), e.getValue()));
             }
         } catch (IOException e) {
             System.err.println("[OomWatchdog][Dump] HISTOGRAM write error: " + e.getMessage());

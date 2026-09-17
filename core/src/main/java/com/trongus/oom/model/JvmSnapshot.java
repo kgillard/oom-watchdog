@@ -364,12 +364,21 @@ public final class JvmSnapshot {
         public Builder nonHeapUsedBytes(long v)            { this.nonHeapUsedBytes = v; return this; }
         /** @param v non-heap max bytes (−1 if unlimited); @return {@code this} */
         public Builder nonHeapMaxBytes(long v)             { this.nonHeapMaxBytes = v; return this; }
-        /** @param v pool name → used bytes map; @return {@code this} */
-        public Builder poolUsedBytes(Map<String,Long> v)   { this.poolUsedBytes = v; return this; }
-        /** @param v GC name → count map; @return {@code this} */
-        public Builder gcCollectionCounts(Map<String,Long> v)  { this.gcCollectionCounts = v; return this; }
-        /** @param v GC name → time ms map; @return {@code this} */
-        public Builder gcCollectionTimesMs(Map<String,Long> v) { this.gcCollectionTimesMs = v; return this; }
+        /** @param v pool name → used bytes map (defensive copy taken); @return {@code this} */
+        public Builder poolUsedBytes(Map<String,Long> v)   {
+            this.poolUsedBytes = v == null ? new LinkedHashMap<>() : new LinkedHashMap<>(v);
+            return this;
+        }
+        /** @param v GC name → count map (defensive copy taken); @return {@code this} */
+        public Builder gcCollectionCounts(Map<String,Long> v) {
+            this.gcCollectionCounts = v == null ? new LinkedHashMap<>() : new LinkedHashMap<>(v);
+            return this;
+        }
+        /** @param v GC name → time ms map (defensive copy taken); @return {@code this} */
+        public Builder gcCollectionTimesMs(Map<String,Long> v) {
+            this.gcCollectionTimesMs = v == null ? new LinkedHashMap<>() : new LinkedHashMap<>(v);
+            return this;
+        }
         /** @param v total GC ms; @return {@code this} */
         public Builder totalGcTimeMs(long v)               { this.totalGcTimeMs = v; return this; }
         /** @param v JVM uptime ms; @return {@code this} */

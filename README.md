@@ -3,7 +3,7 @@
 > **Preemptively detect and alert on JVM Out-of-Memory conditions — before the process crashes.**
 
 [![Build](https://img.shields.io/badge/build-passing-brightgreen)]()
-[![Tests](https://img.shields.io/badge/tests-179%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-189%20passing-brightgreen)]()
 [![JDK](https://img.shields.io/badge/JDK-8%20%E2%80%93%2026%2B-blue)]()
 [![Vendors](https://img.shields.io/badge/JVM-HotSpot%20%7C%20OpenJ9%20%7C%20GraalVM-blue)]()
 
@@ -211,7 +211,7 @@ mvn clean package -q          # produces core/target/oom-watchdog.jar
 
 ```bash
 mvn test -pl oom-watchdog-tests
-# Tests run: 179, Failures: 0, Errors: 0, Skipped: 0
+# Tests run: 189, Failures: 0, Errors: 0, Skipped: 0
 ```
 
 ### Generate self-extracting installer
@@ -249,7 +249,7 @@ oom-watchdog/
 │       ├── DynamicOomClassGenerator.java
 │       ├── BuiltInHeapExhauster.java
 │       └── HarnessAlertRecorder.java
-└── oom-watchdog-tests/              JUnit 4 + Mockito 4 test suite (179 tests)
+└── oom-watchdog-tests/              JUnit 4 + Mockito 4 test suite (189 tests)
 ```
 
 ---
@@ -271,6 +271,25 @@ post-GC heap used
        └──────────────▶ time
          slope = +42 MB/hour → WARNING (leak trend)
 ```
+
+---
+
+## Security
+
+Two security audit passes were performed against the full source tree.
+All 11 issues found were fixed; see [`ARCHITECTURE.md`](ARCHITECTURE.md#security-hardening-summary)
+for the complete per-issue table.  Highlights:
+
+| Area | Hardening applied |
+|------|-------------------|
+| Config validation | `WatchdogConfig.build()` rejects all out-of-range values (thresholds, port, poll interval, etc.) |
+| QRadar TCP | 5-second connect + read timeout prevents poll-thread blocking |
+| QRadar UDP | Payload capped at 65 007 bytes to prevent datagram truncation |
+| `gcore` execution | Output path canonicalized; 60-second timeout + `destroyForcibly` |
+| Alert formatting | `AlertFormatter` sanitises all free-text fields before embedding |
+| Snapshot integrity | `JvmSnapshot.Builder` map setters take defensive copies |
+| Charset safety | All file writes use explicit `StandardCharsets.UTF_8` |
+| Thread safety | `HarnessAlertRecorder` counters use `AtomicInteger` |
 
 ---
 
