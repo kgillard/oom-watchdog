@@ -24,11 +24,20 @@ and are documented in detail below.
 4. [Example 02 — Multiple alert channels + custom channel](#4-example-02--multiple-alert-channels)
 5. [Example 03 — Automatic dump capture on CRITICAL](#5-example-03--dump-on-critical)
 6. [Example 04 — Custom implementations of all extension points](#6-example-04--custom-implementations)
-7. [Example 05 — QRadar LEEF 2.0 syslog integration](#7-example-05--qradar-integration)
-8. [Example 06 — Framework integration (Spring Boot, health checks, metrics)](#8-example-06--framework-integration)
-9. [Extension point reference](#9-extension-point-reference)
-10. [Security notes for custom implementations](#10-security-notes-for-custom-implementations)
-11. [Building the examples](#11-building-the-examples)
+7. [Example 05 — QRadar LEEF 2.0 syslog integration (basic)](#7-example-05--qradar-integration-basic)
+8. [Example 07 — QRadar advanced patterns](#8-example-07--qradar-advanced-patterns)
+   - [LEEF 2.0 wire format (complete)](#81-leef-20-wire-format-complete)
+   - [QRadar log source setup](#82-qradar-log-source-setup)
+   - [Pattern 1: CRITICAL-only forwarding](#83-pattern-1-critical-only-forwarding)
+   - [Pattern 2: Rate-limited channel](#84-pattern-2-rate-limited-channel)
+   - [Pattern 3: Environment-tagged events](#85-pattern-3-environment-tagged-events)
+   - [Pattern 4: Primary / failover channel](#86-pattern-4-primaryfailover-channel)
+   - [TLS-encrypted syslog relay](#87-tls-encrypted-syslog-relay)
+   - [QRadar AQL correlation queries](#88-qradar-aql-correlation-queries)
+9. [Example 06 — Framework integration (Spring Boot, health checks, metrics)](#9-example-06--framework-integration)
+10. [Extension point reference](#10-extension-point-reference)
+11. [Security notes for custom implementations](#11-security-notes-for-custom-implementations)
+12. [Building the examples](#12-building-the-examples)
 
 ---
 
@@ -38,7 +47,7 @@ and are documented in detail below.
 
 ```bash
 curl -L -o oom-watchdog.jar \
-  https://github.com/kgillard/oom-watchdog/releases/download/v1.0.0/oom-watchdog.jar
+  https://github.com/kgillard/oom-watchdog/releases/download/v1.1.0/oom-watchdog.jar
 ```
 
 No installation, no classpath setup — the JAR is a self-contained fat JAR with no
@@ -416,54 +425,343 @@ public final class UploadingDumpService implements HeapDumpService {
 
 ---
 
-## 7. Example 05 — QRadar Integration
+## 7. Example 05 — QRadar Integration (basic)
 
 **File:** [`Example05QRadarIntegration.java`](core/src/main/java/com/trongus/oom/examples/Example05QRadarIntegration.java)
 
-Full QRadar LEEF 2.0 syslog integration over UDP or TCP.
-
-### LEEF 2.0 event format
-
-Each alert is a syslog RFC 3164 packet containing:
-
-```
-<13>Sep 17 08:00:00 prod-host LEEF:2.0|IBM|OomWatchdog|1.0|OOM_ALERT|
-devTime=Sep 17 2025 08:00:00.000 +0000	sev=9	src=prod-host
-heapUsedMB=921	heapMaxMB=1024	heapPct=90.0
-nonHeapUsedMB=128	gcOverheadPct=23.8	totalGcTimeMs=14300
-postGcGrowth=42.30 MB/h	diagnosis=...
-```
-
-The `sev` field maps to QRadar's 1–10 scale:
-- `WARNING` → `sev=5`
-- `CRITICAL` → `sev=9`
-- `OOM_FIRING` → `sev=10`
-
-### Transport selection
+The simplest QRadar integration: one UDP channel and one (optional) TCP channel
+running alongside the console alert channel.
 
 ```java
-// UDP — fire-and-forget, lowest latency, standard syslog port
+// UDP — fire-and-forget, lowest latency (default for most syslog deployments)
 QRadarAlertChannel udp = new QRadarAlertChannel(
-        "siem.corp.com", 514, QRadarAlertChannel.Transport.UDP);
+        host, port, QRadarAlertChannel.Transport.UDP);
 
-// TCP — guaranteed delivery, 5-second timeout
+// TCP — guaranteed delivery, fresh connection per alert, 5-second timeout
 QRadarAlertChannel tcp = new QRadarAlertChannel(
-        "siem.corp.com", 1514, QRadarAlertChannel.Transport.TCP);
+        host, port, QRadarAlertChannel.Transport.TCP);
+
+OomWatchdog watchdog = new OomWatchdog(config, collector, assessor,
+        Arrays.asList(new ConsoleAlertChannel(), udp), dumpService);
+watchdog.start();
 ```
 
-Use UDP for high-frequency polling on a reliable LAN.  Use TCP when you need reliable
-delivery (compliance requirements, WAN links, or critical-only notifications).
-
-### QRadar log source configuration
-
-In the QRadar console, add a **Universal DSM** or **syslog** log source pointing at
-the machine running OOM Watchdog.  The LEEF header
-(`LEEF:2.0|IBM|OomWatchdog|1.0|OOM_ALERT`) is recognised automatically by QRadar's
-LEEF parser.
+**Run it:**
+```bash
+java -cp oom-watchdog.jar com.trongus.oom.examples.Example05QRadarIntegration \
+     192.168.1.100 514
+```
 
 ---
 
-## 8. Example 06 — Framework Integration
+## 8. Example 07 — QRadar Advanced Patterns
+
+**File:** [`Example07QRadarAdvanced.java`](core/src/main/java/com/trongus/oom/examples/Example07QRadarAdvanced.java)
+
+Covers every production QRadar integration concern: event format anatomy, log source
+configuration, CRITICAL-only filtering, rate limiting, environment tagging, primary/failover
+resilience, TLS relay, and AQL correlation queries.
+
+### 8.1 LEEF 2.0 wire format (complete)
+
+Every alert emitted by `QRadarAlertChannel` is a syslog RFC 3164 message with a LEEF 2.0
+payload.  The complete wire format for a CRITICAL event (tab characters shown as `→`):
+
+```
+<13>Sep 17 08:00:00 prod-host LEEF:2.0|IBM|OomWatchdog|1.1|OOM_CRITICAL|
+sev=9→cat=JVM_OOM_Risk→process=98765@prod-host
+heapUsedMB=921→heapMaxMB=1024→heapPct=90.0
+nonHeapUsedMB=128→gcOverheadPct=23.8→totalGcTimeMs=14300
+gc_G1_Young_Generation_count=1420→gc_G1_Young_Generation_timeMs=6200
+gc_G1_Old_Generation_count=3→gc_G1_Old_Generation_timeMs=8100
+postGcGrowth=42.30 MB/h→riskLevel=CRITICAL
+heapDump=/var/dumps/oom_heap_98765_20251017_080000_001.hprof
+msg=[Assessment] CRITICAL – OOM imminent. Heap at 90.0% ...
+```
+
+**Field reference:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `sev` | int 1–10 | QRadar severity: WARNING=5, CRITICAL=9, OOM_FIRING=10 |
+| `cat` | string | Always `JVM_OOM_Risk` — use for QRadar log source filtering |
+| `process` | string | JVM process name from `RuntimeMXBean.getName()` (e.g. `12345@host`) |
+| `heapUsedMB` | long | Heap memory currently in use by live objects (megabytes) |
+| `heapMaxMB` | long | Maximum heap size (`-Xmx`) in megabytes |
+| `heapPct` | double | Heap utilisation percentage (`heapUsedMB / heapMaxMB × 100`) |
+| `nonHeapUsedMB` | long | Metaspace + Code Cache in use (megabytes) |
+| `gcOverheadPct` | double | Fraction of JVM uptime spent in GC (percentage) |
+| `totalGcTimeMs` | long | Cumulative GC wall-clock time since JVM start (milliseconds) |
+| `gc_<name>_count` | long | Per-collector cumulative collection count (one field per GC algorithm) |
+| `gc_<name>_timeMs` | long | Per-collector cumulative collection time (one field per GC algorithm) |
+| `postGcGrowth` | string | OLS slope of post-GC heap samples: `42.30 MB/h` or `N/A` |
+| `riskLevel` | string | Enum name: `OK`, `WARNING`, `CRITICAL`, or `OOM_FIRING` |
+| `heapDump` | string | Semicolon-separated absolute paths to dump files (present on CRITICAL only) |
+| `msg` | string | Full diagnosis notes (sanitised: tabs, newlines, and pipes replaced) |
+
+### 8.2 QRadar log source setup
+
+In the QRadar Console → **Admin → Log Sources → Add**:
+
+| Setting | Value |
+|---------|-------|
+| **Log Source Type** | Universal LEEF |
+| **Protocol Configuration** | Syslog |
+| **Log Source Identifier** | IP address of the host running OOM Watchdog |
+| **Port** | 514 (UDP default) or 1514 (TCP common alternate) |
+| **Log Source Group** | JVM Monitoring (create if absent) |
+
+After saving, navigate to **Admin → Log Source Extensions** and verify the LEEF
+header `LEEF:2.0|IBM|OomWatchdog` is parsing correctly.  If events appear as
+"Unknown Log Source", manually assign the **Universal LEEF** DSM.
+
+**Verifying events reach QRadar** (AQL):
+```sql
+SELECT * FROM events
+WHERE "LogSourceType" = 'UniversalLeef'
+  AND "cat" = 'JVM_OOM_Risk'
+ORDER BY "starttime" DESC
+LAST 1 HOURS
+```
+
+### 8.3 Pattern 1: CRITICAL-only forwarding
+
+Reduce QRadar EPS consumption — send WARNING events only to local channels, not to the SIEM:
+
+```java
+public final class CriticalOnlyQRadarChannel implements AlertChannel {
+
+    private final QRadarAlertChannel delegate;
+
+    public CriticalOnlyQRadarChannel(String host, int port,
+                                     QRadarAlertChannel.Transport transport) {
+        this.delegate = new QRadarAlertChannel(host, port, transport);
+    }
+
+    @Override
+    public void alert(JvmSnapshot snapshot) {
+        // Only forward CRITICAL and OOM_FIRING — suppress WARNING noise
+        if (snapshot.getRiskLevel().ordinal() >= OomRiskLevel.CRITICAL.ordinal()) {
+            delegate.alert(snapshot);
+        }
+    }
+}
+```
+
+**When to use:** when your QRadar EPS licence is constrained, or when WARNING-level events
+from many JVM services create too much noise in SIEM dashboards.
+
+### 8.4 Pattern 2: Rate-limited channel
+
+Prevent a sustained critical episode from flooding QRadar with one event every poll cycle:
+
+```java
+public final class RateLimitedQRadarChannel implements AlertChannel {
+
+    private final QRadarAlertChannel delegate;
+    private final long minIntervalMs;
+    private final AtomicLong lastSentMs = new AtomicLong(0L);
+
+    @Override
+    public void alert(JvmSnapshot snapshot) {
+        long now     = System.currentTimeMillis();
+        long elapsed = now - lastSentMs.get();
+        if (elapsed >= minIntervalMs) {
+            if (lastSentMs.compareAndSet(lastSentMs.get(), now)) {
+                delegate.alert(snapshot);
+            }
+        }
+        // Otherwise: suppress — QRadar already has an event for this episode
+    }
+}
+```
+
+**Configuration:**
+```java
+// Allow at most 1 QRadar event per 5 minutes per episode
+AlertChannel rateLimited = new RateLimitedQRadarChannel(
+        "siem.corp.com", 514, Transport.UDP, 5 * 60 * 1_000L);
+```
+
+**When to use:** when `pollIntervalMs` is low (e.g. 1 s) and you do not want QRadar to
+receive hundreds of duplicate events during a sustained OOM condition.
+
+### 8.5 Pattern 3: Environment-tagged events
+
+Prepend `[env=production][app=order-service][region=us-east-1]` to every `msg` field
+so QRadar rules can distinguish production incidents from dev/staging noise:
+
+```java
+public final class TaggedQRadarChannel implements AlertChannel {
+
+    private final QRadarAlertChannel delegate;
+    private final String environment;
+    private final String application;
+    private final String region;
+
+    @Override
+    public void alert(JvmSnapshot snapshot) {
+        // Enrich the snapshot — never mutate the original
+        String enrichedNotes = String.format("[env=%s][app=%s][region=%s] %s",
+                environment, application, region, snapshot.getDiagnosisNotes());
+        JvmSnapshot enriched = snapshot.toBuilder()
+                .diagnosisNotes(enrichedNotes)
+                .build();
+        delegate.alert(enriched);
+    }
+}
+```
+
+**Populating tags from the environment (Kubernetes):**
+```yaml
+# Pod spec excerpt
+env:
+  - name: APP_ENV
+    value: "production"
+  - name: APP_NAME
+    valueFrom:
+      fieldRef:
+        fieldPath: metadata.labels['app']
+  - name: APP_REGION
+    value: "us-east-1"
+```
+
+```java
+new TaggedQRadarChannel(
+    host, port, Transport.UDP,
+    System.getenv().getOrDefault("APP_ENV",    "unknown"),
+    System.getenv().getOrDefault("APP_NAME",   "unknown"),
+    System.getenv().getOrDefault("APP_REGION", "unknown"));
+```
+
+**QRadar rule using environment tags:**
+```sql
+-- Fire a high-priority offense only for production CRITICAL events
+SELECT "sourceip", "msg"
+FROM events
+WHERE "cat" = 'JVM_OOM_Risk'
+  AND "msg" ILIKE '%[env=production]%'
+  AND "sev" >= 9
+LAST 5 MINUTES
+```
+
+### 8.6 Pattern 4: Primary/failover channel
+
+Try the primary QRadar endpoint; fall back to a secondary if the primary fails.
+Most useful with TCP transport where connection failures are immediately visible:
+
+```java
+public final class FailoverQRadarChannel implements AlertChannel {
+
+    private final QRadarAlertChannel primary;
+    private final QRadarAlertChannel secondary;
+
+    @Override
+    public void alert(JvmSnapshot snapshot) {
+        try {
+            primary.alert(snapshot);
+        } catch (Exception e) {
+            System.err.println("Primary QRadar failed: " + e.getMessage());
+            secondary.alert(snapshot);   // fallback
+        }
+    }
+}
+
+// Usage
+new FailoverQRadarChannel(
+    "qradar-primary.corp.com",   514,
+    "qradar-standby.corp.com",   514,
+    QRadarAlertChannel.Transport.TCP);
+```
+
+**Note:** UDP `alert()` never throws (datagrams are fire-and-forget).  For UDP failover,
+send to both endpoints simultaneously rather than trying one first.
+
+### 8.7 TLS-encrypted syslog relay
+
+Raw syslog is plaintext.  For PCI-DSS, HIPAA, or ISO 27001 compliance, place an
+rsyslog TLS relay in front of QRadar:
+
+```
+OOM Watchdog  →  UDP/TCP plaintext on port 514  →  rsyslog relay (localhost or LAN)
+                                                       │  TLS on port 6514
+                                                       ▼
+                                                   IBM QRadar
+```
+
+**rsyslog.conf** on the relay host:
+```conf
+# Accept UDP syslog from OOM Watchdog
+module(load="imudp")
+input(type="imudp" port="514")
+
+# Forward encrypted to QRadar over TLS
+module(load="omfwd")
+action(type="omfwd"
+       Target="qradar.corp.com"
+       Port="6514"
+       Protocol="tcp"
+       StreamDriver="gtls"
+       StreamDriverMode="1"
+       StreamDriverAuthMode="x509/name"
+       StreamDriverPermittedPeers="qradar.corp.com")
+```
+
+No code changes are needed in OOM Watchdog — configure it to send plaintext UDP
+to `localhost:514` and the relay handles encryption transparently.
+
+### 8.8 QRadar AQL correlation queries
+
+These AQL queries identify meaningful OOM patterns across your estate.
+
+**Sustained critical pressure (> 3 consecutive polls above 85 %)**:
+```sql
+SELECT "sourceip", "username",
+       COUNT(*) AS alert_count,
+       MAX(FLOAT("heapPct")) AS max_heap_pct
+FROM events
+WHERE "cat" = 'JVM_OOM_Risk'
+  AND FLOAT("heapPct") >= 85
+GROUP BY "sourceip", "username"
+HAVING COUNT(*) >= 3
+LAST 10 MINUTES
+```
+
+**Leak detection — post-GC growth rate above 10 MB/hour**:
+```sql
+SELECT "sourceip", "process", "postGcGrowth", "msg"
+FROM events
+WHERE "cat" = 'JVM_OOM_Risk'
+  AND "postGcGrowth" NOT LIKE 'N/A%'
+  AND FLOAT(REPLACE("postGcGrowth", ' MB/h', '')) > 10.0
+ORDER BY FLOAT(REPLACE("postGcGrowth", ' MB/h', '')) DESC
+LAST 1 HOURS
+```
+
+**GC overhead emergency (> 80 % of uptime in GC)**:
+```sql
+SELECT "sourceip", "process", "gcOverheadPct", "heapPct"
+FROM events
+WHERE "cat" = 'JVM_OOM_Risk'
+  AND FLOAT("gcOverheadPct") >= 80
+ORDER BY FLOAT("gcOverheadPct") DESC
+LAST 30 MINUTES
+```
+
+**Dump file inventory — which processes triggered dumps today**:
+```sql
+SELECT "sourceip", "process", "heapDump", "starttime"
+FROM events
+WHERE "cat" = 'JVM_OOM_Risk'
+  AND "heapDump" IS NOT NULL
+  AND "heapDump" != ''
+ORDER BY "starttime" DESC
+LAST 24 HOURS
+```
+
+---
+
+## 9. Example 06 — Framework Integration
 
 **File:** [`Example06FrameworkIntegration.java`](core/src/main/java/com/trongus/oom/examples/Example06FrameworkIntegration.java)
 
@@ -554,7 +852,7 @@ public final class MicrometerAlertChannel implements AlertChannel {
 
 ---
 
-## 9. Extension Point Reference
+## 10. Extension Point Reference
 
 OOM Watchdog exposes four narrow interfaces.  Implement any or all of them to
 customise behaviour without touching the watchdog core.
@@ -635,7 +933,7 @@ SNS/SQS publish, in-memory recorder for tests.
 
 ---
 
-## 10. Security notes for custom implementations
+## 11. Security notes for custom implementations
 
 When writing custom implementations, follow these guidelines to match the security
 level of the built-in code.
@@ -679,14 +977,14 @@ level of the built-in code.
 
 ---
 
-## 11. Building the examples
+## 12. Building the examples
 
 The examples are compiled as part of the `core` module automatically:
 
 ```bash
 cd oom-watchdog
 mvn clean package -q
-# All 6 example classes are included in core/target/oom-watchdog.jar
+# All 7 example classes are included in core/target/oom-watchdog.jar
 ```
 
 Run an individual example:
@@ -704,9 +1002,14 @@ java -cp core/target/oom-watchdog.jar \
 java -cp core/target/oom-watchdog.jar \
      com.trongus.oom.examples.Example04CustomImplementations
 
-# QRadar integration (pass your QRadar host as first arg)
+# Basic QRadar integration (pass your QRadar host as first arg)
 java -cp core/target/oom-watchdog.jar \
      com.trongus.oom.examples.Example05QRadarIntegration 192.168.1.100 514
+
+# Advanced QRadar — all four patterns active
+java -cp core/target/oom-watchdog.jar \
+     com.trongus.oom.examples.Example07QRadarAdvanced \
+     qradar-primary.corp.com 514 qradar-standby.corp.com 10514
 ```
 
 Run all 189 tests to verify nothing is broken after adding examples:

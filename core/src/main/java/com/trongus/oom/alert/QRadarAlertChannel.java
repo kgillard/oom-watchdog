@@ -45,7 +45,7 @@ public final class QRadarAlertChannel implements AlertChannel {
 
     private static final String VENDOR  = "IBM";
     private static final String PRODUCT = "OomWatchdog";
-    private static final String VERSION = "1.0";
+    private static final String VERSION = "1.1";
 
     // Syslog facility 1 (user-level) + severity 5 (notice) = priority 13
     private static final int SYSLOG_PRIORITY = 13;
