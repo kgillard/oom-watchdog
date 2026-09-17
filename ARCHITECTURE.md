@@ -213,7 +213,50 @@ classDiagram
         +name() String
     }
 
+    class JmxDiagnosticsCollector {
+        -TargetDescriptor descriptor
+        -WatchdogConfig config
+        -Deque~long[]~ postGcWindow
+        -JMXConnector connector
+        -MBeanServerConnection mbsc
+        +JmxDiagnosticsCollector(TargetDescriptor, WatchdogConfig)
+        +collect() JvmSnapshot
+        +close()
+        -ensureConnected() boolean
+        -buildUnreachableSnapshot(long, String) JvmSnapshot
+    }
+
+    class TargetDescriptor {
+        +String name
+        +String jmxUrl
+        +String username
+        +double warnThreshold
+        +double critThreshold
+        +double gcThreshold
+        +long pollIntervalMs
+        +Set~DumpType~ dumpTypes
+        +String dumpDirectory
+        +builder(String, String) Builder$
+    }
+
+    class TargetRegistry {
+        +loadFromFile(String) List~TargetDescriptor~$
+        +loadFromString(String) List~TargetDescriptor~$
+    }
+
+    class WatchdogDaemon {
+        -List~TargetDescriptor~ targets
+        -WatchdogConfig baseConfig
+        -List~AlertChannel~ sharedAlertChannels
+        -Map~String,OomWatchdog~ activeWatchdogs
+        +WatchdogDaemon(List, WatchdogConfig, List)
+        +start()
+        +stop()
+        +isRunning() boolean
+    }
+
     class JvmSnapshot {
+        +String targetName
         +String processName
         +long timestampMs
         +long heapUsedBytes
@@ -317,6 +360,12 @@ classDiagram
     LibertyAlertChannel ..|> AlertChannel
     CognosAlertChannel ..|> AlertChannel
     CompositeDumpService ..|> HeapDumpService
+    JmxDiagnosticsCollector ..|> JvmDiagnosticsCollector
+    JmxDiagnosticsCollector --> TargetDescriptor
+    TargetRegistry --> TargetDescriptor
+    WatchdogDaemon --> TargetDescriptor
+    WatchdogDaemon --> OomWatchdog
+    WatchdogDaemon --> JmxDiagnosticsCollector
 
     FileLogAlertChannel --> AlertFormatter
     ConsoleAlertChannel --> AlertFormatter
@@ -400,15 +449,15 @@ flowchart TD
 ## Module Structure
 
 ```
-oom-watchdog/                  Maven multi-module root (v1.5.0)
+oom-watchdog/                  Maven multi-module root (v1.7.0)
 ├── core/                      oom-watchdog.jar  (fat jar via maven-shade-plugin)
 │   └── src/main/java/com/trongus/oom/
-│       ├── WatchdogMain.java  CLI entry point
+│       ├── WatchdogMain.java  CLI entry point (local + daemon modes)
 │       ├── alert/             AlertChannel (interface) + 6 implementations
 │       │                      (Console, FileLog, QRadar, Was, Liberty, Cognos)
 │       │                      + AlertFormatter (package-private, i18n-aware)
 │       ├── collector/         JvmDiagnosticsCollector (interface)
-│       │                      + MxBeanDiagnosticsCollector
+│       │                      + MxBeanDiagnosticsCollector (in-process MXBeans)
 │       ├── config/            WatchdogConfig (immutable builder, locale)
 │       ├── diagnosis/         OomCause + OomCauseCategory + OomCauseAnalyser  ← v1.3.0
 │       ├── dump/              HeapDumpService (interface) + CompositeDumpService
@@ -418,23 +467,27 @@ oom-watchdog/                  Maven multi-module root (v1.5.0)
 │       │                       ThreadDump, ClassHistogram, CoreDump)
 │       ├── examples/          11 runnable example classes (01–11)
 │       ├── i18n/              Messages (UTF-8 ResourceBundle wrapper)           ← v1.3.0
-│       ├── model/             JvmSnapshot (immutable value object)
+│       ├── logging/           WatchdogLogger + WatchdogLogFormatter             ← v1.6.0
+│       ├── model/             JvmSnapshot (immutable value object, targetName)
 │       │                      + OomRiskLevel enum
 │       ├── monitor/           OomWatchdog + RiskAssessor (interface)
 │       │                      + ThresholdRiskAssessor
 │       ├── platform/          JvmPlatform (static detection, all fields final)
-│       ├── remote/            TargetDescriptor, TargetRegistry, JmxDiagnosticsCollector, WatchdogDaemon  ← v1.7.0
+│       ├── remote/            TargetDescriptor, TargetRegistry,                 ← v1.7.0
+│       │                      JmxDiagnosticsCollector, WatchdogDaemon
 │       └── test/              OomSimulator (3-phase heap exhaustion)
-│   └── src/main/resources/com/trongus/oom/i18n/
-│       ├── Messages.properties       English (base / fallback)
-│       ├── Messages_de.properties    German
-│       ├── Messages_es.properties    Spanish
-│       ├── Messages_fr.properties    French
-│       ├── Messages_ja.properties    Japanese (UTF-8)
-│       ├── Messages_ko.properties    Korean (UTF-8)
-│       ├── Messages_pt_BR.properties Brazilian Portuguese
-│       ├── Messages_zh_CN.properties Simplified Chinese (UTF-8)
-│       └── Messages_zh_TW.properties Traditional Chinese (UTF-8)
+│   └── src/main/resources/
+│       ├── com/trongus/oom/i18n/
+│       │   ├── Messages.properties       English (base / fallback)
+│       │   ├── Messages_de.properties    German
+│       │   ├── Messages_es.properties    Spanish
+│       │   ├── Messages_fr.properties    French
+│       │   ├── Messages_ja.properties    Japanese (UTF-8)
+│       │   ├── Messages_ko.properties    Korean (UTF-8)
+│       │   ├── Messages_pt_BR.properties Brazilian Portuguese
+│       │   ├── Messages_zh_CN.properties Simplified Chinese (UTF-8)
+│       │   └── Messages_zh_TW.properties Traditional Chinese (UTF-8)
+│       └── targets.properties.example    Daemon-mode reference config           ← v1.7.0
 │
 ├── test-harness/              test-harness.jar
 │   └── src/main/java/com/trongus/oom/harness/
@@ -443,7 +496,7 @@ oom-watchdog/                  Maven multi-module root (v1.5.0)
 │       ├── BuiltInHeapExhauster.java
 │       └── HarnessAlertRecorder.java      (CopyOnWriteArrayList + AtomicInteger)
 │
-└── oom-watchdog-tests/        JUnit 4 test suite (189 tests)
+└── oom-watchdog-tests/        JUnit 4 test suite (200 tests)
     └── src/test/java/com/trongus/oom/tests/
         ├── OomWatchdogTestSuite.java
         ├── model/             OomRiskLevelTest, JvmSnapshotTest
@@ -453,6 +506,8 @@ oom-watchdog/                  Maven multi-module root (v1.5.0)
         ├── collector/         MxBeanDiagnosticsCollectorTest
         ├── monitor/           ThresholdRiskAssessorTest
         ├── platform/          JvmPlatformTest
+        ├── remote/            TargetDescriptorTest, TargetRegistryTest,         ← v1.7.0
+        │                      WatchdogDaemonTest
         └── integration/       OomWatchdogIntegrationTest
 ```
 
@@ -517,14 +572,19 @@ The following table shows exactly where OOM Watchdog alert output appears for ev
 | `ResourceBundle.Control` with UTF-8 reader | Prevents ISO-8859-1 corruption of CJK double-byte characters in `.properties` files |
 | `OomCauseAnalyser` stateless | Can be shared across threads; no synchronisation cost |
 | `OomCause` immutable value object | Safe to pass across threads with no defensive copy |
+| `WatchdogDaemon` target name sanitised before file path use | Prevents path traversal via malicious target names (`[^A-Za-z0-9._-]` → `_`) |
+| `TargetRegistry.loadFromFile()` uses `getCanonicalFile()` | Prevents path traversal when loading targets config file |
+| `JmxDiagnosticsCollector` sanitises exception reason in unreachable snapshot | Prevents control-character injection from remote JMX errors into diagnosis notes |
+| `TargetRegistry` null-guards `getProperty()` before `.trim()` | Prevents NPE on malformed properties files with valueless keys |
 
 ---
 
 ## Security Hardening Summary
 
-Four security audit passes have been performed.  Passes 1 and 2 identified and
+Five security audit passes have been performed.  Passes 1 and 2 identified and
 fixed 11 issues.  Pass 3 reviewed all remaining source files and confirmed no
 further issues.  Pass 4 identified and fixed 3 concurrency issues (SEC-2, SEC-3, SEC-4).
+Pass 5 (v1.7.0) identified and fixed 4 issues in the new remote JMX monitoring subsystem.
 
 | # | Audit | File | Issue | Fix |
 |---|-------|------|-------|-----|
@@ -542,18 +602,22 @@ further issues.  Pass 4 identified and fixed 3 concurrency issues (SEC-2, SEC-3,
 | SEC-2 | 4 | `OomWatchdog` | `volatile boolean dumpTakenForCurrentEpisode` — check-then-act race between poll cycles | Replaced with `AtomicBoolean.compareAndSet(false, true)` |
 | SEC-3 | 4 | `OomWatchdog` | `volatile OomRiskLevel lastLevel` — weak memory ordering for `getLastRiskLevel()` callers | Replaced with `AtomicReference<OomRiskLevel>` |
 | SEC-4 | 4 | `HarnessAlertRecorder` | `ArrayList dumpPaths` — `synchronized` writes but unsynchronised iteration in `printResults()` | Replaced with `CopyOnWriteArrayList` |
+| SEC-5 | 5 | `WatchdogDaemon` | Target name used raw in file path — path traversal risk | Sanitised with `[^A-Za-z0-9._-]` → `_` before constructing path |
+| SEC-6 | 5 | `TargetRegistry` | `loadFromFile()` not using canonical path — path traversal risk | `getCanonicalFile()` applied before opening file |
+| SEC-7 | 5 | `JmxDiagnosticsCollector` | Raw exception message embedded in `diagnosisNotes` without sanitisation | Control characters stripped with `replaceAll("[\\x00-\\x1F\\x7F]", " ")` |
+| SEC-8 | 5 | `TargetRegistry` | `getProperty(key).trim()` called without null guard on every key | Null-safe guard added before `.trim()` across all property reads |
 
 ---
 
 ## Release Artefacts
 
-The v1.5.0 release publishes two executable fat JARs built with `maven-shade-plugin`.
-Both are attached to the [GitHub release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.5.0).
+The v1.7.0 release publishes two executable fat JARs built with `maven-shade-plugin`.
+Both will be attached to the [GitHub release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.0).
 
 | Artefact | Main class | Contents | Size (approx) |
 |----------|-----------|----------|---------------|
-| `oom-watchdog.jar` | `com.trongus.oom.WatchdogMain` | `core` module + all runtime dependencies shaded | ~161 KB |
-| `test-harness.jar` | `com.trongus.oom.harness.TestHarnessMain` | `test-harness` + `core` modules shaded | ~175 KB |
+| `oom-watchdog.jar` | `com.trongus.oom.WatchdogMain` | `core` module + all runtime dependencies shaded | ~165 KB |
+| `test-harness.jar` | `com.trongus.oom.harness.TestHarnessMain` | `test-harness` + `core` modules shaded | ~180 KB |
 
 ### Build reproducibility
 

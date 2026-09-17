@@ -23,7 +23,7 @@ import com.trongus.oom.i18n.Messages;
  * </ol>
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.3.0
+ * @version 1.7.0
  * @since 1.3.0
  * @see OomCause
  * @see OomCauseCategory
