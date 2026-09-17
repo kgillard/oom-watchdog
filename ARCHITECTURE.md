@@ -1,4 +1,4 @@
-# OOM Watchdog – Architecture (v1.4.0)
+# OOM Watchdog – Architecture (v1.5.0)
 
 ## Overview
 
@@ -7,7 +7,15 @@ preemptively detects Out-Of-Memory conditions and fires structured alerts before
 crashes.  It supports **all major JVM vendors** (HotSpot, IBM J9/OpenJ9, GraalVM JVM,
 GraalVM Native Image) and **JDK 8 through 26+**.
 
-**v1.4.0 additions:** `OomCauseAnalyser` (root-cause analysis), `OomCause`/`OomCauseCategory`
+**v1.5.0 additions:** Example 11 (`Example11CauseAnalysisAndI18n`) demonstrating
+`OomCauseAnalyser` standalone and locale-aware watchdog wiring; per-release Quick Start
+guide in `EXAMPLES.md`; all example `@version` tags updated; security audit badge updated
+to reflect 4 passes.
+
+**v1.4.0 additions:** Security hardening — `AtomicBoolean.compareAndSet` (SEC-2),
+`AtomicReference<OomRiskLevel>` (SEC-3), `CopyOnWriteArrayList` (SEC-4).
+
+**v1.3.0 additions:** `OomCauseAnalyser` (root-cause analysis), `OomCause`/`OomCauseCategory`
 value objects, `Messages` i18n wrapper, and 9-locale resource bundles.  All alert text,
 section headings, and diagnosis strings are now locale-aware.
 
@@ -264,21 +272,21 @@ flowchart TD
 ## Module Structure
 
 ```
-oom-watchdog/                  Maven multi-module root (v1.4.0)
+oom-watchdog/                  Maven multi-module root (v1.5.0)
 ├── core/                      oom-watchdog.jar  (fat jar via maven-shade-plugin)
 │   └── src/main/java/com/trongus/oom/
 │       ├── WatchdogMain.java  CLI entry point
 │       ├── alert/             AlertChannel ISP + 6 implementations + AlertFormatter (i18n)
 │       ├── collector/         JvmDiagnosticsCollector + MxBeanDiagnosticsCollector
 │       ├── config/            WatchdogConfig (immutable, builder, locale)
-│       ├── diagnosis/         OomCause + OomCauseCategory + OomCauseAnalyser  ← NEW v1.4.0
+│       ├── diagnosis/         OomCause + OomCauseCategory + OomCauseAnalyser  ← NEW v1.5.0
 │       ├── dump/              HeapDumpService + CompositeDumpService + DumpType + strategies
-│       ├── i18n/              Messages (UTF-8 ResourceBundle wrapper)          ← NEW v1.4.0
+│       ├── i18n/              Messages (UTF-8 ResourceBundle wrapper)          ← NEW v1.5.0
 │       ├── model/             JvmSnapshot + OomRiskLevel
 │       ├── monitor/           OomWatchdog + RiskAssessor + ThresholdRiskAssessor
 │       ├── platform/          JvmPlatform (static detection)
 │       └── test/              OomSimulator (3-phase heap exhaustion)
-│   └── src/main/resources/com/trongus/oom/i18n/    ← NEW v1.4.0
+│   └── src/main/resources/com/trongus/oom/i18n/    ← NEW v1.5.0
 │       ├── Messages.properties       English (base / fallback)
 │       ├── Messages_de.properties    German
 │       ├── Messages_es.properties    Spanish
@@ -393,8 +401,8 @@ and confirmed **no further issues** — the codebase is fully hardened.
 
 ## Release Artefacts
 
-The v1.4.0 release publishes two executable fat JARs built with `maven-shade-plugin`.
-Both are attached to the [GitHub release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.4.0).
+The v1.5.0 release publishes two executable fat JARs built with `maven-shade-plugin`.
+Both are attached to the [GitHub release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.5.0).
 
 | Artefact | Main class | Contents |
 |----------|-----------|----------|

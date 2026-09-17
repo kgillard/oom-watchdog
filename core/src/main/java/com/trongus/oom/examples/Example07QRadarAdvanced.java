@@ -128,7 +128,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * }</pre>
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.1.0
+ * @version 1.5.0
  * @since 1.1.0
  * @see QRadarAlertChannel
  * @see QRadarAlertChannel.Transport

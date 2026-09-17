@@ -4,21 +4,21 @@
 
 [![Build](https://img.shields.io/badge/build-passing-brightgreen)]()
 [![Tests](https://img.shields.io/badge/tests-189%20passing-brightgreen)]()
-[![Security Audit](https://img.shields.io/badge/security%20audit-3%20passes%20clean-brightgreen)]()
+[![Security Audit](https://img.shields.io/badge/security%20audit-4%20passes%20clean-brightgreen)]()
 [![JDK](https://img.shields.io/badge/JDK-8%20%E2%80%93%2026%2B-blue)]()
 [![Vendors](https://img.shields.io/badge/JVM-HotSpot%20%7C%20OpenJ9%20%7C%20GraalVM-blue)]()
-[![Release](https://img.shields.io/badge/release-v1.4.0-blue)](https://github.com/kgillard/oom-watchdog/releases/tag/v1.4.0)
+[![Release](https://img.shields.io/badge/release-v1.5.0-blue)](https://github.com/kgillard/oom-watchdog/releases/tag/v1.5.0)
 
 ---
 
 ## Download
 
-Pre-built JARs are available in the [v1.4.0 release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.4.0):
+Pre-built JARs are available in the [v1.5.0 release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.5.0):
 
 | Artefact | Description | Size |
 |----------|-------------|------|
-| [`oom-watchdog.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.4.0/oom-watchdog.jar) | Fat JAR — monitoring agent + CLI entry point | ~79 KB |
-| [`test-harness.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.4.0/test-harness.jar) | Fat JAR — interactive OOM test harness | ~92 KB |
+| [`oom-watchdog.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.5.0/oom-watchdog.jar) | Fat JAR — monitoring agent + CLI entry point | ~79 KB |
+| [`test-harness.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.5.0/test-harness.jar) | Fat JAR — interactive OOM test harness | ~92 KB |
 
 ---
 
@@ -38,10 +38,15 @@ On the first `CRITICAL` event in an episode, the dump service captures diagnosti
 (heap dump, thread dump, class histogram, core dump) — but only **once per episode** to
 prevent dump storms.
 
-**New in v1.4.0:** The `OomCauseAnalyser` produces a plain-language explanation of the
-most likely OOM root cause (runaway GC, heap exhaustion, memory leak, GC overhead).
-All alert text is now fully internationalised (i18n) across 9 locales: `en`, `de`, `es`,
-`fr`, `ja`, `ko`, `pt_BR`, `zh_CN`, `zh_TW`.
+**New in v1.5.0:** Per-release Quick Start guide, Example 11 (OOM cause analysis + i18n),
+and all example `@version` tags updated.  See [`EXAMPLES.md`](EXAMPLES.md) for the
+complete release-by-release changelog.
+
+**v1.4.0:** Security audit pass 4 — `AtomicBoolean.compareAndSet`, `AtomicReference`,
+`CopyOnWriteArrayList` hardening.
+
+**v1.3.0:** `OomCauseAnalyser` root-cause analysis and full i18n across 9 locales
+(`en`, `de`, `es`, `fr`, `ja`, `ko`, `pt_BR`, `zh_CN`, `zh_TW`).
 
 ---
 
@@ -52,7 +57,7 @@ All alert text is now fully internationalised (i18n) across 9 locales: `en`, `de
 ```bash
 # Download the release JAR
 curl -L -o oom-watchdog.jar \
-  https://github.com/kgillard/oom-watchdog/releases/download/v1.4.0/oom-watchdog.jar
+  https://github.com/kgillard/oom-watchdog/releases/download/v1.5.0/oom-watchdog.jar
 
 # Run against a target JVM process (monitoring mode)
 java -jar oom-watchdog.jar \
@@ -364,7 +369,7 @@ Fields: `timestamp | component | server | riskLevel | heapUsedMB | heapMaxMB | h
 
 ---
 
-## OOM cause analysis (v1.4.0)
+## OOM cause analysis (v1.5.0)
 
 Every alert now includes a plain-language root cause diagnosis produced by `OomCauseAnalyser`:
 
@@ -380,7 +385,7 @@ The explanation is embedded in the `[Cause]` section of every diagnosis note and
 
 ---
 
-## Internationalisation (v1.4.0)
+## Internationalisation (v1.5.0)
 
 All alert text, section headings, and diagnosis strings are locale-aware. Set the locale on `WatchdogConfig`:
 
@@ -571,21 +576,23 @@ post-GC heap used
 
 ## Security
 
-Three security audit passes were performed against the full source tree.
-All 11 issues found were fixed in passes 1 and 2; pass 3 confirmed no further issues.
+Four security audit passes have been performed against the full source tree.
 See [`ARCHITECTURE.md`](ARCHITECTURE.md#security-hardening-summary) for the complete
-per-issue table.  Highlights:
+per-issue table.  Summary of all hardening applied:
 
-| Area | Hardening applied |
-|------|-------------------|
-| Config validation | `WatchdogConfig.build()` rejects all out-of-range values (thresholds, port, poll interval, window size, dump directory) |
-| QRadar TCP | 5-second connect + read timeout prevents poll-thread blocking on unreachable hosts |
-| QRadar UDP | Payload capped at 65 007 bytes to prevent silent datagram truncation |
-| `gcore` execution | Output path canonicalized (`getCanonicalPath()`); 60-second timeout + `destroyForcibly()`; output capped at 4 096 bytes |
-| Alert formatting | `AlertFormatter.sanitiseMultiLine()` / `sanitiseSingleLine()` strip control characters and quote injection |
-| Snapshot integrity | `JvmSnapshot.Builder` map setters take defensive `LinkedHashMap` copies |
-| Charset safety | All file writes use explicit `StandardCharsets.UTF_8`; resource bundles loaded with explicit UTF-8 reader |
-| Thread safety | `HarnessAlertRecorder` alert counters use `AtomicInteger.incrementAndGet()` |
+| Audit | Area | Hardening applied |
+|-------|------|-------------------|
+| 1–2 | Config validation | `WatchdogConfig.build()` rejects all out-of-range values (thresholds, port, poll interval, window size, dump directory) |
+| 1–2 | QRadar TCP | 5-second connect + read timeout prevents poll-thread blocking on unreachable hosts |
+| 1–2 | QRadar UDP | Payload capped at 65 007 bytes to prevent silent datagram truncation |
+| 1–2 | `gcore` execution | Output path canonicalized (`getCanonicalPath()`); 60-second timeout + `destroyForcibly()`; output capped at 4 096 bytes |
+| 1–2 | Alert formatting | `AlertFormatter.sanitiseMultiLine()` / `sanitiseSingleLine()` strip control characters and quote injection |
+| 1–2 | Snapshot integrity | `JvmSnapshot.Builder` map setters take defensive `LinkedHashMap` copies |
+| 1–2 | Charset safety | All file writes use explicit `StandardCharsets.UTF_8`; resource bundles loaded with explicit UTF-8 reader |
+| 3 | Thread safety (counters) | `HarnessAlertRecorder` alert counters use `AtomicInteger.incrementAndGet()` |
+| 4 | Thread safety (dump guard) | `OomWatchdog.dumpTakenThisEpisode` replaced with `AtomicBoolean.compareAndSet(false, true)` — eliminates check-then-act race (SEC-2) |
+| 4 | Thread safety (risk level) | `OomWatchdog.lastLevel` replaced with `AtomicReference<OomRiskLevel>` for consistent cross-thread visibility (SEC-3) |
+| 4 | Thread safety (dump paths) | `HarnessAlertRecorder.dumpPaths` replaced with `CopyOnWriteArrayList` — eliminates unsynchronised read race (SEC-4) |
 
 ---
 

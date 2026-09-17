@@ -34,7 +34,7 @@ import java.util.Collections;
  * you will see a multi-line {@code === JVM OOM Alert ===} block on stdout every 5 seconds.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.0.0
+ * @version 1.5.0
  * @since 1.0.0
  * @see Example02AlertChannels
  * @see Example03DumpOnCritical

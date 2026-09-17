@@ -74,7 +74,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * }</pre>
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.2.0
+ * @version 1.5.0
  * @since 1.2.0
  * @see CognosAlertChannel
  * @see WatchdogConfig

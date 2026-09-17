@@ -74,7 +74,7 @@ import java.util.EnumSet;
  * </table>
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.0.0
+ * @version 1.5.0
  * @since 1.0.0
  * @see com.trongus.oom.dump.CompositeDumpService
  * @see DumpType

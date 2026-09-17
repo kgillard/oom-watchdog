@@ -4,7 +4,7 @@ This document covers every way to use OOM Watchdog: running the pre-built JAR fr
 command line without writing any code, embedding it in an application with the Java API,
 and writing your own custom implementations of every extension point.
 
-Ten worked examples live in
+Eleven worked examples live in
 [`core/src/main/java/com/trongus/oom/examples/`](core/src/main/java/com/trongus/oom/examples/)
 and are documented in detail below.
 
@@ -12,6 +12,13 @@ and are documented in detail below.
 
 ## Table of Contents
 
+0. [Release Quick Start guide (per version)](#0-release-quick-start-guide)
+   - [v1.0.0 — Minimal monitoring](#v100--minimal-monitoring)
+   - [v1.1.0 — QRadar advanced patterns](#v110--qradar-advanced-patterns)
+   - [v1.2.0 — IBM Application Servers (WAS, Liberty, Cognos)](#v120--ibm-application-servers)
+   - [v1.3.0 — OOM cause analysis and i18n](#v130--oom-cause-analysis-and-i18n)
+   - [v1.4.0 — Security hardening (audit pass 4)](#v140--security-hardening)
+   - [v1.5.0 — Example 11 + per-release guide](#v150--example-11--per-release-guide)
 1. [Using the JAR without any code](#1-using-the-jar-without-any-code)
    - [Download](#11-download)
    - [Monitoring mode](#12-monitoring-mode)
@@ -35,19 +42,343 @@ and are documented in detail below.
    - [TLS-encrypted syslog relay](#87-tls-encrypted-syslog-relay)
    - [QRadar AQL correlation queries](#88-qradar-aql-correlation-queries)
 9. [Example 06 — Framework integration (Spring Boot, health checks, metrics)](#9-example-06--framework-integration)
-10. [Extension point reference](#10-extension-point-reference)
-11. [Security notes for custom implementations](#11-security-notes-for-custom-implementations)
-12. [Building the examples](#12-building-the-examples)
-13. [IBM Application Server and Cognos Integration](#13-ibm-application-server-and-cognos-integration)
-    - [Section 13: Example 08 — WAS monitoring](#131-example-08--was-monitoring)
-    - [Section 14: Example 09 — Liberty + MicroProfile Health](#132-example-09--liberty--microprofile-health)
-    - [Section 15: Example 10 — Cognos Analytics all three components](#133-example-10--cognos-analytics-all-three-components)
-    - [WAS heap sizing guide](#134-was-heap-sizing-guide)
-    - [Liberty server.xml configuration](#135-liberty-serverxml-configuration)
-    - [Cognos component memory architecture](#136-cognos-component-memory-architecture)
-    - [cognosservice.xml log file configuration](#137-cognosservicexml-log-file-configuration)
+10. [Example 11 — OOM cause analysis and i18n](#10-example-11--oom-cause-analysis-and-i18n)
+11. [Extension point reference](#11-extension-point-reference)
+12. [Security notes for custom implementations](#12-security-notes-for-custom-implementations)
+13. [Building the examples](#13-building-the-examples)
+14. [IBM Application Server and Cognos Integration](#14-ibm-application-server-and-cognos-integration)
+    - [Example 08 — WAS monitoring](#141-example-08--was-monitoring)
+    - [Example 09 — Liberty + MicroProfile Health](#142-example-09--liberty--microprofile-health)
+    - [Example 10 — Cognos Analytics all three components](#143-example-10--cognos-analytics-all-three-components)
+    - [WAS heap sizing guide](#144-was-heap-sizing-guide)
+    - [Liberty server.xml configuration](#145-liberty-serverxml-configuration)
+    - [Cognos component memory architecture](#146-cognos-component-memory-architecture)
+    - [cognosservice.xml log file configuration](#147-cognosservicexml-log-file-configuration)
 
 ---
+
+## 0. Release Quick Start guide
+
+Each release introduced new capabilities.  Use this section to jump straight to the
+features added in the release you are targeting.
+
+---
+
+### v1.0.0 — Minimal monitoring
+
+**What's in it:** Core watchdog engine, threshold-based risk assessment, three alert
+channels (`ConsoleAlertChannel`, `FileLogAlertChannel`, `QRadarAlertChannel`), and
+`CompositeDumpService` with four dump types.
+
+**Quick Start (embed):**
+
+```java
+// maven: com.trongus.oom:oom-watchdog-core:1.0.0
+WatchdogConfig config = WatchdogConfig.defaults()
+    .warningHeapThreshold(0.80)
+    .criticalHeapThreshold(0.90)
+    .pollIntervalMs(5_000L)
+    .build();
+
+OomWatchdog watchdog = new OomWatchdog(
+    config,
+    new MxBeanDiagnosticsCollector(config),
+    new ThresholdRiskAssessor(config),
+    Collections.singletonList(new ConsoleAlertChannel()),
+    new CompositeDumpService(config)
+);
+Runtime.getRuntime().addShutdownHook(new Thread(watchdog::stop, "oom-watchdog-shutdown"));
+watchdog.start();
+```
+
+**Quick Start (CLI):**
+
+```bash
+curl -L -o oom-watchdog.jar \
+  https://github.com/kgillard/oom-watchdog/releases/download/v1.0.0/oom-watchdog.jar
+
+java -jar oom-watchdog.jar \
+    --warn-threshold 0.80 \
+    --crit-threshold 0.90 \
+    --log-file /var/log/oom-watchdog.log
+```
+
+**Test / demo mode:**
+
+```bash
+java -Xmx64m -jar oom-watchdog.jar \
+    --test-mode \
+    --warn-threshold 0.50 \
+    --crit-threshold 0.70 \
+    --poll-ms 1000
+```
+
+**Examples introduced:** 01, 02, 03, 04, 05, 06
+
+---
+
+### v1.1.0 — QRadar advanced patterns
+
+**What's in it:** Four production QRadar integration patterns: CRITICAL-only forwarding,
+rate limiting, environment tagging, and primary/failover resilience.  Full LEEF 2.0 wire
+format documentation and AQL correlation queries.
+
+**Quick Start:**
+
+```java
+// CRITICAL-only — suppress WARNING noise in QRadar
+public final class CriticalOnlyQRadarChannel implements AlertChannel {
+    private final QRadarAlertChannel delegate =
+            new QRadarAlertChannel("siem.corp.com", 514, Transport.UDP);
+
+    @Override
+    public void alert(JvmSnapshot snapshot) {
+        if (snapshot.getRiskLevel().ordinal() >= OomRiskLevel.CRITICAL.ordinal()) {
+            delegate.alert(snapshot);
+        }
+    }
+}
+
+// Rate-limited — at most 1 event per 5 minutes during a sustained episode
+AlertChannel rateLimited = new RateLimitedQRadarChannel(
+    "siem.corp.com", 514, Transport.UDP, 5 * 60 * 1_000L);
+
+// Environment-tagged — prepend [env=production] to every msg field
+AlertChannel tagged = new TaggedQRadarChannel(
+    "siem.corp.com", 514, Transport.UDP,
+    "production", "order-service", "us-east-1");
+```
+
+**LEEF 2.0 syslog wire format** (single line; `<TAB>` = literal tab character):
+```
+<13>Sep 17 08:00:00 prod-host LEEF:2.0|IBM|OomWatchdog|1.1|OOM_CRITICAL|sev=9<TAB>cat=JVM_OOM_Risk<TAB>heapPct=90.0<TAB>...
+```
+
+**AQL — sustained critical pressure (> 3 consecutive polls above 85 %):**
+```sql
+SELECT "sourceip", COUNT(*) AS alert_count
+FROM events
+WHERE "cat" = 'JVM_OOM_Risk' AND FLOAT("heapPct") >= 85
+GROUP BY "sourceip" HAVING COUNT(*) >= 3
+LAST 10 MINUTES
+```
+
+**Examples introduced:** 07
+
+---
+
+### v1.2.0 — IBM Application Servers
+
+**What's in it:** Three new alert channels for IBM middleware:
+- `WasAlertChannel` — routes through WAS `SystemErr.log` via JUL
+- `LibertyAlertChannel` — produces structured JSON to Liberty `messages.log`
+- `CognosAlertChannel` — writes pipe-delimited log files for Cognos Log Server
+
+**Quick Start (WAS):**
+
+```java
+WatchdogConfig config = WatchdogConfig.defaults()
+    .warningHeapThreshold(0.75)
+    .criticalHeapThreshold(0.88)
+    .pollIntervalMs(30_000L)          // 30 s aligns with WAS PMI cadence
+    .dumpTypes(EnumSet.of(DumpType.HEAP, DumpType.THREAD))
+    .build();
+
+OomWatchdog watchdog = new OomWatchdog(config,
+    new MxBeanDiagnosticsCollector(config),
+    new ThresholdRiskAssessor(config),
+    Arrays.asList(
+        new WasAlertChannel(),        // → SystemErr.log (FFDC incident ID included)
+        new FileLogAlertChannel("${SERVER_LOG_ROOT}/oom-watchdog/oom.log")
+    ),
+    new CompositeDumpService(config)
+);
+```
+
+**Quick Start (Liberty):**
+
+```java
+WatchdogConfig config = WatchdogConfig.defaults()
+    .warningHeapThreshold(0.70)   // warn earlier — small container heap
+    .criticalHeapThreshold(0.85)  // critical before container OOM-killer fires
+    .pollIntervalMs(10_000L)
+    .build();
+
+OomWatchdog watchdog = new OomWatchdog(config,
+    new MxBeanDiagnosticsCollector(config),
+    new ThresholdRiskAssessor(config),
+    Arrays.asList(new LibertyAlertChannel()),
+    new CompositeDumpService(config)
+);
+```
+
+**Quick Start (Cognos — three JVM components):**
+
+```java
+// Start one watchdog per JVM process from each component's startup class
+OomWatchdog atcWatchdog = new OomWatchdog(atcConfig,
+    new MxBeanDiagnosticsCollector(atcConfig),
+    new ThresholdRiskAssessor(atcConfig),
+    Arrays.asList(
+        new CognosAlertChannel("ATC", "/opt/IBM/cognos/analytics/logs/oom-watchdog-ATC.log")
+    ),
+    new CompositeDumpService(atcConfig)
+);
+atcWatchdog.start();
+```
+
+**Liberty `server.xml` (JSON logging + trace):**
+```xml
+<logging traceSpecification="com.trongus.oom.*=all"
+         messageFormat="JSON"
+         logDirectory="${server.output.dir}/logs" />
+```
+
+**WAS Admin Console logger configuration:**
+1. Navigate to **Servers → WebSphere application servers → `<server>` → Logging and Tracing → Change Log Detail Levels**
+2. Add `com.trongus.oom.*=ALL` — no restart required
+
+**Examples introduced:** 08, 09, 10
+
+---
+
+### v1.3.0 — OOM cause analysis and i18n
+
+**What's in it:**
+- `OomCauseAnalyser` — stateless, thread-safe analyser that classifies the most likely
+  root cause into five `OomCauseCategory` values and produces a plain-language explanation.
+- `Messages` — UTF-8 `ResourceBundle` wrapper with 9-locale support.
+- `WatchdogConfig.locale()` — single point to localise all alert text.
+
+**Cause categories:**
+
+| Category | Signals |
+|----------|---------|
+| `RUNAWAY_GC_WITH_HIGH_HEAP` | heap ≥ critical threshold **and** GC overhead ≥ threshold |
+| `HEAP_EXHAUSTION` | heap ≥ critical threshold only |
+| `GC_OVERHEAD_EXCEEDED` | GC overhead ≥ threshold only |
+| `MEMORY_LEAK_TREND` | positive post-GC heap growth slope |
+| `NONE` | all metrics within bounds |
+
+**Quick Start — locale-aware watchdog:**
+
+```java
+WatchdogConfig config = WatchdogConfig.defaults()
+    .warningHeapThreshold(0.80)
+    .criticalHeapThreshold(0.90)
+    .pollIntervalMs(5_000L)
+    .locale(Locale.JAPANESE)    // alert text in Japanese
+    .build();
+
+OomWatchdog watchdog = new OomWatchdog(
+    config,
+    new MxBeanDiagnosticsCollector(config),
+    new ThresholdRiskAssessor(config),  // uses Messages + OomCauseAnalyser internally
+    Collections.singletonList(new ConsoleAlertChannel()),
+    new CompositeDumpService(config)
+);
+watchdog.start();
+```
+
+**Supported locales:** `en` (default), `de`, `es`, `fr`, `ja`, `ko`, `pt_BR`, `zh_CN`, `zh_TW`
+
+**Standalone analyser (testing / custom assessors):**
+
+```java
+Messages messages = new Messages(Locale.ENGLISH);
+OomCauseAnalyser analyser = new OomCauseAnalyser(0.90, 0.50, messages);
+
+// Simulate a heap-exhaustion signal
+OomCause cause = analyser.analyse(
+    0.93,                        // heapUsedRatio (93%)
+    0.25,                        // gcOverheadRatio (25%)
+    0.0                          // postGcGrowthRatePerMs (no leak)
+);
+System.out.println(cause.getCategory());     // HEAP_EXHAUSTION
+System.out.println(cause.getExplanation());  // "Heap used 93.0% of maximum capacity..."
+```
+
+**Examples introduced:** _(no new example file in v1.3.0; use Example 11 below)_
+
+---
+
+### v1.4.0 — Security hardening (audit pass 4)
+
+**What's in it:** Three concurrency security fixes:
+
+| ID | Class | Before | After |
+|----|-------|--------|-------|
+| SEC-2 | `OomWatchdog` | `volatile boolean dumpTaken…` (check-then-act race) | `AtomicBoolean.compareAndSet(false, true)` |
+| SEC-3 | `OomWatchdog` | `volatile OomRiskLevel lastLevel` | `AtomicReference<OomRiskLevel>` |
+| SEC-4 | `HarnessAlertRecorder` | `ArrayList` + `synchronized` write / unsynchronised read | `CopyOnWriteArrayList` |
+
+**Upgrade note:** No API change — these are internal implementation fixes.  Replace the
+v1.3.0 JAR with the v1.4.0 JAR in your classpath; no code changes required.
+
+```bash
+# Download v1.4.0
+curl -L -o oom-watchdog.jar \
+  https://github.com/kgillard/oom-watchdog/releases/download/v1.4.0/oom-watchdog.jar
+```
+
+**Examples changed:** none (internal fixes only)
+
+---
+
+### v1.5.0 — Example 11 + per-release guide
+
+**What's in it:**
+- **Example 11** — `Example11CauseAnalysisAndI18n.java` — demonstrates `OomCauseAnalyser`
+  standalone + locale-aware watchdog in a single runnable class.
+- This per-release Quick Start guide (Section 0 of this document).
+- All example `@version` tags updated to `1.5.0`.
+- Security badge in README updated to reflect 4 audit passes.
+
+**Quick Start — run Example 11:**
+
+```bash
+# English (default)
+java -cp oom-watchdog.jar com.trongus.oom.examples.Example11CauseAnalysisAndI18n
+
+# Japanese
+java -cp oom-watchdog.jar com.trongus.oom.examples.Example11CauseAnalysisAndI18n ja
+
+# Simplified Chinese
+java -cp oom-watchdog.jar com.trongus.oom.examples.Example11CauseAnalysisAndI18n zh_CN
+```
+
+Expected output (English):
+```
+[Example11] Using locale: en
+=== OomCauseAnalyser standalone demo ===
+Healthy JVM:                        category=NONE
+                                    explanation=No OOM risk detected...
+
+Memory leak:                        category=MEMORY_LEAK_TREND
+                                    explanation=Post-GC heap is growing at a sustained rate...
+
+GC overhead:                        category=GC_OVERHEAD_EXCEEDED
+                                    explanation=The JVM is spending too much time in garbage collection...
+
+Heap exhaustion:                    category=HEAP_EXHAUSTION
+                                    explanation=Heap used 93.0% of maximum capacity...
+
+Runaway GC + high heap:             category=RUNAWAY_GC_WITH_HIGH_HEAP
+                                    explanation=The JVM cannot reclaim enough memory despite...
+
+=== Starting watchdog with locale en ===
+[Example11] Watchdog running with locale 'en'.
+```
+
+**Download v1.5.0:**
+
+```bash
+curl -L -o oom-watchdog.jar \
+  https://github.com/kgillard/oom-watchdog/releases/download/v1.5.0/oom-watchdog.jar
+```
+
+---
+
 
 ## 1. Using the JAR without any code
 
@@ -55,7 +386,7 @@ and are documented in detail below.
 
 ```bash
 curl -L -o oom-watchdog.jar \
-  https://github.com/kgillard/oom-watchdog/releases/download/v1.4.0/oom-watchdog.jar
+  https://github.com/kgillard/oom-watchdog/releases/download/v1.5.0/oom-watchdog.jar
 ```
 
 No installation, no classpath setup — the JAR is a self-contained fat JAR with no
@@ -169,14 +500,14 @@ Then reference it in your `pom.xml`:
 <dependency>
     <groupId>com.trongus.oom</groupId>
     <artifactId>oom-watchdog-core</artifactId>
-    <version>1.4.0</version>
+    <version>1.5.0</version>
 </dependency>
 ```
 
 Or in Gradle:
 
 ```groovy
-implementation 'com.trongus.oom:oom-watchdog-core:1.4.0'
+implementation 'com.trongus.oom:oom-watchdog-core:1.5.0'
 ```
 
 ### 2.2 Minimal wiring
@@ -884,7 +1215,90 @@ public final class MicrometerAlertChannel implements AlertChannel {
 
 ---
 
-## 10. Extension Point Reference
+## 10. Example 11 — OOM Cause Analysis and i18n
+
+**File:** [`Example11CauseAnalysisAndI18n.java`](core/src/main/java/com/trongus/oom/examples/Example11CauseAnalysisAndI18n.java)
+
+Demonstrates the two features introduced in v1.3.0: `OomCauseAnalyser` used standalone
+to classify JVM signals into root-cause categories, and `WatchdogConfig.locale()` to
+produce alert text in any of nine supported locales.
+
+### Standalone OomCauseAnalyser
+
+The analyser is stateless and thread-safe.  It accepts three signals and returns an
+`OomCause` with a category enum and a localised plain-language explanation:
+
+```java
+Messages messages = new Messages(Locale.ENGLISH);
+OomCauseAnalyser analyser = new OomCauseAnalyser(
+        0.90,      // criticalHeapThreshold
+        0.50,      // gcOverheadThreshold
+        messages);
+
+// All five categories:
+analyser.analyse(0.50, 0.10, 0.0);                    // → NONE
+analyser.analyse(0.72, 0.22, 50.0 / 3_600_000.0);    // → MEMORY_LEAK_TREND
+analyser.analyse(0.65, 0.60, 0.0);                    // → GC_OVERHEAD_EXCEEDED
+analyser.analyse(0.93, 0.30, 0.0);                    // → HEAP_EXHAUSTION
+analyser.analyse(0.94, 0.72, 20.0 / 3_600_000.0);    // → RUNAWAY_GC_WITH_HIGH_HEAP
+```
+
+The explanation is already fully formatted for embedding in alert text, log entries,
+or diagnostic tools without further processing.
+
+### Locale-aware watchdog
+
+```java
+// Pass a Locale to WatchdogConfig — ThresholdRiskAssessor picks it up automatically
+WatchdogConfig config = WatchdogConfig.defaults()
+        .warningHeapThreshold(0.80)
+        .criticalHeapThreshold(0.90)
+        .pollIntervalMs(3_000L)
+        .locale(Locale.JAPANESE)   // or: new Locale("pt", "BR"), Locale.KOREAN, etc.
+        .build();
+
+OomWatchdog watchdog = new OomWatchdog(
+        config,
+        new MxBeanDiagnosticsCollector(config),
+        new ThresholdRiskAssessor(config),
+        Arrays.asList(new ConsoleAlertChannel(),
+                      new FileLogAlertChannel("./oom-example11.log")),
+        new CompositeDumpService(config)
+);
+watchdog.start();
+```
+
+**Supported locale tags** (pass as arg to `Example11CauseAnalysisAndI18n`):
+
+| Tag | Language |
+|-----|----------|
+| _(omit)_ or `en` | English (default) |
+| `de` | German |
+| `es` | Spanish |
+| `fr` | French |
+| `ja` | Japanese |
+| `ko` | Korean |
+| `pt_BR` | Brazilian Portuguese |
+| `zh_CN` | Simplified Chinese |
+| `zh_TW` | Traditional Chinese |
+
+**Run it:**
+
+```bash
+# English
+java -cp oom-watchdog.jar com.trongus.oom.examples.Example11CauseAnalysisAndI18n
+
+# Japanese (locale as first argument)
+java -cp oom-watchdog.jar com.trongus.oom.examples.Example11CauseAnalysisAndI18n ja
+
+# Run with a tiny heap to trigger actual alerts in Japanese
+java -Xmx32m -cp oom-watchdog.jar \
+     com.trongus.oom.examples.Example11CauseAnalysisAndI18n ja
+```
+
+---
+
+## 11. Extension Point Reference
 
 OOM Watchdog exposes four narrow interfaces.  Implement any or all of them to
 customise behaviour without touching the watchdog core.
@@ -1009,14 +1423,14 @@ level of the built-in code.
 
 ---
 
-## 12. Building the examples
+## 13. Building the examples
 
 The examples are compiled as part of the `core` module automatically:
 
 ```bash
 cd oom-watchdog
 mvn clean package -q
-# All 10 example classes are included in core/target/oom-watchdog.jar
+# All 11 example classes are included in core/target/oom-watchdog.jar
 ```
 
 Run an individual example:
@@ -1052,6 +1466,16 @@ java -cp core/target/oom-watchdog.jar \
 
 java -cp core/target/oom-watchdog.jar \
      com.trongus.oom.examples.Example10CognosIntegration
+
+# OOM cause analysis + i18n (pass locale tag as optional first argument)
+java -cp core/target/oom-watchdog.jar \
+     com.trongus.oom.examples.Example11CauseAnalysisAndI18n
+
+java -cp core/target/oom-watchdog.jar \
+     com.trongus.oom.examples.Example11CauseAnalysisAndI18n ja
+
+java -Xmx32m -cp core/target/oom-watchdog.jar \
+     com.trongus.oom.examples.Example11CauseAnalysisAndI18n zh_CN
 ```
 
 Run all 189 tests to verify nothing is broken after adding examples:
@@ -1065,7 +1489,7 @@ mvn test -pl oom-watchdog-tests
 
 ## 13. IBM Application Server and Cognos Integration
 
-OOM Watchdog 1.4.0 adds three new `AlertChannel` implementations targeting IBM
+OOM Watchdog 1.5.0 adds three new `AlertChannel` implementations targeting IBM
 application server platforms.  Each channel uses `java.util.logging` (JUL), which is
 intercepted at runtime by WAS, Liberty, and Cognos without any additional dependencies.
 

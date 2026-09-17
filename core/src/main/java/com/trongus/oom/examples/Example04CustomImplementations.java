@@ -43,7 +43,7 @@ import java.util.List;
  * implementations trivial to write and test in isolation.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.0.0
+ * @version 1.5.0
  * @since 1.0.0
  * @see JvmDiagnosticsCollector
  * @see RiskAssessor

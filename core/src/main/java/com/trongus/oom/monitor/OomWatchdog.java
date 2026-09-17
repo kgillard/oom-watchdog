@@ -48,7 +48,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * {@link #lastLevel} is an {@link AtomicReference} for consistent memory visibility.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.4.0
+ * @version 1.5.0
  * @since 1.0.0
  * @see JvmDiagnosticsCollector
  * @see RiskAssessor
