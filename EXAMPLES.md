@@ -4,7 +4,7 @@ This document covers every way to use OOM Watchdog: running the pre-built JAR fr
 command line without writing any code, embedding it in an application with the Java API,
 and writing your own custom implementations of every extension point.
 
-Six worked examples live in
+Ten worked examples live in
 [`core/src/main/java/com/trongus/oom/examples/`](core/src/main/java/com/trongus/oom/examples/)
 and are documented in detail below.
 
@@ -38,6 +38,14 @@ and are documented in detail below.
 10. [Extension point reference](#10-extension-point-reference)
 11. [Security notes for custom implementations](#11-security-notes-for-custom-implementations)
 12. [Building the examples](#12-building-the-examples)
+13. [IBM Application Server and Cognos Integration](#13-ibm-application-server-and-cognos-integration)
+    - [Section 13: Example 08 — WAS monitoring](#131-example-08--was-monitoring)
+    - [Section 14: Example 09 — Liberty + MicroProfile Health](#132-example-09--liberty--microprofile-health)
+    - [Section 15: Example 10 — Cognos Analytics all three components](#133-example-10--cognos-analytics-all-three-components)
+    - [WAS heap sizing guide](#134-was-heap-sizing-guide)
+    - [Liberty server.xml configuration](#135-liberty-serverxml-configuration)
+    - [Cognos component memory architecture](#136-cognos-component-memory-architecture)
+    - [cognosservice.xml log file configuration](#137-cognosservicexml-log-file-configuration)
 
 ---
 
@@ -47,7 +55,7 @@ and are documented in detail below.
 
 ```bash
 curl -L -o oom-watchdog.jar \
-  https://github.com/kgillard/oom-watchdog/releases/download/v1.1.0/oom-watchdog.jar
+  https://github.com/kgillard/oom-watchdog/releases/download/v1.2.0/oom-watchdog.jar
 ```
 
 No installation, no classpath setup — the JAR is a self-contained fat JAR with no
@@ -984,7 +992,7 @@ The examples are compiled as part of the `core` module automatically:
 ```bash
 cd oom-watchdog
 mvn clean package -q
-# All 7 example classes are included in core/target/oom-watchdog.jar
+# All 10 example classes are included in core/target/oom-watchdog.jar
 ```
 
 Run an individual example:
@@ -1010,6 +1018,16 @@ java -cp core/target/oom-watchdog.jar \
 java -cp core/target/oom-watchdog.jar \
      com.trongus.oom.examples.Example07QRadarAdvanced \
      qradar-primary.corp.com 514 qradar-standby.corp.com 10514
+
+# IBM Application Server examples
+java -cp core/target/oom-watchdog.jar \
+     com.trongus.oom.examples.Example08WasIntegration
+
+java -cp core/target/oom-watchdog.jar \
+     com.trongus.oom.examples.Example09LibertyIntegration
+
+java -cp core/target/oom-watchdog.jar \
+     com.trongus.oom.examples.Example10CognosIntegration
 ```
 
 Run all 189 tests to verify nothing is broken after adding examples:
@@ -1017,6 +1035,247 @@ Run all 189 tests to verify nothing is broken after adding examples:
 ```bash
 mvn test -pl oom-watchdog-tests
 # Tests run: 189, Failures: 0, Errors: 0, Skipped: 0
+```
+
+---
+
+## 13. IBM Application Server and Cognos Integration
+
+OOM Watchdog 1.2.0 adds three new `AlertChannel` implementations targeting IBM
+application server platforms.  Each channel uses `java.util.logging` (JUL), which is
+intercepted at runtime by WAS, Liberty, and Cognos without any additional dependencies.
+
+---
+
+### 13.1 Example 08 — WAS monitoring
+
+**File:** [`Example08WasIntegration.java`](core/src/main/java/com/trongus/oom/examples/Example08WasIntegration.java)
+
+**What it demonstrates:**
+- Embedding the watchdog in a WAS application via a `WasContextListener` POJO that
+  mirrors the `javax.servlet.ServletContextListener` lifecycle methods
+  (`contextInitialized` / `contextDestroyed`).
+- Using `WasAlertChannel` alongside `FileLogAlertChannel` for dual-destination alerting.
+- The WAS-specific shutdown hook pattern via `Runtime.getRuntime().addShutdownHook()`.
+- `WatchdogConfig` tuned for production WAS (30-second poll, 256 MB–2 GB heaps).
+
+**Key configuration:**
+
+```java
+WatchdogConfig config = WatchdogConfig.defaults()
+    .warningHeapThreshold(0.75)
+    .criticalHeapThreshold(0.88)
+    .pollIntervalMs(30_000L)
+    .leakDetectionWindowSize(5)
+    .gcOverheadThreshold(0.40)
+    .heapDumpDirectory("${SERVER_LOG_ROOT}/oom-dumps")
+    .dumpTypes(EnumSet.of(DumpType.HEAP, DumpType.THREAD))
+    .build();
+```
+
+**Channel stack:**
+
+```java
+Arrays.asList(
+    new WasAlertChannel(),          // → SystemErr.log (FFDC incident ID included)
+    new FileLogAlertChannel("${SERVER_LOG_ROOT}/oom-watchdog/oom-watchdog.log")
+)
+```
+
+**Deploying in a real WAS WAR:**
+
+```java
+// 1. Add javax.servlet-api to your WAR's provided scope in pom.xml
+// 2. Annotate the inner class:
+
+@WebListener
+public static final class WasContextListener implements ServletContextListener {
+
+    @Override
+    public void contextInitialized(ServletContextEvent sce) { startWatchdog(); }
+
+    @Override
+    public void contextDestroyed(ServletContextEvent sce)   { stopWatchdog(); }
+}
+```
+
+**WAS Admin Console — logger configuration:**
+
+1. Open WAS Integrated Solutions Console.
+2. Navigate to **Servers → Server Types → WebSphere application servers →
+   `<your server>` → Troubleshooting → Logging and Tracing → Change Log Detail Levels**.
+3. Add: `com.trongus.oom.*=ALL`
+4. Apply and save (no restart required).
+
+---
+
+### 13.2 Example 09 — Liberty + MicroProfile Health
+
+**File:** [`Example09LibertyIntegration.java`](core/src/main/java/com/trongus/oom/examples/Example09LibertyIntegration.java)
+
+**What it demonstrates:**
+- CDI `@ApplicationScoped` lifecycle pattern via `LibertyAppBean` inner class.
+- `LibertyAlertChannel` producing structured JSON log messages to `messages.log`.
+- `OomHealthCheck` inner class illustrating MicroProfile Health `@Liveness` integration.
+- Aggressive thresholds appropriate for container-sized heaps (256–512 MB).
+
+**Key configuration (microservice tuning):**
+
+```java
+WatchdogConfig config = WatchdogConfig.defaults()
+    .warningHeapThreshold(0.70)   // warn earlier — small heap saturates fast
+    .criticalHeapThreshold(0.85)  // critical before container OOM-killer fires
+    .pollIntervalMs(10_000L)      // 10 s for rapid container spike detection
+    .leakDetectionWindowSize(3)   // 30-second leak window
+    .gcOverheadThreshold(0.35)    // lower threshold: small heap = faster GC pressure
+    .dumpTypes(EnumSet.of(DumpType.THREAD))
+    .build();
+```
+
+**MicroProfile Health integration:**
+
+```java
+// In a real Liberty app with mpHealth-4.0 feature:
+@Liveness
+@ApplicationScoped
+public class OomHealthCheck implements HealthCheck {
+
+    @Inject
+    private LibertyAppBean oomBean;
+
+    @Override
+    public HealthCheckResponse call() {
+        boolean healthy = oomBean.getAlertChannel().isHealthy();
+        return HealthCheckResponse.named("jvm-oom-risk")
+                .status(healthy)
+                .withData("riskLevel", oomBean.getAlertChannel().getLastRiskLevel().name())
+                .build();
+    }
+}
+```
+
+The Liberty `/health/live` endpoint returns `DOWN` automatically when the JVM is at
+`CRITICAL` or `OOM_FIRING` risk level, triggering a Kubernetes liveness restart.
+
+---
+
+### 13.3 Example 10 — Cognos Analytics all three components
+
+**File:** [`Example10CognosIntegration.java`](core/src/main/java/com/trongus/oom/examples/Example10CognosIntegration.java)
+
+**What it demonstrates:**
+- A `CognosStartupMonitor` inner class managing the OOM Watchdog lifecycle for one
+  Cognos JVM component.
+- Factory methods (`atcMonitor`, `contentManagerMonitor`, `gatewayMonitor`) with
+  pre-tuned configurations per component.
+- Starting separate watchdog instances for all three Cognos JVM processes.
+- Heap thresholds appropriate for Cognos Report Studio large-dataset workloads.
+
+**Per-component configurations:**
+
+| Component | `-Xmx` range | Warn % | Critical % | Poll interval |
+|-----------|-------------|--------|-----------|---------------|
+| ATC       | 4 GB – 8 GB | 70 %   | 85 %      | 15 s          |
+| CM        | 2 GB – 4 GB | 75 %   | 88 %      | 30 s          |
+| Gateway   | 1 GB – 2 GB | 80 %   | 90 %      | 30 s          |
+
+**Log file per component:**
+
+```
+${COGNOS_LOGS}/oom-watchdog-ATC.log
+${COGNOS_LOGS}/oom-watchdog-CM.log
+${COGNOS_LOGS}/oom-watchdog-Gateway.log
+```
+
+---
+
+### 13.4 WAS heap sizing guide
+
+| JVM argument              | Recommended value for WAS production                           |
+|---------------------------|----------------------------------------------------------------|
+| `-Xms`                    | Equal to `-Xmx` (avoids GC storms during heap resize)         |
+| `-Xmx`                    | 1 GB – 4 GB depending on application workload                 |
+| `-Xmn`                    | 25–33 % of `-Xmx` (nursery size for IBM J9 `gencon`)          |
+| `-Xgcpolicy`              | `gencon` (generational + concurrent — WAS default)            |
+| `-Xdump:heap`             | Enable for automatic OOM heap capture                         |
+| `-verbose:gc`             | Route to `${LOG_ROOT}/verbosegc.log` for GC analysis          |
+| `-XX:MaxMetaspaceSize`    | 256 m – 512 m (limit Metaspace growth)                        |
+
+---
+
+### 13.5 Liberty `server.xml` configuration
+
+```xml
+<featureManager>
+    <feature>mpHealth-4.0</feature>
+    <feature>cdi-4.0</feature>
+</featureManager>
+
+<!-- Enable JSON logging and OOM Watchdog trace -->
+<logging traceSpecification="com.trongus.oom.*=all"
+         messageFormat="JSON"
+         logDirectory="${server.output.dir}/logs"
+         maxFileSize="20"
+         maxFiles="5" />
+```
+
+For Liberty 8.5.5.x (older feature names):
+
+```xml
+<logging traceSpecification="com.trongus.oom.*=all"
+         messageFormat="ENHANCED"
+         logDirectory="${server.output.dir}/logs" />
+```
+
+---
+
+### 13.6 Cognos component memory architecture
+
+```
+  ┌─────────────────────────────────────────────────────────────────┐
+  │                   Cognos Analytics Deployment                   │
+  │                                                                 │
+  │  ┌──────────────┐   ┌──────────────┐   ┌──────────────────┐    │
+  │  │   ATC JVM    │   │   CM JVM     │   │  Gateway JVM     │    │
+  │  │  -Xmx4g–8g   │   │  -Xmx2g–4g  │   │  -Xmx1g–2g       │    │
+  │  │              │   │              │   │                  │    │
+  │  │ Report Engine│   │ Content Mgr  │   │ HTTP Dispatcher  │    │
+  │  │ Session Cache│   │ JDBC Cache   │   │ Session Routing  │    │
+  │  │ PDF Renderer │   │ Metadata Tree│   │ Load Balancer    │    │
+  │  │              │   │              │   │                  │    │
+  │  │ OomWatchdog  │   │ OomWatchdog  │   │ OomWatchdog      │    │
+  │  └──────┬───────┘   └──────┬───────┘   └────────┬─────────┘    │
+  │         │                  │                    │              │
+  └─────────┼──────────────────┼────────────────────┼──────────────┘
+            │                  │                    │
+  CognosAlertChannel    CognosAlertChannel   CognosAlertChannel
+  oom-watchdog-ATC.log  oom-watchdog-CM.log  oom-watchdog-GW.log
+            │                  │                    │
+            └──────────────────┴────────────────────┘
+                               │
+                    Cognos Log Server / QRadar
+```
+
+---
+
+### 13.7 `cognosservice.xml` log file configuration
+
+```xml
+<!-- In cognosservice.xml — route Cognos Log Server to OOM Watchdog alert files -->
+<param name="Log.outputFile">
+    /opt/IBM/cognos/analytics/logs/oom-watchdog-ATC.log
+</param>
+<param name="Log.localCaching">true</param>
+<param name="Log.flushInterval">30</param>
+
+<!-- Recommended JVM arguments for ATC component -->
+<param name="Environment.JAVA_OPTIONS">
+    -Xms2g -Xmx8g -Xmn2g -Xgcpolicy:gencon
+    -XX:MaxMetaspaceSize=512m
+    -XX:+HeapDumpOnOutOfMemoryError
+    -XX:HeapDumpPath=/opt/IBM/cognos/analytics/logs/heapdumps
+    -verbose:gc -Xverbosegclog:/opt/IBM/cognos/analytics/logs/verbosegc-ATC.log
+</param>
 ```
 
 ---

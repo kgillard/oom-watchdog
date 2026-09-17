@@ -356,3 +356,126 @@ mvn clean package -DskipTests -q
 # core/target/oom-watchdog.jar
 # test-harness/target/test-harness.jar
 ```
+
+---
+
+## IBM Application Server Support
+
+OOM Watchdog 1.2.0 extends the `AlertChannel` interface with three new implementations
+targeting IBM application server platforms: `WasAlertChannel`, `LibertyAlertChannel`,
+and `CognosAlertChannel`.  All three use `java.util.logging` (JUL) as the sole
+external dependency, which each server intercepts and routes at runtime.
+
+---
+
+### WAS (WebSphere Application Server) — traditional
+
+| Characteristic | Detail |
+|----------------|--------|
+| JVM vendor     | IBM J9 (IBM SDK for Java 8; also available on OpenJ9) |
+| GC policy      | `gencon` by default (generational + concurrent); configurable via `-Xgcpolicy` |
+| Heap model     | Nursery (`-Xmn`) + tenure space; typical production heap 1 GB – 4 GB |
+| Logging        | JUL records intercepted by WAS logging handler; routed to `SystemOut.log` (INFO and below) and `SystemErr.log` (WARNING and above) |
+| FFDC           | First Failure Data Capture: WAS generates an FFDC incident file in `${SERVER_LOG_ROOT}/ffdc/` on exception; `WasAlertChannel` includes a matching incident ID in every log entry |
+| Thread pool    | WAS manages web-container and EJB thread pools independently; the watchdog scheduler uses its own `ScheduledExecutorService` and does not consume a WAS-managed thread |
+| Poll interval  | 30 s recommended for production WAS (heap growth is gradual; aligns with WAS PMI 10–60 s sampling) |
+
+**How `WasAlertChannel` integrates:**
+
+1. Emits a JUL `WARNING`/`SEVERE` record to logger `com.trongus.oom.WasAlert`.
+2. WAS's built-in JUL handler writes the record to `SystemErr.log`.
+3. A structured single-line entry is also written to `System.err` for FFDC correlation.
+4. Logger level is configured via WAS Admin Console → **Logging and Tracing →
+   Change Log Detail Levels** → `com.trongus.oom.*=ALL`.
+
+---
+
+### Liberty (WebSphere Liberty / Open Liberty)
+
+| Characteristic | Detail |
+|----------------|--------|
+| JVM vendor     | IBM J9 / OpenJ9 (default); HotSpot also supported |
+| Heap model     | Standard JVM heap; typical container deployments use 256 MB – 512 MB (`-Xmx`) |
+| Logging        | JUL unified with Liberty's logging pipeline; output goes to `messages.log`, `console.log`, and `trace.log` depending on level and `server.xml` configuration |
+| JSON logging   | When `messageFormat="JSON"` is set in `server.xml`, every JUL record is emitted as a JSON object; `LibertyAlertChannel` embeds a JSON fragment as the log message so all OOM fields are top-level JSON keys queryable in Elastic / Splunk / IBM Log Analysis |
+| MicroProfile   | Liberty exposes `/health` endpoints backed by MicroProfile Health; `LibertyAlertChannel.isHealthy()` is designed for direct use in a `@Liveness` `HealthCheck` implementation |
+| CDI lifecycle  | Managed via `@ApplicationScoped` + `@PostConstruct` / `@PreDestroy` |
+
+**How `LibertyAlertChannel` integrates:**
+
+1. Emits a JUL `WARNING`/`SEVERE` record to logger `com.trongus.oom.LibertyAlert` with a
+   JSON-fragment message body.
+2. Liberty routes the record to `messages.log` (always) and `console.log` (if foreground).
+3. When JSON logging is active, all OOM fields appear as top-level JSON keys.
+4. `isHealthy()` / `getLastRiskLevel()` enable direct MicroProfile Health wiring.
+
+---
+
+### Cognos Analytics — multiple JVM processes
+
+Cognos Analytics runs three or more separate JVM processes.  Each is monitored
+independently by its own `OomWatchdog` instance paired with a `CognosAlertChannel`.
+
+| Component             | Default JVM | Primary OOM causes                                     | Recommended `-Xmx` |
+|-----------------------|-------------|--------------------------------------------------------|---------------------|
+| Application Tier (ATC)| IBM J9      | Large report datasets, PDF rendering, session caches   | 4 GB – 8 GB         |
+| Content Manager (CM)  | IBM J9      | JDBC result caches, XML metadata trees                 | 2 GB – 4 GB         |
+| Gateway / Dispatcher  | IBM J9      | HTTP session routing, request buffering                | 1 GB – 2 GB         |
+
+**How `CognosAlertChannel` integrates:**
+
+1. Writes a pipe-delimited structured log entry to a dedicated Cognos alert log file
+   (`oom-watchdog-ATC.log`, etc.) that the Cognos Log Server can ingest.
+2. Emits a JUL record at the appropriate level for the application server hosting Cognos.
+3. Log entries include `cognosComponent`, `cognosServer`, `reportEngineHeapMb`, and all
+   standard JVM memory metrics.
+4. The log file path and Cognos component name are configured at construction time.
+
+---
+
+### Architecture diagram — WAS / Liberty / Cognos → OOM Watchdog → QRadar
+
+```mermaid
+graph TD
+    subgraph IBM_Platforms["IBM Application Server Platforms"]
+        WAS["WebSphere Application Server<br/>(IBM J9 / gencon GC)<br/>SystemErr.log · FFDC"]
+        Liberty["WebSphere Liberty / Open Liberty<br/>(J9 or HotSpot)<br/>messages.log · JSON logging · /health"]
+        ATC["Cognos ATC JVM<br/>(-Xmx4g–8g)<br/>Report Engine · Session Cache"]
+        CM["Cognos CM JVM<br/>(-Xmx2g–4g)<br/>Content Manager · JDBC Cache"]
+        GW["Cognos Gateway JVM<br/>(-Xmx1g–2g)<br/>HTTP Dispatcher"]
+    end
+
+    subgraph OomWatchdog["OOM Watchdog (per JVM)"]
+        direction TB
+        Collector["MxBeanDiagnosticsCollector<br/>(MemoryMXBean · GcMXBean)"]
+        Assessor["ThresholdRiskAssessor<br/>(heap % · GC overhead · leak trend)"]
+        Channels["AlertChannel chain"]
+    end
+
+    subgraph Channels_Detail["Alert Channels (1.2.0)"]
+        WasChannel["WasAlertChannel<br/>JUL → SystemErr.log<br/>FFDC incident ID"]
+        LibertyChannel["LibertyAlertChannel<br/>JUL → messages.log<br/>JSON fragment · isHealthy()"]
+        CognosChannel["CognosAlertChannel<br/>pipe-delimited log file<br/>component · server · heapMb"]
+        QRadarChannel["QRadarAlertChannel<br/>LEEF 2.0 syslog<br/>UDP or TCP"]
+        FileChannel["FileLogAlertChannel<br/>structured file log"]
+    end
+
+    WAS -->|JUL| WasChannel
+    Liberty -->|JUL| LibertyChannel
+    ATC -->|JUL + file| CognosChannel
+    CM -->|JUL + file| CognosChannel
+    GW -->|JUL + file| CognosChannel
+
+    Collector --> Assessor --> Channels
+    Channels --> WasChannel
+    Channels --> LibertyChannel
+    Channels --> CognosChannel
+    Channels --> QRadarChannel
+    Channels --> FileChannel
+
+    QRadarChannel -->|"LEEF 2.0 syslog (UDP/TCP)"| QRadar["IBM QRadar SIEM"]
+    WasChannel -->|"SystemErr.log / FFDC"| WASLogs["WAS Log Files"]
+    LibertyChannel -->|"messages.log (JSON)"| LibertyLogs["Liberty Log Files"]
+    CognosChannel -->|"oom-watchdog-*.log"| CognosLogs["Cognos Log Server"]
+```
+
