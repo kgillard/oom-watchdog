@@ -55,7 +55,7 @@ import java.util.Map;
  * rest of the chain for that dump type.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.0.0
+ * @version 1.4.0
  * @since 1.0.0
  * @see HeapDumpService
  * @see DumpStrategy

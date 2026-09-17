@@ -12,6 +12,10 @@ import java.lang.management.ManagementFactory;
  *
  * <p>Detection results are cached as static finals evaluated at class-load
  * time to avoid repeated string/reflection overhead in the poll loop.
+ *
+ * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
+ * @version 1.4.0
+ * @since 1.0.0
  */
 public final class JvmPlatform {
 

@@ -55,7 +55,7 @@ and are documented in detail below.
 
 ```bash
 curl -L -o oom-watchdog.jar \
-  https://github.com/kgillard/oom-watchdog/releases/download/v1.3.0/oom-watchdog.jar
+  https://github.com/kgillard/oom-watchdog/releases/download/v1.4.0/oom-watchdog.jar
 ```
 
 No installation, no classpath setup — the JAR is a self-contained fat JAR with no
@@ -169,14 +169,14 @@ Then reference it in your `pom.xml`:
 <dependency>
     <groupId>com.trongus.oom</groupId>
     <artifactId>oom-watchdog-core</artifactId>
-    <version>1.3.0</version>
+    <version>1.4.0</version>
 </dependency>
 ```
 
 Or in Gradle:
 
 ```groovy
-implementation 'com.trongus.oom:oom-watchdog-core:1.3.0'
+implementation 'com.trongus.oom:oom-watchdog-core:1.4.0'
 ```
 
 ### 2.2 Minimal wiring
@@ -1065,7 +1065,7 @@ mvn test -pl oom-watchdog-tests
 
 ## 13. IBM Application Server and Cognos Integration
 
-OOM Watchdog 1.3.0 adds three new `AlertChannel` implementations targeting IBM
+OOM Watchdog 1.4.0 adds three new `AlertChannel` implementations targeting IBM
 application server platforms.  Each channel uses `java.util.logging` (JUL), which is
 intercepted at runtime by WAS, Liberty, and Cognos without any additional dependencies.
 

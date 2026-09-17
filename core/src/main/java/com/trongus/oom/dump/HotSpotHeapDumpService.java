@@ -51,6 +51,12 @@ import java.util.concurrent.TimeUnit;
  * <p>All output lands in {@link WatchdogConfig#getHeapDumpDirectory()}.
  * The file name always contains the process name, dump type, and a
  * millisecond-precision timestamp so successive dumps never overwrite each other.
+ *
+ * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
+ * @version 1.4.0
+ * @since 1.0.0
+ * @see HeapDumpService
+ * @see DumpType
  */
 public final class HotSpotHeapDumpService implements HeapDumpService {
 

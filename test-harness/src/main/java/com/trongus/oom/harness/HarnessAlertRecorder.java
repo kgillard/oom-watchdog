@@ -4,8 +4,8 @@ import com.trongus.oom.model.JvmSnapshot;
 import com.trongus.oom.model.OomRiskLevel;
 import com.trongus.oom.alert.AlertChannel;
 
-import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -19,8 +19,13 @@ import java.util.concurrent.atomic.AtomicInteger;
  * and recording generated dump file locations so the test harness can assert on watchdog
  * escalation correctness prior to JVM termination.
  *
+ * <h2>Thread Safety</h2>
+ * <p>All mutable state is either an {@link AtomicInteger} (for counters) or a
+ * {@link CopyOnWriteArrayList} (for dump paths), so readers — including
+ * {@link TestHarnessMain#printResults} — never need to hold an external lock.
+ *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.0.0
+ * @version 1.4.0
  * @since 1.0.0
  * @see com.trongus.oom.alert.AlertChannel
  * @see com.trongus.oom.model.JvmSnapshot
@@ -41,8 +46,12 @@ final class HarnessAlertRecorder implements AlertChannel {
      */
     final AtomicInteger critCount = new AtomicInteger(0);
 
-    /** Synchronized list of file paths where diagnostic dumps were written upon escalation. */
-    final List<String> dumpPaths = new ArrayList<>();
+    /**
+     * File paths where diagnostic dumps were written upon escalation.
+     * {@link CopyOnWriteArrayList} provides thread-safe writes from the watchdog
+     * thread and lock-free iteration from the results-printing thread.
+     */
+    final List<String> dumpPaths = new CopyOnWriteArrayList<>();
 
     /**
      * Default package-private constructor for the test alert recorder.
@@ -65,11 +74,9 @@ final class HarnessAlertRecorder implements AlertChannel {
         if (snapshot.getRiskLevel() == OomRiskLevel.CRITICAL) {
             critCount.incrementAndGet();
         }
-        // Store any recorded dump artifact paths in the synchronized collection
+        // CopyOnWriteArrayList.add() is thread-safe; no external lock needed
         if (snapshot.getHeapDumpPath() != null) {
-            synchronized (dumpPaths) {
-                dumpPaths.add(snapshot.getHeapDumpPath());
-            }
+            dumpPaths.add(snapshot.getHeapDumpPath());
         }
     }
 

@@ -7,18 +7,18 @@
 [![Security Audit](https://img.shields.io/badge/security%20audit-3%20passes%20clean-brightgreen)]()
 [![JDK](https://img.shields.io/badge/JDK-8%20%E2%80%93%2026%2B-blue)]()
 [![Vendors](https://img.shields.io/badge/JVM-HotSpot%20%7C%20OpenJ9%20%7C%20GraalVM-blue)]()
-[![Release](https://img.shields.io/badge/release-v1.3.0-blue)](https://github.com/kgillard/oom-watchdog/releases/tag/v1.3.0)
+[![Release](https://img.shields.io/badge/release-v1.4.0-blue)](https://github.com/kgillard/oom-watchdog/releases/tag/v1.4.0)
 
 ---
 
 ## Download
 
-Pre-built JARs are available in the [v1.3.0 release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.3.0):
+Pre-built JARs are available in the [v1.4.0 release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.4.0):
 
 | Artefact | Description | Size |
 |----------|-------------|------|
-| [`oom-watchdog.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.3.0/oom-watchdog.jar) | Fat JAR — monitoring agent + CLI entry point | ~79 KB |
-| [`test-harness.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.3.0/test-harness.jar) | Fat JAR — interactive OOM test harness | ~92 KB |
+| [`oom-watchdog.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.4.0/oom-watchdog.jar) | Fat JAR — monitoring agent + CLI entry point | ~79 KB |
+| [`test-harness.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.4.0/test-harness.jar) | Fat JAR — interactive OOM test harness | ~92 KB |
 
 ---
 
@@ -38,7 +38,7 @@ On the first `CRITICAL` event in an episode, the dump service captures diagnosti
 (heap dump, thread dump, class histogram, core dump) — but only **once per episode** to
 prevent dump storms.
 
-**New in v1.3.0:** The `OomCauseAnalyser` produces a plain-language explanation of the
+**New in v1.4.0:** The `OomCauseAnalyser` produces a plain-language explanation of the
 most likely OOM root cause (runaway GC, heap exhaustion, memory leak, GC overhead).
 All alert text is now fully internationalised (i18n) across 9 locales: `en`, `de`, `es`,
 `fr`, `ja`, `ko`, `pt_BR`, `zh_CN`, `zh_TW`.
@@ -52,7 +52,7 @@ All alert text is now fully internationalised (i18n) across 9 locales: `en`, `de
 ```bash
 # Download the release JAR
 curl -L -o oom-watchdog.jar \
-  https://github.com/kgillard/oom-watchdog/releases/download/v1.3.0/oom-watchdog.jar
+  https://github.com/kgillard/oom-watchdog/releases/download/v1.4.0/oom-watchdog.jar
 
 # Run against a target JVM process (monitoring mode)
 java -jar oom-watchdog.jar \
@@ -364,7 +364,7 @@ Fields: `timestamp | component | server | riskLevel | heapUsedMB | heapMaxMB | h
 
 ---
 
-## OOM cause analysis (v1.3.0)
+## OOM cause analysis (v1.4.0)
 
 Every alert now includes a plain-language root cause diagnosis produced by `OomCauseAnalyser`:
 
@@ -380,7 +380,7 @@ The explanation is embedded in the `[Cause]` section of every diagnosis note and
 
 ---
 
-## Internationalisation (v1.3.0)
+## Internationalisation (v1.4.0)
 
 All alert text, section headings, and diagnosis strings are locale-aware. Set the locale on `WatchdogConfig`:
 

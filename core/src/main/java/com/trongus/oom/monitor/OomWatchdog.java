@@ -16,6 +16,8 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * OomWatchdog – the central orchestrator.
@@ -36,6 +38,22 @@ import java.util.concurrent.TimeUnit;
  *       {@code OOM_FIRING} event and not repeated until risk returns to
  *       {@code OK} (prevents dump storms).</li>
  * </ul>
+ *
+ * <h3>Thread safety</h3>
+ * <p>{@code start()} and {@code stop()} are {@code synchronized} on the instance
+ * to serialise lifecycle transitions.  The poll cycle runs on a single-threaded
+ * {@link ScheduledExecutorService}, but the episode-dump guard uses an
+ * {@link AtomicBoolean} with {@code compareAndSet} to eliminate any check-then-act
+ * race should the scheduler ever be replaced with a multi-threaded one.
+ * {@link #lastLevel} is an {@link AtomicReference} for consistent memory visibility.
+ *
+ * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
+ * @version 1.4.0
+ * @since 1.0.0
+ * @see JvmDiagnosticsCollector
+ * @see RiskAssessor
+ * @see AlertChannel
+ * @see HeapDumpService
  */
 public final class OomWatchdog {
 
@@ -48,9 +66,20 @@ public final class OomWatchdog {
     private final ScheduledExecutorService scheduler;
     private volatile ScheduledFuture<?>    task;
 
-    // State: prevents repeated dump for the same sustained-critical episode
-    private volatile boolean dumpTakenForCurrentEpisode = false;
-    private volatile OomRiskLevel lastLevel = OomRiskLevel.OK;
+    /**
+     * Guards against triggering multiple dumps within a single sustained-critical
+     * episode.  Uses {@link AtomicBoolean#compareAndSet} so the check-and-set is
+     * atomic even if the scheduler is ever made multi-threaded.
+     */
+    private final AtomicBoolean           dumpTakenThisEpisode = new AtomicBoolean(false);
+
+    /**
+     * Tracks the risk level assessed in the most recent poll cycle.
+     * {@link AtomicReference} provides consistent visibility across threads
+     * (e.g. {@link #getLastRiskLevel()} callers on the calling thread).
+     */
+    private final AtomicReference<OomRiskLevel> lastLevel =
+            new AtomicReference<>(OomRiskLevel.OK);
 
     /**
      * @param config        tuning parameters
@@ -116,18 +145,19 @@ public final class OomWatchdog {
 
             // 3. Reset episode flag when risk returns to OK
             if (level == OomRiskLevel.OK) {
-                dumpTakenForCurrentEpisode = false;
+                dumpTakenThisEpisode.set(false);
             }
 
             // 4. Alert all channels when risk is elevated
             if (level.ordinal() >= OomRiskLevel.WARNING.ordinal()) {
                 JvmSnapshot toReport = assessed;
 
-                // 5. Trigger selected dump types on first CRITICAL / OOM_FIRING event in episode
-                if (!dumpTakenForCurrentEpisode
-                        && level.ordinal() >= OomRiskLevel.CRITICAL.ordinal()
-                        && !config.getDumpTypes().isEmpty()) {
-                    dumpTakenForCurrentEpisode = true;
+                // 5. Trigger selected dump types on the first CRITICAL / OOM_FIRING event
+                //    in this episode.  compareAndSet(false, true) is atomic: only the first
+                //    concurrent caller wins; subsequent ones skip the dump entirely.
+                if (level.ordinal() >= OomRiskLevel.CRITICAL.ordinal()
+                        && !config.getDumpTypes().isEmpty()
+                        && dumpTakenThisEpisode.compareAndSet(false, true)) {
                     List<DumpType> types = new ArrayList<>(config.getDumpTypes());
                     List<String> dumpPaths = dumpService.dump(assessed, types);
                     if (!dumpPaths.isEmpty()) {
@@ -146,7 +176,7 @@ public final class OomWatchdog {
                 }
             }
 
-            lastLevel = level;
+            lastLevel.set(level);
 
         } catch (Exception e) {
             // The watchdog must not crash the host process.
@@ -167,8 +197,13 @@ public final class OomWatchdog {
         };
     }
 
-    /** Returns the last assessed risk level (useful for tests / health-checks). */
+    /**
+     * Returns the last assessed risk level (useful for tests / health-checks).
+     *
+     * @return the most recent {@link OomRiskLevel} recorded by the poll cycle;
+     *         {@link OomRiskLevel#OK} if no poll has completed yet
+     */
     public OomRiskLevel getLastRiskLevel() {
-        return lastLevel;
+        return lastLevel.get();
     }
 }
