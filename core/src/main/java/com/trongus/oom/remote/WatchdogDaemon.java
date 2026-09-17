@@ -123,9 +123,11 @@ public final class WatchdogDaemon implements Closeable {
                 WatchdogConfig targetConfig = targetCfgBuilder.build();
 
                 // Alert channels: console + per-target file log + shared channels (e.g. QRadar)
+                // Sanitise target name for filesystem safety: allow only alphanumeric, dash, underscore
+                String safeName = target.getName().replaceAll("[^A-Za-z0-9._-]", "_");
                 List<AlertChannel> channels = new ArrayList<>();
                 channels.add(new ConsoleAlertChannel());
-                channels.add(new FileLogAlertChannel("./oom-watchdog-" + target.getName() + ".log"));
+                channels.add(new FileLogAlertChannel("./oom-watchdog-" + safeName + ".log"));
                 channels.addAll(sharedAlertChannels);
 
                 JmxDiagnosticsCollector collector = new JmxDiagnosticsCollector(target, targetConfig);

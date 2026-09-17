@@ -3,17 +3,16 @@ package com.trongus.oom.remote;
 import com.trongus.oom.dump.DumpType;
 import com.trongus.oom.logging.WatchdogLogger;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.Reader;
 import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -79,9 +78,9 @@ public final class TargetRegistry {
         if (filePath == null || filePath.trim().isEmpty()) {
             throw new IllegalArgumentException("File path must not be null or blank");
         }
-        File file = new File(filePath.trim());
+        File file = new File(filePath.trim()).getCanonicalFile();
         if (!file.exists() || !file.isFile()) {
-            throw new IOException("Targets configuration file does not exist or is not a regular file: " + filePath);
+            throw new IOException("Targets configuration file does not exist or is not a regular file: " + file.getPath());
         }
         try (InputStream in = new FileInputStream(file)) {
             Properties props = new Properties();
@@ -161,7 +160,9 @@ public final class TargetRegistry {
 
             String targetName = remainder.substring(0, firstDot).trim();
             String propName   = remainder.substring(firstDot + 1).trim().toLowerCase();
-            String value      = props.getProperty(key).trim();
+            String rawValue   = props.getProperty(key);
+            if (rawValue == null) continue;        // guard: Properties.getProperty() can return null
+            String value      = rawValue.trim();
 
             targetMap.computeIfAbsent(targetName, k -> new LinkedHashMap<>()).put(propName, value);
         }
@@ -199,30 +200,30 @@ public final class TargetRegistry {
                 b.credentials(username, password != null ? password : "");
             }
 
-            // Optional thresholds
+            // Optional thresholds — catch NumberFormatException to give a clear error message
             if (p.containsKey("warn")) {
-                b.warnThreshold(Double.parseDouble(p.get("warn")));
+                b.warnThreshold(parseDouble(p.get("warn"), "warn", targetName));
             } else if (p.containsKey("warn-threshold")) {
-                b.warnThreshold(Double.parseDouble(p.get("warn-threshold")));
+                b.warnThreshold(parseDouble(p.get("warn-threshold"), "warn-threshold", targetName));
             }
 
             if (p.containsKey("crit")) {
-                b.critThreshold(Double.parseDouble(p.get("crit")));
+                b.critThreshold(parseDouble(p.get("crit"), "crit", targetName));
             } else if (p.containsKey("crit-threshold")) {
-                b.critThreshold(Double.parseDouble(p.get("crit-threshold")));
+                b.critThreshold(parseDouble(p.get("crit-threshold"), "crit-threshold", targetName));
             }
 
             if (p.containsKey("gc")) {
-                b.gcThreshold(Double.parseDouble(p.get("gc")));
+                b.gcThreshold(parseDouble(p.get("gc"), "gc", targetName));
             } else if (p.containsKey("gc-threshold")) {
-                b.gcThreshold(Double.parseDouble(p.get("gc-threshold")));
+                b.gcThreshold(parseDouble(p.get("gc-threshold"), "gc-threshold", targetName));
             }
 
             // Optional poll interval
             if (p.containsKey("poll-ms")) {
-                b.pollIntervalMs(Long.parseLong(p.get("poll-ms")));
+                b.pollIntervalMs(parseLong(p.get("poll-ms"), "poll-ms", targetName));
             } else if (p.containsKey("poll-interval-ms")) {
-                b.pollIntervalMs(Long.parseLong(p.get("poll-interval-ms")));
+                b.pollIntervalMs(parseLong(p.get("poll-interval-ms"), "poll-interval-ms", targetName));
             }
 
             // Optional dump types
@@ -250,5 +251,45 @@ public final class TargetRegistry {
         }
 
         return Collections.unmodifiableList(descriptors);
+    }
+
+    /**
+     * Parses a double value from a property string, throwing a descriptive
+     * {@link IllegalArgumentException} rather than a raw {@link NumberFormatException}.
+     *
+     * @param value      raw string value
+     * @param propName   property name for error reporting
+     * @param targetName target name for error reporting
+     * @return parsed double value
+     * @throws IllegalArgumentException if the value is not a valid double
+     */
+    private static double parseDouble(String value, String propName, String targetName) {
+        try {
+            return Double.parseDouble(value.trim());
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException(String.format(
+                    "Invalid value '%s' for property 'target.%s.%s' – expected a decimal number between 0.0 and 1.0",
+                    value, targetName, propName));
+        }
+    }
+
+    /**
+     * Parses a long value from a property string, throwing a descriptive
+     * {@link IllegalArgumentException} rather than a raw {@link NumberFormatException}.
+     *
+     * @param value      raw string value
+     * @param propName   property name for error reporting
+     * @param targetName target name for error reporting
+     * @return parsed long value
+     * @throws IllegalArgumentException if the value is not a valid long integer
+     */
+    private static long parseLong(String value, String propName, String targetName) {
+        try {
+            return Long.parseLong(value.trim());
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException(String.format(
+                    "Invalid value '%s' for property 'target.%s.%s' – expected a whole number in milliseconds",
+                    value, targetName, propName));
+        }
     }
 }

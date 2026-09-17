@@ -281,12 +281,17 @@ public final class JmxDiagnosticsCollector implements JvmDiagnosticsCollector, C
     }
 
     private JvmSnapshot buildUnreachableSnapshot(long timestampMs, String reason) {
+        // Sanitise the reason to prevent log-injection; restrict to safe printable characters
+        String safeReason = reason != null
+                ? reason.replaceAll("[\\x00-\\x1F\\x7F]", " ").trim()
+                : "unknown";
         return new JvmSnapshot.Builder()
                 .targetName(descriptor.getName())
                 .processName(descriptor.getName() + " [UNREACHABLE]")
                 .timestampMs(timestampMs)
                 .riskLevel(OomRiskLevel.OOM_FIRING)
-                .diagnosisNotes("[UNREACHABLE] Target JVM '" + descriptor.getName() + "' could not be reached via JMX: " + reason)
+                .diagnosisNotes("[UNREACHABLE] Target JVM '" + descriptor.getName()
+                        + "' could not be reached via JMX: " + safeReason)
                 .build();
     }
 

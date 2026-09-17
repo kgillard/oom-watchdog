@@ -456,7 +456,7 @@ public final class WatchdogMain {
      * applying defaults and basic range validation.
      *
      * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
-     * @version 1.6.0
+     * @version 1.7.0
      * @since 1.0.0
      * @see WatchdogMain
      */

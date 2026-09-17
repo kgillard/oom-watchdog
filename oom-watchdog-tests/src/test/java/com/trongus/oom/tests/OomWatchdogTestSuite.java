@@ -37,11 +37,13 @@ import org.junit.runners.Suite;
  *   <li><strong>collector</strong> – {@link MxBeanDiagnosticsCollectorTest}</li>
  *   <li><strong>monitor</strong> – {@link ThresholdRiskAssessorTest}</li>
  *   <li><strong>platform</strong> – {@link JvmPlatformTest}</li>
+ *   <li><strong>remote</strong> – {@link TargetDescriptorTest}, {@link TargetRegistryTest},
+ *       {@link WatchdogDaemonTest}</li>
  *   <li><strong>integration</strong> – {@link OomWatchdogIntegrationTest}</li>
  * </ul>
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.0.0
+ * @version 1.7.0
  * @since 1.0.0
  */
 @RunWith(Suite.class)
