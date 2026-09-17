@@ -107,7 +107,7 @@ public final class ThresholdRiskAssessor implements RiskAssessor {
         OomCause cause = causeAnalyser.analyse(heapRatio, gcOverhead, growthRate);
         summary.append("[Cause] ").append(cause.getExplanation());
 
-        String enrichedNotes = summary.toString().trim() + " | " + snap.getDiagnosisNotes();
+        String enrichedNotes = summary.toString().trim() + " " + snap.getDiagnosisNotes();
 
         return snap.toBuilder()
                 .riskLevel(level)
