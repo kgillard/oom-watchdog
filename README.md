@@ -13,12 +13,12 @@
 
 ## Download
 
-Pre-built JARs are available in the [v1.5.0 release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.5.0):
+Pre-built JARs are available in the [v1.7.0 release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.0):
 
 | Artefact | Description | Size |
 |----------|-------------|------|
-| [`oom-watchdog.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.5.0/oom-watchdog.jar) | Fat JAR — monitoring agent + CLI entry point | ~161 KB |
-| [`test-harness.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.5.0/test-harness.jar) | Fat JAR — interactive OOM test harness | ~175 KB |
+| [`oom-watchdog.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.7.0/oom-watchdog.jar) | Fat JAR — monitoring agent + CLI entry point | ~179 KB |
+| [`test-harness.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.7.0/test-harness.jar) | Fat JAR — interactive OOM test harness | ~192 KB |
 
 ---
 
