@@ -10,9 +10,13 @@ import com.trongus.oom.config.WatchdogConfig;
 import com.trongus.oom.dump.DumpType;
 import com.trongus.oom.dump.CompositeDumpService;
 import com.trongus.oom.dump.HeapDumpService;
+import com.trongus.oom.logging.WatchdogLogger;
 import com.trongus.oom.monitor.OomWatchdog;
 import com.trongus.oom.monitor.RiskAssessor;
 import com.trongus.oom.monitor.ThresholdRiskAssessor;
+import com.trongus.oom.remote.TargetDescriptor;
+import com.trongus.oom.remote.TargetRegistry;
+import com.trongus.oom.remote.WatchdogDaemon;
 import com.trongus.oom.test.OomSimulator;
 
 import java.util.ArrayList;
@@ -20,12 +24,15 @@ import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Main application entry point and command-line driver for the OOM Watchdog agent.
  *
  * <h2>Design Rationale</h2>
  * <p>{@code WatchdogMain} acts as the primary runtime orchestrator. It parses CLI arguments,
+ * initialises structured JUL logging via {@link WatchdogLogger},
  * builds an immutable {@link WatchdogConfig}, configures alert dispatching channels
  * (Console, File Logger, and optional QRadar Syslog), initialises diagnostics collection
  * and risk assessment engines, registers JVM shutdown hooks for graceful termination,
@@ -84,6 +91,12 @@ import java.util.Set;
  *     <td>Output file path for local structured alert logging.</td>
  *   </tr>
  *   <tr>
+ *     <td>{@code --log-level}</td>
+ *     <td>{@code FINEST|FINE|CONFIG|INFO|WARNING|SEVERE}</td>
+ *     <td>{@code INFO}</td>
+ *     <td>Minimum log level for internal watchdog diagnostic output.</td>
+ *   </tr>
+ *   <tr>
  *     <td>{@code --qradar-host}</td>
  *     <td>String (hostname/IP)</td>
  *     <td>(empty / disabled)</td>
@@ -100,6 +113,18 @@ import java.util.Set;
  *     <td>Flag (boolean)</td>
  *     <td>{@code false} (UDP)</td>
  *     <td>When specified, uses TCP transport rather than UDP for QRadar syslog forwarding.</td>
+ *   </tr>
+ *   <tr>
+ *     <td>{@code --daemon}</td>
+ *     <td>Flag (boolean)</td>
+ *     <td>{@code false}</td>
+ *     <td>Enables daemon mode for monitoring multiple external JVM processes via JMX.</td>
+ *   </tr>
+ *   <tr>
+ *     <td>{@code --targets-file}</td>
+ *     <td>String (file path)</td>
+ *     <td>{@code "./targets.properties"}</td>
+ *     <td>Path to the properties file declaring external JVM targets in daemon mode.</td>
  *   </tr>
  *   <tr>
  *     <td>{@code --test-mode}</td>
@@ -135,16 +160,24 @@ import java.util.Set;
  *     --warn-threshold 0.50 \
  *     --crit-threshold 0.70 \
  *     --poll-ms 1000
+ *
+ *   # Debug mode with fine-grained internal diagnostics
+ *   java -jar oom-watchdog.jar --log-level FINE
  * }</pre>
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.5.0
+ * @version 1.7.0
  * @since 1.0.0
  * @see com.trongus.oom.config.WatchdogConfig
  * @see com.trongus.oom.monitor.OomWatchdog
+ * @see com.trongus.oom.remote.WatchdogDaemon
+ * @see com.trongus.oom.remote.TargetRegistry
  * @see com.trongus.oom.test.OomSimulator
+ * @see com.trongus.oom.logging.WatchdogLogger
  */
 public final class WatchdogMain {
+
+    private static final Logger LOG = WatchdogLogger.forClass(WatchdogMain.class);
 
     /**
      * Private constructor preventing instantiation of this static utility entry class.
@@ -157,9 +190,10 @@ public final class WatchdogMain {
 
     /**
      * Main entry point for the OOM Watchdog application.
-     * <p>Parses command-line arguments, validates threshold relationships, builds configuration,
-     * wires alert channels, instantiates the watchdog engine, registers a JVM shutdown hook,
-     * and either initiates background monitoring or launches the test simulator.
+     * <p>Parses command-line arguments, initialises structured logging, validates threshold
+     * relationships, builds configuration, wires alert channels, instantiates the watchdog
+     * engine, registers a JVM shutdown hook, and either initiates background monitoring or
+     * launches the test simulator.
      *
      * @param args command-line arguments supplied to the JVM
      * @throws InterruptedException if the main thread is interrupted while waiting during execution
@@ -175,6 +209,10 @@ public final class WatchdogMain {
             return;
         }
 
+        // ── Logging ───────────────────────────────────────────────────────────
+        // Initialise structured JUL logging before any other component is created
+        WatchdogLogger.initialise(cli.logLevel);
+
         // ── Configuration ─────────────────────────────────────────────────────
         // Construct the immutable WatchdogConfig instance from parsed arguments
         WatchdogConfig.Builder cfgBuilder = WatchdogConfig.defaults()
@@ -184,7 +222,8 @@ public final class WatchdogMain {
             .pollIntervalMs(       cli.pollMs)
             .heapDumpDirectory(    cli.dumpDir)
             .qradarHost(           cli.qradarHost)
-            .qradarPort(           cli.qradarPort);
+            .qradarPort(           cli.qradarPort)
+            .logLevel(             cli.logLevel);
 
         if (!cli.dumpTypes.isEmpty()) {
             cfgBuilder.dumpTypes(cli.dumpTypes);
@@ -192,23 +231,56 @@ public final class WatchdogMain {
 
         WatchdogConfig config = cfgBuilder.build();
 
-        // ── Alert channels ────────────────────────────────────────────────────
-        // Initialise notification destinations (Console, Local File Log, QRadar)
-        List<AlertChannel> channels = new ArrayList<>();
-
-        channels.add(new ConsoleAlertChannel());
-        channels.add(new FileLogAlertChannel(cli.logFile));
-
+        // ── Shared QRadar Alert Channel (if configured) ───────────────────────
+        List<AlertChannel> sharedChannels = new ArrayList<>();
         if (!cli.qradarHost.isEmpty()) {
             QRadarAlertChannel.Transport transport = cli.qradarTcp
                     ? QRadarAlertChannel.Transport.TCP
                     : QRadarAlertChannel.Transport.UDP;
-            channels.add(new QRadarAlertChannel(cli.qradarHost, cli.qradarPort, transport));
-            System.out.println("[OomWatchdog] QRadar alerts → "
-                    + cli.qradarHost + ":" + cli.qradarPort + "/" + transport);
+            sharedChannels.add(new QRadarAlertChannel(cli.qradarHost, cli.qradarPort, transport));
+            WatchdogLogger.config(LOG, "QRadar alerts \u2192 {0}:{1}/{2}",
+                    cli.qradarHost, cli.qradarPort, transport);
         } else {
-            System.out.println("[OomWatchdog] QRadar disabled (use --qradar-host to enable).");
+            WatchdogLogger.config(LOG, "QRadar disabled (use --qradar-host to enable).");
         }
+
+        // ── Daemon Mode (Multi-Target JVM Monitoring) ─────────────────────────
+        if (cli.daemon) {
+            WatchdogLogger.info(LOG, "Launching in DAEMON mode using targets file: {0}", cli.targetsFile);
+            List<TargetDescriptor> targets;
+            try {
+                targets = TargetRegistry.loadFromFile(cli.targetsFile);
+            } catch (Exception e) {
+                WatchdogLogger.severe(LOG, e, "Failed to load targets file [{0}]: {1}",
+                        cli.targetsFile, e.getMessage());
+                System.err.println("[OomWatchdog] Error loading targets file: " + e.getMessage());
+                System.exit(1);
+                return;
+            }
+
+            if (targets.isEmpty()) {
+                WatchdogLogger.severe(LOG, "No valid targets found in targets file: {0}", cli.targetsFile);
+                System.err.println("[OomWatchdog] No targets found in " + cli.targetsFile);
+                System.exit(1);
+                return;
+            }
+
+            WatchdogDaemon daemon = new WatchdogDaemon(targets, config, sharedChannels);
+            Runtime.getRuntime().addShutdownHook(
+                    new Thread(daemon::stop, "oom-daemon-shutdown"));
+
+            daemon.start();
+            printDaemonSummary(targets, config, cli);
+
+            Thread.currentThread().join();
+            return;
+        }
+
+        // ── Single-JVM Self-Monitoring Mode ───────────────────────────────────
+        List<AlertChannel> channels = new ArrayList<>();
+        channels.add(new ConsoleAlertChannel());
+        channels.add(new FileLogAlertChannel(cli.logFile));
+        channels.addAll(sharedChannels);
 
         // ── Wiring ────────────────────────────────────────────────────────────
         // Assemble core monitoring dependencies and instantiate OomWatchdog
@@ -249,8 +321,8 @@ public final class WatchdogMain {
     private static void runSimulator(long leakSecs) {
         OomSimulator simulator = new OomSimulator(
                 leakSecs * 1000L,
-                (phase, desc) -> System.out.println(
-                        "[WatchdogMain] Simulator phase change: " + phase + " – " + desc));
+                (phase, desc) -> WatchdogLogger.info(LOG,
+                        "Simulator phase change: {0} \u2013 {1}", phase, desc));
 
         Thread simThread = new Thread(simulator, "oom-simulator");
         simThread.setDaemon(false); // keep JVM alive through OOM
@@ -263,12 +335,43 @@ public final class WatchdogMain {
     // =========================================================================
 
     /**
-     * Prints an ASCII summary table detailing active configuration options at startup.
+     * Logs summary table detailing active multi-target daemon configuration at startup.
+     *
+     * @param targets list of target descriptors
+     * @param config  active base configuration
+     * @param cli     parsed command-line arguments container
+     */
+    private static void printDaemonSummary(List<TargetDescriptor> targets, WatchdogConfig config, CliArgs cli) {
+        System.out.println();
+        System.out.println("╔══════════════════════════════════════════════════════════╗");
+        System.out.println("║          OOM Watchdog Daemon – Multi-Target Mode         ║");
+        System.out.println("╠══════════════════════════════════════════════════════════╣");
+        System.out.printf( "║  Targets file            : %s%n",      cli.targetsFile);
+        System.out.printf( "║  Monitored targets count : %d%n",      targets.size());
+        for (TargetDescriptor t : targets) {
+            System.out.printf( "║    \u2022 %-18s (warn=%.0f%% crit=%.0f%%)%n",
+                    t.getName(), t.getWarnThreshold() * 100, t.getCritThreshold() * 100);
+        }
+        System.out.printf( "║  Log level               : %s%n",      config.getLogLevel().getName());
+        if (!cli.qradarHost.isEmpty()) {
+            System.out.printf( "║  QRadar destination      : %s:%d/%s%n",
+                    cli.qradarHost, cli.qradarPort, cli.qradarTcp ? "TCP" : "UDP");
+        }
+        System.out.println("╚══════════════════════════════════════════════════════════╝");
+        System.out.println();
+        System.out.println("Press Ctrl-C to stop.");
+    }
+
+    /**
+     * Logs a CONFIG-level summary table detailing active configuration options at startup.
      *
      * @param config active {@link WatchdogConfig} instance
      * @param cli    parsed command-line arguments container
      */
     private static void printStartupSummary(WatchdogConfig config, CliArgs cli) {
+        // The startup banner is intentionally written to System.out (not the logger)
+        // so it always appears regardless of the configured log level, mimicking the
+        // conventional ASCII banner pattern for CLI tools.
         System.out.println();
         System.out.println("╔══════════════════════════════════════════════════════════╗");
         System.out.println("║               OOM Watchdog – Running                     ║");
@@ -281,6 +384,7 @@ public final class WatchdogMain {
         System.out.printf( "║  Dump types              : %s%n",
                 config.getDumpTypes().isEmpty() ? "(none)" : config.getDumpTypes().toString());
         System.out.printf( "║  Log file                : %s%n",      cli.logFile);
+        System.out.printf( "║  Log level               : %s%n",      config.getLogLevel().getName());
         System.out.printf( "║  Test mode               : %s%n",      cli.testMode ? "YES" : "no");
         System.out.println("╚══════════════════════════════════════════════════════════╝");
         System.out.println();
@@ -315,6 +419,15 @@ public final class WatchdogMain {
           + "                               Example: --dump-types heap,thread\n"
           + "                               Default: none\n"
           + "  --log-file       <path>       Alert log file (default: ./oom-watchdog.log)\n"
+          + "  --log-level      <level>      Internal diagnostic log level:\n"
+          + "                                 FINEST  – verbose trace output\n"
+          + "                                 FINE    – debug-level events\n"
+          + "                                 CONFIG  – startup and configuration info\n"
+          + "                                 INFO    – normal operations (default)\n"
+          + "                                 WARNING – degraded/recoverable only\n"
+          + "                                 SEVERE  – fatal/unrecoverable only\n"
+          + "  --daemon                      Run in daemon mode monitoring external JVMs via JMX\n"
+          + "  --targets-file   <path>       Path to targets.properties in daemon mode (default: ./targets.properties)\n"
           + "  --qradar-host    <host>       QRadar syslog host (disables QRadar if omitted)\n"
           + "  --qradar-port    <port>       QRadar syslog port (default: 514)\n"
           + "  --qradar-tcp                  Use TCP instead of UDP for QRadar syslog\n"
@@ -343,7 +456,7 @@ public final class WatchdogMain {
      * applying defaults and basic range validation.
      *
      * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
-     * @version 1.0.0
+     * @version 1.6.0
      * @since 1.0.0
      * @see WatchdogMain
      */
@@ -370,6 +483,9 @@ public final class WatchdogMain {
         /** Destination file path for local alert logging. */
         String logFile = "./oom-watchdog.log";
 
+        /** Minimum log level for internal watchdog diagnostic output. */
+        Level logLevel = Level.INFO;
+
         /** QRadar syslog receiver hostname or IP address; empty if disabled. */
         String qradarHost = "";
 
@@ -378,6 +494,12 @@ public final class WatchdogMain {
 
         /** Whether to use TCP transport rather than UDP for QRadar syslog packets. */
         boolean qradarTcp = false;
+
+        /** Whether to run in multi-target daemon mode. */
+        boolean daemon = false;
+
+        /** Path to targets.properties configuration file for daemon mode. */
+        String targetsFile = "./targets.properties";
 
         /** Whether to run the test mode memory simulator instead of normal monitoring. */
         boolean testMode = false;
@@ -403,8 +525,10 @@ public final class WatchdogMain {
                 String arg = list.get(i);
                 switch (arg) {
                     case "--help":          c.help = true;                                    break;
+                    case "--daemon":        c.daemon = true;                                  break;
                     case "--test-mode":     c.testMode = true;                                break;
                     case "--qradar-tcp":    c.qradarTcp = true;                               break;
+                    case "--targets-file":  c.targetsFile    = nextStr(list, i++, arg);      break;
                     case "--warn-threshold":c.warnThreshold  = nextDouble(list, i++, arg);   break;
                     case "--crit-threshold":c.critThreshold  = nextDouble(list, i++, arg);   break;
                     case "--gc-threshold":  c.gcThreshold    = nextDouble(list, i++, arg);   break;
@@ -413,12 +537,14 @@ public final class WatchdogMain {
                     case "--qradar-port":   c.qradarPort     = nextInt(list, i++, arg);      break;
                     case "--dump-dir":      c.dumpDir        = nextStr(list, i++, arg);      break;
                     case "--log-file":      c.logFile        = nextStr(list, i++, arg);      break;
+                    case "--log-level":     c.logLevel       = parseLogLevel(nextStr(list, i++, arg)); break;
                     case "--qradar-host":   c.qradarHost     = nextStr(list, i++, arg);      break;
                     case "--dump-types":
                         c.dumpTypes = parseDumpTypes(nextStr(list, i++, arg));
                         break;
                     default:
                         if (arg.startsWith("--")) {
+                            // Log to stderr before logger is initialised (it's init'd after parse)
                             System.err.println("[OomWatchdog] Unknown argument: " + arg
                                     + "  (use --help for usage)");
                         }
@@ -460,6 +586,23 @@ public final class WatchdogMain {
                 c.dumpDir = "./dumps";
             }
             return c;
+        }
+
+        /**
+         * Parses a JUL log level name (case-insensitive).
+         * Falls back to {@link Level#INFO} if the name is not recognised.
+         *
+         * @param name the level name string (e.g. {@code "FINE"}, {@code "info"})
+         * @return the corresponding {@link Level}; never {@code null}
+         */
+        private static Level parseLogLevel(String name) {
+            try {
+                return Level.parse(name.toUpperCase());
+            } catch (IllegalArgumentException e) {
+                System.err.println("[OomWatchdog] Unknown log-level '" + name
+                        + "'; valid values: FINEST, FINE, CONFIG, INFO, WARNING, SEVERE. Using INFO.");
+                return Level.INFO;
+            }
         }
 
         /**

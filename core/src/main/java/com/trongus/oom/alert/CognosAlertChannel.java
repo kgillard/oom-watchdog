@@ -1,5 +1,6 @@
 package com.trongus.oom.alert;
 
+import com.trongus.oom.logging.WatchdogLogger;
 import com.trongus.oom.model.JvmSnapshot;
 import com.trongus.oom.model.OomRiskLevel;
 
@@ -85,7 +86,7 @@ import java.util.logging.Logger;
  * argument list in the Cognos service configuration.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.5.0
+ * @version 1.6.0
  * @since 1.2.0
  * @see AlertChannel
  * @see WasAlertChannel
@@ -93,7 +94,11 @@ import java.util.logging.Logger;
  */
 public final class CognosAlertChannel implements AlertChannel {
 
+    /** JUL logger for Cognos alert routing (intentionally uses the alert-routing name, not the diagnostic hierarchy). */
     private static final Logger LOG = Logger.getLogger("com.trongus.oom.CognosAlert");
+
+    /** Internal diagnostics logger for watchdog operational messages. */
+    private static final Logger DIAG = WatchdogLogger.forClass(CognosAlertChannel.class);
 
     /** Prefix for diagnostic {@code System.err} lines. */
     private static final String ERR_PREFIX = "[OomWatchdog][Cognos]";
@@ -137,7 +142,7 @@ public final class CognosAlertChannel implements AlertChannel {
                 Files.createDirectories(logPath.getParent());
             }
         } catch (IOException ex) {
-            System.err.println(ERR_PREFIX + " Failed to create log directory: " + ex.getMessage());
+            WatchdogLogger.warning(DIAG, ex, "Failed to create Cognos log directory: {0}", ex.getMessage());
         }
     }
 
@@ -210,7 +215,7 @@ public final class CognosAlertChannel implements AlertChannel {
             LOG.log(julLevel, julMsg);
 
         } catch (Exception ex) {
-            System.err.println(ERR_PREFIX + " alert() failed: " + ex.getMessage());
+            WatchdogLogger.warning(DIAG, ex, "Cognos alert() failed: {0}", ex.getMessage());
         }
     }
 

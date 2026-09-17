@@ -124,6 +124,8 @@ chmod +x oom-watchdog-installer.sh
 | `--qradar-port <port>` | `514` | QRadar / syslog target port (1–65535) |
 | `--qradar-tcp` | _(off)_ | Use TCP instead of UDP for QRadar |
 | `--test-mode` | _(off)_ | Run OomSimulator and exit |
+| `--daemon` | _(off)_ | Run in multi-target daemon mode monitoring external JVMs via JMX |
+| `--targets-file <path>` | `./targets.properties` | Path to targets configuration file in daemon mode |
 | `--test-leak-secs <s>` | `20` | Slow-leak phase duration in test mode |
 | `--help` | | Print usage and exit |
 
@@ -214,6 +216,52 @@ A single-line structured entry is also appended for machine parsing:
 
 ```
 2025-09-17T08:00:00.000+1000 severity=CRITICAL process=98765@prod-host heapUsedMB=921 heapMaxMB=1024 heapPct=90.0 nonHeapUsedMB=128 gcOverheadPct=23.8 totalGcTimeMs=14300 postGcGrowth=42.30 MB/h diagnosis="..."
+```
+
+---
+
+### Multi-Target Daemon Mode (Monitoring External JVMs via JMX)
+
+`WatchdogDaemon` monitors multiple external JVM processes concurrently via standard JMX (JSR-160). This is ideal for monitoring IBM QRadar (`hostcontext`, `tomcat`), WebSphere Application Server, WebSphere Liberty, Cognos, and custom microservices from a single watchdog process.
+
+#### Enabling JMX on QRadar and Target JVMs
+
+Add standard JMX flags to the target JVM startup options (e.g. `/opt/qradar/systemd/bin/hostcontext.sh` or Tomcat `setenv.sh`):
+
+```bash
+-Dcom.sun.management.jmxremote \
+-Dcom.sun.management.jmxremote.port=7777 \
+-Dcom.sun.management.jmxremote.ssl=false \
+-Dcom.sun.management.jmxremote.authenticate=false
+```
+
+#### Configuring `targets.properties`
+
+```properties
+# QRadar hostcontext
+target.hostcontext.jmx-url    = service:jmx:rmi:///jndi/rmi://localhost:7777/jmxrmi
+target.hostcontext.warn       = 0.75
+target.hostcontext.crit       = 0.85
+target.hostcontext.dump-types = heap,thread
+target.hostcontext.dump-dir   = /var/log/qradar/dumps/hostcontext
+
+# Tomcat Web Server
+target.tomcat.jmx-url         = service:jmx:rmi:///jndi/rmi://localhost:8090/jmxrmi
+target.tomcat.warn            = 0.80
+target.tomcat.crit            = 0.90
+
+# WebSphere Liberty
+target.liberty.jmx-url        = service:jmx:rmi:///jndi/rmi://localhost:9443/jmxrmi
+```
+
+#### Running in Daemon Mode
+
+```bash
+java -jar oom-watchdog.jar \
+    --daemon \
+    --targets-file /etc/oom-watchdog/targets.properties \
+    --qradar-host 127.0.0.1 \
+    --qradar-port 514
 ```
 
 ---

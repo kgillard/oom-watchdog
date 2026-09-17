@@ -127,6 +127,7 @@ public final class MxBeanDiagnosticsCollector implements JvmDiagnosticsCollector
                                            totalGcTime, gcCounts.isEmpty());
 
         return new JvmSnapshot.Builder()
+                .targetName(null)
                 .processName(processName)
                 .timestampMs(now)
                 .heapUsedBytes(heapUsed)

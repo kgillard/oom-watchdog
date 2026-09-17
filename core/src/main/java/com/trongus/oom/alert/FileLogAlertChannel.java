@@ -1,5 +1,6 @@
 package com.trongus.oom.alert;
 
+import com.trongus.oom.logging.WatchdogLogger;
 import com.trongus.oom.model.JvmSnapshot;
 
 import java.io.IOException;
@@ -10,6 +11,7 @@ import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.logging.Logger;
 
 /**
  * Appends a structured alert entry to a rotating log file.
@@ -18,8 +20,14 @@ import java.util.Date;
  * format produced by {@link AlertFormatter#toSingleLine(JvmSnapshot)}.
  * A separate detailed multi-line entry is also appended so the file can be
  * both machine-parsed and human-read.
+ *
+ * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
+ * @version 1.6.0
+ * @since 1.0.0
  */
 public final class FileLogAlertChannel implements AlertChannel {
+
+    private static final Logger LOG = WatchdogLogger.forClass(FileLogAlertChannel.class);
 
     private final Path logPath;
 
@@ -34,7 +42,7 @@ public final class FileLogAlertChannel implements AlertChannel {
                 Files.createDirectories(logPath.getParent());
             }
         } catch (IOException e) {
-            System.err.println("[OomWatchdog][FileLog] Failed to create log directory: " + e.getMessage());
+            WatchdogLogger.warning(LOG, e, "Failed to create log directory: {0}", e.getMessage());
         }
     }
 
@@ -54,7 +62,7 @@ public final class FileLogAlertChannel implements AlertChannel {
                     multiLine.getBytes(StandardCharsets.UTF_8),
                     StandardOpenOption.CREATE, StandardOpenOption.APPEND);
         } catch (IOException e) {
-            System.err.println("[OomWatchdog][FileLog] Failed to write alert: " + e.getMessage());
+            WatchdogLogger.warning(LOG, e, "Failed to write alert: {0}", e.getMessage());
         }
     }
 

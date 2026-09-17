@@ -48,6 +48,7 @@ and are documented in detail below.
 13. [Building the examples](#13-building-the-examples)
 14. [IBM Application Server and Cognos Integration](#14-ibm-application-server-and-cognos-integration)
     - [Example 08 — WAS monitoring](#141-example-08--was-monitoring)
+15. [Multi-Target Daemon Mode and Remote JMX Monitoring](#15-multi-target-daemon-mode-and-remote-jmx-monitoring)
     - [Example 09 — Liberty + MicroProfile Health](#142-example-09--liberty--microprofile-health)
     - [Example 10 — Cognos Analytics all three components](#143-example-10--cognos-analytics-all-three-components)
     - [WAS heap sizing guide](#144-was-heap-sizing-guide)
@@ -302,7 +303,7 @@ System.out.println(cause.getExplanation());  // "Heap used 93.0% of maximum capa
 
 ---
 
-### v1.4.0 — Security hardening (audit pass 4)
+### v1.4.0 — Security hardening
 
 **What's in it:** Three concurrency security fixes:
 
@@ -1379,7 +1380,7 @@ SNS/SQS publish, in-memory recorder for tests.
 
 ---
 
-## 11. Security notes for custom implementations
+## 12. Security notes for custom implementations
 
 When writing custom implementations, follow these guidelines to match the security
 level of the built-in code.
@@ -1487,7 +1488,7 @@ mvn test -pl oom-watchdog-tests
 
 ---
 
-## 13. IBM Application Server and Cognos Integration
+## 14. IBM Application Server and Cognos Integration
 
 OOM Watchdog 1.5.0 adds three new `AlertChannel` implementations targeting IBM
 application server platforms.  Each channel uses `java.util.logging` (JUL), which is
@@ -1495,7 +1496,7 @@ intercepted at runtime by WAS, Liberty, and Cognos without any additional depend
 
 ---
 
-### 13.1 Example 08 — WAS monitoring
+### 14.1 Example 08 — WAS monitoring
 
 **File:** [`Example08WasIntegration.java`](core/src/main/java/com/trongus/oom/examples/Example08WasIntegration.java)
 
@@ -1557,7 +1558,7 @@ public static final class WasContextListener implements ServletContextListener {
 
 ---
 
-### 13.2 Example 09 — Liberty + MicroProfile Health
+### 14.2 Example 09 — Liberty + MicroProfile Health
 
 **File:** [`Example09LibertyIntegration.java`](core/src/main/java/com/trongus/oom/examples/Example09LibertyIntegration.java)
 
@@ -1607,7 +1608,7 @@ The Liberty `/health/live` endpoint returns `DOWN` automatically when the JVM is
 
 ---
 
-### 13.3 Example 10 — Cognos Analytics all three components
+### 14.3 Example 10 — Cognos Analytics all three components
 
 **File:** [`Example10CognosIntegration.java`](core/src/main/java/com/trongus/oom/examples/Example10CognosIntegration.java)
 
@@ -1637,7 +1638,7 @@ ${COGNOS_LOGS}/oom-watchdog-Gateway.log
 
 ---
 
-### 13.4 WAS heap sizing guide
+### 14.4 WAS heap sizing guide
 
 | JVM argument              | Recommended value for WAS production                           |
 |---------------------------|----------------------------------------------------------------|
@@ -1651,7 +1652,7 @@ ${COGNOS_LOGS}/oom-watchdog-Gateway.log
 
 ---
 
-### 13.5 Liberty `server.xml` configuration
+### 14.5 Liberty `server.xml` configuration
 
 ```xml
 <featureManager>
@@ -1677,7 +1678,7 @@ For Liberty 8.5.5.x (older feature names):
 
 ---
 
-### 13.6 Cognos component memory architecture
+### 14.6 Cognos component memory architecture
 
 ```
   ┌─────────────────────────────────────────────────────────────────┐
@@ -1706,7 +1707,7 @@ For Liberty 8.5.5.x (older feature names):
 
 ---
 
-### 13.7 `cognosservice.xml` log file configuration
+### 14.7 `cognosservice.xml` log file configuration
 
 ```xml
 <!-- In cognosservice.xml — route Cognos Log Server to OOM Watchdog alert files -->
@@ -1724,6 +1725,61 @@ For Liberty 8.5.5.x (older feature names):
     -XX:HeapDumpPath=/opt/IBM/cognos/analytics/logs/heapdumps
     -verbose:gc -Xverbosegclog:/opt/IBM/cognos/analytics/logs/verbosegc-ATC.log
 </param>
+```
+
+---
+
+## 15. Multi-Target Daemon Mode and Remote JMX Monitoring
+
+### 15.1 Overview (v1.7.0)
+
+In enterprise deployments such as IBM QRadar or multi-tier WebSphere clusters, multiple JVMs run concurrently on a single appliance or host. `WatchdogDaemon` allows a single lightweight watchdog process to monitor all target JVMs simultaneously over standard JMX (JSR-160 RMI).
+
+### 15.2 targets.properties configuration
+
+```properties
+# ==============================================================================
+# QRadar Multi-Target Configuration
+# ==============================================================================
+
+# Target 1: QRadar hostcontext (main orchestrator)
+target.hostcontext.jmx-url    = service:jmx:rmi:///jndi/rmi://localhost:7777/jmxrmi
+target.hostcontext.warn       = 0.75
+target.hostcontext.crit       = 0.85
+target.hostcontext.poll-ms    = 3000
+target.hostcontext.dump-types = heap,thread
+target.hostcontext.dump-dir   = /var/log/qradar/dumps/hostcontext
+
+# Target 2: Tomcat Web Server (UI and REST API)
+target.tomcat.jmx-url         = service:jmx:rmi:///jndi/rmi://localhost:8090/jmxrmi
+target.tomcat.warn            = 0.80
+target.tomcat.crit            = 0.90
+target.tomcat.dump-types      = heap,thread,class_histogram
+target.tomcat.dump-dir        = /var/log/qradar/dumps/tomcat
+
+# Target 3: WebSphere Liberty / Open Liberty
+target.liberty.jmx-url        = service:jmx:rmi:///jndi/rmi://localhost:9443/jmxrmi
+target.liberty.warn           = 0.75
+target.liberty.crit           = 0.88
+target.liberty.dump-types     = heap,thread
+```
+
+### 15.3 Running the Daemon
+
+```bash
+java -jar oom-watchdog.jar \
+    --daemon \
+    --targets-file /etc/oom-watchdog/targets.properties \
+    --qradar-host 127.0.0.1 \
+    --qradar-port 514
+```
+
+### 15.4 LEEF 2.0 Output with targetJvm Tag
+
+When forwarded to QRadar SIEM, events produced in daemon mode automatically include the `targetJvm` attribute:
+
+```
+<13>Sep 17 08:00:00 qradar-appliance LEEF:2.0|IBM|OomWatchdog|1.1|OOM_CRITICAL|sev=9\tcat=JVM_OOM_Risk\ttargetJvm=hostcontext\tprocess=hostcontext (12345@qradar-appliance)\theapUsedMB=1740\theapMaxMB=2048\theapPct=85.0\tnonHeapUsedMB=256\tgcOverheadPct=18.4\ttotalGcTimeMs=9200\tpostGcGrowth=34.10 MB/h\triskLevel=CRITICAL\tmsg=...
 ```
 
 ---

@@ -1,6 +1,7 @@
 package com.trongus.oom.dump;
 
 import com.trongus.oom.config.WatchdogConfig;
+import com.trongus.oom.logging.WatchdogLogger;
 import com.trongus.oom.model.JvmSnapshot;
 import com.trongus.oom.platform.JvmPlatform;
 
@@ -26,6 +27,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Logger;
 
 /**
  * Cross-vendor, multi-type diagnostic dump service.
@@ -53,13 +55,14 @@ import java.util.concurrent.TimeUnit;
  * millisecond-precision timestamp so successive dumps never overwrite each other.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.5.0
+ * @version 1.6.0
  * @since 1.0.0
  * @see HeapDumpService
  * @see DumpType
  */
 public final class HotSpotHeapDumpService implements HeapDumpService {
 
+    private static final Logger LOG = WatchdogLogger.forClass(HotSpotHeapDumpService.class);
     private static final String HOTSPOT_MXBEAN_NAME = "com.sun.management:type=HotSpotDiagnostic";
 
     private final WatchdogConfig config;
@@ -79,7 +82,7 @@ public final class HotSpotHeapDumpService implements HeapDumpService {
         try {
             Files.createDirectories(Paths.get(config.getHeapDumpDirectory()));
         } catch (IOException e) {
-            System.err.println("[OomWatchdog][Dump] Cannot create dump directory: " + e.getMessage());
+            WatchdogLogger.warning(LOG, e, "Cannot create dump directory: {0}", e.getMessage());
             return paths;
         }
 
@@ -90,7 +93,7 @@ public final class HotSpotHeapDumpService implements HeapDumpService {
                     paths.add(path);
                 }
             } catch (Exception e) {
-                System.err.println("[OomWatchdog][Dump] " + type + " dump failed: " + e.getMessage());
+                WatchdogLogger.warning(LOG, e, "{0} dump failed: {1}", type, e.getMessage());
             }
         }
         return paths;
@@ -107,7 +110,7 @@ public final class HotSpotHeapDumpService implements HeapDumpService {
             case THREAD:          return dumpThreads(snapshot);
             case CLASS_HISTOGRAM: return dumpClassHistogram(snapshot);
             default:
-                System.err.println("[OomWatchdog][Dump] Unknown dump type: " + type);
+                WatchdogLogger.warning(LOG, "Unknown dump type: {0}", type);
                 return null;
         }
     }
@@ -140,12 +143,12 @@ public final class HotSpotHeapDumpService implements HeapDumpService {
             Object      bean     = ManagementFactory.newPlatformMXBeanProxy(server, HOTSPOT_MXBEAN_NAME, beanCls);
             Method      dumpHeap = beanCls.getMethod("dumpHeap", String.class, boolean.class);
             dumpHeap.invoke(bean, path, true); // true = live objects only
-            System.out.println("[OomWatchdog][Dump] HEAP (HotSpot): " + path);
+            WatchdogLogger.info(LOG, "HEAP (HotSpot): {0}", path);
             return new File(path).getAbsolutePath();
         } catch (ClassNotFoundException e) {
             return null; // not HotSpot
         } catch (Exception e) {
-            System.err.println("[OomWatchdog][Dump] HEAP HotSpot error: " + e.getMessage());
+            WatchdogLogger.warning(LOG, e, "HEAP HotSpot error: {0}", e.getMessage());
             return null;
         }
     }
@@ -154,12 +157,12 @@ public final class HotSpotHeapDumpService implements HeapDumpService {
         try {
             Class<?> dumpCls = Class.forName("com.ibm.jvm.Dump");
             dumpCls.getMethod("HeapDump").invoke(null);
-            System.out.println("[OomWatchdog][Dump] HEAP (IBM J9) triggered; JVM path ~ " + path);
+            WatchdogLogger.info(LOG, "HEAP (IBM J9) triggered; JVM path ~ {0}", path);
             return path + "_j9.phd";
         } catch (ClassNotFoundException e) {
             return null; // not J9
         } catch (Exception e) {
-            System.err.println("[OomWatchdog][Dump] HEAP J9 error: " + e.getMessage());
+            WatchdogLogger.warning(LOG, e, "HEAP J9 error: {0}", e.getMessage());
             return null;
         }
     }
@@ -187,12 +190,12 @@ public final class HotSpotHeapDumpService implements HeapDumpService {
             Class<?> dumpCls = Class.forName("com.ibm.jvm.Dump");
             dumpCls.getMethod("SystemDump").invoke(null);
             String path = buildPath(snapshot, "core", ".dmp");
-            System.out.println("[OomWatchdog][Dump] CORE (IBM J9) triggered; JVM path ~ " + path);
+            WatchdogLogger.info(LOG, "CORE (IBM J9) triggered; JVM path ~ {0}", path);
             return path + "_j9";
         } catch (ClassNotFoundException e) {
             return null;
         } catch (Exception e) {
-            System.err.println("[OomWatchdog][Dump] CORE J9 error: " + e.getMessage());
+            WatchdogLogger.warning(LOG, e, "CORE J9 error: {0}", e.getMessage());
             return null;
         }
     }
@@ -201,7 +204,7 @@ public final class HotSpotHeapDumpService implements HeapDumpService {
         // Use the reliable PID from JvmPlatform rather than parsing the MXBean name
         long pid = JvmPlatform.PID;
         if (pid < 0) {
-            System.err.println("[OomWatchdog][Dump] CORE: cannot determine PID, skipping gcore.");
+            WatchdogLogger.warning(LOG, "CORE: cannot determine PID, skipping gcore.");
             return null;
         }
         String outPath = buildPath(snapshot, "core", ".core");
@@ -211,7 +214,7 @@ public final class HotSpotHeapDumpService implements HeapDumpService {
         try {
             safePath = new File(outPath).getCanonicalPath();
         } catch (IOException e) {
-            System.err.println("[OomWatchdog][Dump] CORE: invalid output path: " + e.getMessage());
+            WatchdogLogger.warning(LOG, e, "CORE: invalid output path: {0}", e.getMessage());
             return null;
         }
 
@@ -235,15 +238,15 @@ public final class HotSpotHeapDumpService implements HeapDumpService {
             boolean finished = proc.waitFor(60, TimeUnit.SECONDS);
             if (!finished) {
                 proc.destroyForcibly();
-                System.err.println("[OomWatchdog][Dump] gcore timed out after 60 s.");
+                WatchdogLogger.warning(LOG, "gcore timed out after 60 s.");
                 return null;
             }
             int exit = proc.exitValue();
             if (exit == 0) {
-                System.out.println("[OomWatchdog][Dump] CORE (gcore): " + safePath);
+                WatchdogLogger.info(LOG, "CORE (gcore): {0}", safePath);
                 return new File(safePath).getAbsolutePath();
             } else {
-                System.err.println("[OomWatchdog][Dump] CORE gcore exit " + exit + ": " + output);
+                WatchdogLogger.warning(LOG, "CORE gcore exit {0}: {1}", exit, output);
                 return null;
             }
         } catch (IOException e) {
@@ -278,10 +281,10 @@ public final class HotSpotHeapDumpService implements HeapDumpService {
                 pw.write("\n");
             }
         } catch (IOException e) {
-            System.err.println("[OomWatchdog][Dump] THREAD write error: " + e.getMessage());
+            WatchdogLogger.warning(LOG, e, "THREAD write error: {0}", e.getMessage());
             return null;
         }
-        System.out.println("[OomWatchdog][Dump] THREAD: " + path);
+        WatchdogLogger.info(LOG, "THREAD: {0}", path);
         return new File(path).getAbsolutePath();
     }
 
@@ -361,7 +364,7 @@ public final class HotSpotHeapDumpService implements HeapDumpService {
                 pw.write("Time    : " + new Date(snapshot.getTimestampMs()) + "\n\n");
                 if (result != null) pw.write(result);
             }
-            System.out.println("[OomWatchdog][Dump] CLASS_HISTOGRAM (HotSpot DiagnosticCommand): " + path);
+            WatchdogLogger.info(LOG, "CLASS_HISTOGRAM (HotSpot DiagnosticCommand): {0}", path);
             return new File(path).getAbsolutePath();
         } catch (Exception e) {
             // Not available on this JVM / version
@@ -373,12 +376,12 @@ public final class HotSpotHeapDumpService implements HeapDumpService {
         try {
             Class<?> dumpCls = Class.forName("com.ibm.jvm.Dump");
             dumpCls.getMethod("JavaDump").invoke(null); // J9 javacore includes class histogram
-            System.out.println("[OomWatchdog][Dump] CLASS_HISTOGRAM (IBM J9 JavaDump) triggered; path ~ " + path);
+            WatchdogLogger.info(LOG, "CLASS_HISTOGRAM (IBM J9 JavaDump) triggered; path ~ {0}", path);
             return path + "_j9";
         } catch (ClassNotFoundException e) {
             return null;
         } catch (Exception e) {
-            System.err.println("[OomWatchdog][Dump] CLASS_HISTOGRAM J9 error: " + e.getMessage());
+            WatchdogLogger.warning(LOG, e, "CLASS_HISTOGRAM J9 error: {0}", e.getMessage());
             return null;
         }
     }
@@ -395,10 +398,10 @@ public final class HotSpotHeapDumpService implements HeapDumpService {
                 pw.write(String.format("%-45s  %,12d%n", e.getKey(), e.getValue()));
             }
         } catch (IOException e) {
-            System.err.println("[OomWatchdog][Dump] HISTOGRAM write error: " + e.getMessage());
+            WatchdogLogger.warning(LOG, e, "HISTOGRAM write error: {0}", e.getMessage());
             return null;
         }
-        System.out.println("[OomWatchdog][Dump] CLASS_HISTOGRAM (pool summary fallback): " + path);
+        WatchdogLogger.info(LOG, "CLASS_HISTOGRAM (pool summary fallback): {0}", path);
         return new File(path).getAbsolutePath();
     }
 

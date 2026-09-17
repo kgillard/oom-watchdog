@@ -1,0 +1,69 @@
+# ==============================================================================
+# OOM Watchdog – Multi-Target Configuration Example (targets.properties)
+#
+# Declares remote JVM processes to monitor concurrently via standard JMX (JSR-160).
+#
+# Format:
+#   target.<name>.jmx-url     = service:jmx:rmi:///jndi/rmi://<host>:<port>/jmxrmi  (required)
+#   target.<name>.warn        = 0.80                                                 (optional, default 0.80)
+#   target.<name>.crit        = 0.90                                                 (optional, default 0.90)
+#   target.<name>.gc          = 0.50                                                 (optional, default 0.50)
+#   target.<name>.poll-ms     = 5000                                                 (optional, default 5000)
+#   target.<name>.dump-types  = heap,thread,class_histogram                          (optional, default none)
+#   target.<name>.dump-dir    = ./dumps/<name>                                       (optional, default ./dumps/<name>)
+#   target.<name>.username    = <jmx-user>                                           (optional)
+#   target.<name>.password    = <jmx-password>                                       (optional)
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# IBM QRadar – hostcontext
+# ------------------------------------------------------------------------------
+# Enable JMX in /opt/qradar/systemd/bin/hostcontext.sh or systemd unit:
+#   -Dcom.sun.management.jmxremote
+#   -Dcom.sun.management.jmxremote.port=7777
+#   -Dcom.sun.management.jmxremote.ssl=false
+#   -Dcom.sun.management.jmxremote.authenticate=false
+target.hostcontext.jmx-url    = service:jmx:rmi:///jndi/rmi://localhost:7777/jmxrmi
+target.hostcontext.warn       = 0.75
+target.hostcontext.crit       = 0.85
+target.hostcontext.gc         = 0.40
+target.hostcontext.poll-ms    = 3000
+target.hostcontext.dump-types = heap,thread
+target.hostcontext.dump-dir   = /var/log/qradar/dumps/hostcontext
+
+# ------------------------------------------------------------------------------
+# IBM QRadar / Tomcat Web Server (UI & API)
+# ------------------------------------------------------------------------------
+# Enable JMX in /opt/tomcat/bin/setenv.sh or /opt/qradar/bin/tomcat.sh:
+#   CATALINA_OPTS="$CATALINA_OPTS -Dcom.sun.management.jmxremote.port=8090 ..."
+target.tomcat.jmx-url         = service:jmx:rmi:///jndi/rmi://localhost:8090/jmxrmi
+target.tomcat.warn            = 0.80
+target.tomcat.crit            = 0.90
+target.tomcat.dump-types      = heap,thread,class_histogram
+
+# ------------------------------------------------------------------------------
+# IBM WebSphere Application Server (WAS Traditional)
+# ------------------------------------------------------------------------------
+target.was.jmx-url            = service:jmx:rmi:///jndi/rmi://localhost:8880/jmxrmi
+target.was.warn               = 0.80
+target.was.crit               = 0.90
+target.was.poll-ms            = 5000
+
+# ------------------------------------------------------------------------------
+# IBM WebSphere Liberty / Open Liberty
+# ------------------------------------------------------------------------------
+# Enable JMX in server.xml:
+#   <featureManager><feature>restConnector-2.0</feature></featureManager>
+#   or standard local JMX port:
+target.liberty.jmx-url        = service:jmx:rmi:///jndi/rmi://localhost:9443/jmxrmi
+target.liberty.warn           = 0.75
+target.liberty.crit           = 0.88
+target.liberty.dump-types     = heap,thread
+
+# ------------------------------------------------------------------------------
+# IBM Cognos – Content Manager (CM) / Admin Task Center (ATC)
+# ------------------------------------------------------------------------------
+target.cognos-atc.jmx-url     = service:jmx:rmi:///jndi/rmi://localhost:9300/jmxrmi
+target.cognos-atc.warn        = 0.80
+target.cognos-atc.crit        = 0.90
+target.cognos-atc.dump-types  = heap,thread

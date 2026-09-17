@@ -98,6 +98,9 @@ final class AlertFormatter {
         StringBuilder sb = new StringBuilder();
         sb.append(messages.get("section.banner")).append("\n");
         sb.append(String.format("  %-11s: %s%n",  messages.get("label.severity"),  snap.getRiskLevel()));
+        if (snap.getTargetName() != null) {
+            sb.append(String.format("  %-11s: %s%n",  "Target", sanitiseMultiLine(snap.getTargetName())));
+        }
         sb.append(String.format("  %-11s: %s%n",  messages.get("label.process"),   sanitiseMultiLine(snap.getProcessName())));
         sb.append(String.format("  %-11s: %tc%n", messages.get("label.timestamp"), snap.getTimestampMs()));
         sb.append("\n").append(messages.get("section.heap")).append("\n");
@@ -167,11 +170,16 @@ final class AlertFormatter {
                 ? "N/A"
                 : String.format("%.2f MB/h", slope * 3_600_000.0 / MB);
 
+        String targetPart = snap.getTargetName() != null
+                ? "target=" + sanitiseSingleLine(snap.getTargetName()) + " "
+                : "";
+
         return String.format(
-            "severity=%s process=%s heapUsedMB=%d heapMaxMB=%d heapPct=%.1f "
+            "severity=%s %sprocess=%s heapUsedMB=%d heapMaxMB=%d heapPct=%.1f "
           + "nonHeapUsedMB=%d gcOverheadPct=%.1f totalGcTimeMs=%d postGcGrowth=%s "
           + "diagnosis=\"%s\"%s",
             snap.getRiskLevel(),
+            targetPart,
             sanitiseSingleLine(snap.getProcessName()),
             snap.getHeapUsedBytes()     / MB,
             snap.getHeapMaxBytes()      / MB,

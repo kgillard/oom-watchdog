@@ -1,4 +1,4 @@
-# OOM Watchdog – Architecture (v1.5.0)
+# OOM Watchdog – Architecture (v1.7.0)
 
 ## Overview
 
@@ -6,6 +6,10 @@ OOM Watchdog is a zero-dependency, production-quality JVM memory watchdog librar
 preemptively detects Out-Of-Memory conditions and fires structured alerts before the JVM
 crashes.  It supports **all major JVM vendors** (HotSpot, IBM J9/OpenJ9, GraalVM JVM,
 GraalVM Native Image) and **JDK 8 through 26+**.
+
+**v1.7.0 additions:** Multi-target JVM monitoring daemon with remote JMX collector (`com.trongus.oom.remote` package: `TargetDescriptor`, `TargetRegistry`, `JmxDiagnosticsCollector`, `WatchdogDaemon`), target JVM tag propagation in `JvmSnapshot`, `QRadarAlertChannel` LEEF attribute `targetJvm`, and CLI daemon flags (`--daemon`, `--targets-file`).
+
+**v1.6.0 additions:** `WatchdogLogger` structured JUL logging subsystem, `WatchdogConfig.logLevel(Level)`, CLI `--log-level` flag.
 
 **v1.5.0 additions:** Example 11 (`Example11CauseAnalysisAndI18n`) demonstrating
 `OomCauseAnalyser` standalone and locale-aware watchdog wiring; per-release Quick Start
@@ -30,13 +34,18 @@ substitutable, interfaces are narrow, and all high-level modules depend on abstr
 ```mermaid
 graph TD
     CLI["WatchdogMain (CLI)"] -->|builds| W["OomWatchdog (Orchestrator)"]
+    CLI -->|or builds| DAE["WatchdogDaemon (Multi-target)"]
+    DAE -->|loads| REG["TargetRegistry"]
+    REG -->|parses| TD["TargetDescriptor"]
+    DAE -->|manages N x| W
     W --> C["JvmDiagnosticsCollector"]
     W --> A["RiskAssessor"]
     W --> CH["AlertChannel(s)"]
     W --> D["HeapDumpService"]
     W --> WC["WatchdogConfig"]
 
-    C -->|impl| MX["MxBeanDiagnosticsCollector"]
+    C -->|impl (local)| MX["MxBeanDiagnosticsCollector"]
+    C -->|impl (remote JMX)| JMX["JmxDiagnosticsCollector"]
     A -->|impl| TR["ThresholdRiskAssessor"]
     CH -->|impl| CON["ConsoleAlertChannel"]
     CH -->|impl| FILE["FileLogAlertChannel"]
@@ -414,6 +423,7 @@ oom-watchdog/                  Maven multi-module root (v1.5.0)
 │       ├── monitor/           OomWatchdog + RiskAssessor (interface)
 │       │                      + ThresholdRiskAssessor
 │       ├── platform/          JvmPlatform (static detection, all fields final)
+│       ├── remote/            TargetDescriptor, TargetRegistry, JmxDiagnosticsCollector, WatchdogDaemon  ← v1.7.0
 │       └── test/              OomSimulator (3-phase heap exhaustion)
 │   └── src/main/resources/com/trongus/oom/i18n/
 │       ├── Messages.properties       English (base / fallback)

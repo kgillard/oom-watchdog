@@ -1,5 +1,6 @@
 package com.trongus.oom.alert;
 
+import com.trongus.oom.logging.WatchdogLogger;
 import com.trongus.oom.model.JvmSnapshot;
 import com.trongus.oom.model.OomRiskLevel;
 
@@ -61,14 +62,18 @@ import java.util.logging.Logger;
  * prior sanitisation.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.5.0
+ * @version 1.6.0
  * @since 1.2.0
  * @see AlertChannel
  * @see FileLogAlertChannel
  */
 public final class WasAlertChannel implements AlertChannel {
 
+    /** JUL logger for WAS alert routing (intentionally uses the alert-routing name, not the diagnostic hierarchy). */
     private static final Logger LOG = Logger.getLogger("com.trongus.oom.WasAlert");
+
+    /** Internal diagnostics logger for watchdog operational messages. */
+    private static final Logger DIAG = WatchdogLogger.forClass(WasAlertChannel.class);
 
     /** Prefix written to {@code System.err} so WAS captures it in {@code SystemErr.log}. */
     private static final String STDERR_PREFIX = "[OomWatchdog][WAS]";
@@ -132,7 +137,7 @@ public final class WasAlertChannel implements AlertChannel {
             System.err.println(errLine);
 
         } catch (Exception ex) {
-            System.err.println(STDERR_PREFIX + " alert() failed: " + ex.getMessage());
+            WatchdogLogger.warning(DIAG, ex, "WAS alert() failed: {0}", ex.getMessage());
         }
     }
 

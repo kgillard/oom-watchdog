@@ -38,6 +38,9 @@ public final class JvmSnapshot {
 
     // ── process identity ─────────────────────────────────────────────────────
 
+    /** Name of the remote target being monitored (e.g. {@code "hostcontext"}), or {@code null} if self-monitoring. */
+    private final String targetName;
+
     /** JVM process name as returned by {@code RuntimeMXBean.getName()}, e.g. {@code "12345@hostname"}. */
     private final String processName;
 
@@ -179,6 +182,7 @@ public final class JvmSnapshot {
      * @param b fully populated builder
      */
     private JvmSnapshot(final Builder b) {
+        this.targetName                = b.targetName;
         this.processName               = b.processName;
         this.timestampMs               = b.timestampMs;
         this.heapUsedBytes             = b.heapUsedBytes;
@@ -201,6 +205,9 @@ public final class JvmSnapshot {
     }
 
     // ── accessors ─────────────────────────────────────────────────────────────
+
+    /** @return target name if monitoring an external JVM via JMX, or {@code null} if self-monitoring */
+    public String     getTargetName()                { return targetName; }
 
     /** @return process name from {@code RuntimeMXBean.getName()}, e.g. {@code "12345@host"} */
     public String     getProcessName()               { return processName; }
@@ -291,6 +298,7 @@ public final class JvmSnapshot {
      */
     public Builder toBuilder() {
         Builder b = new Builder();
+        b.targetName                = this.targetName;
         b.processName               = this.processName;
         b.timestampMs               = this.timestampMs;
         b.heapUsedBytes             = this.heapUsedBytes;
@@ -326,6 +334,7 @@ public final class JvmSnapshot {
      */
     public static final class Builder {
 
+        private String  targetName;
         private String  processName               = "unknown";
         private long    timestampMs               = System.currentTimeMillis();
         private long    heapUsedBytes;
@@ -348,6 +357,8 @@ public final class JvmSnapshot {
         private String  diagnosisNotes            = "";
         private String  heapDumpPath;
 
+        /** @param v target name (e.g. "hostcontext"); @return {@code this} */
+        public Builder targetName(String v)                { this.targetName = v; return this; }
         /** @param v JVM process name; @return {@code this} */
         public Builder processName(String v)               { this.processName = v; return this; }
         /** @param v epoch ms timestamp; @return {@code this} */

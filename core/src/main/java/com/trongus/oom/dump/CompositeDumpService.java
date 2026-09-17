@@ -8,6 +8,7 @@ import com.trongus.oom.dump.strategy.GraalNativeHeapDumpStrategy;
 import com.trongus.oom.dump.strategy.HotSpotHeapDumpStrategy;
 import com.trongus.oom.dump.strategy.J9HeapDumpStrategy;
 import com.trongus.oom.dump.strategy.ThreadDumpStrategy;
+import com.trongus.oom.logging.WatchdogLogger;
 import com.trongus.oom.model.JvmSnapshot;
 import com.trongus.oom.platform.JvmPlatform;
 
@@ -21,6 +22,7 @@ import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Logger;
 
 /**
  * {@link HeapDumpService} implementation that selects the correct
@@ -55,7 +57,7 @@ import java.util.Map;
  * rest of the chain for that dump type.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.5.0
+ * @version 1.6.0
  * @since 1.0.0
  * @see HeapDumpService
  * @see DumpStrategy
@@ -63,6 +65,8 @@ import java.util.Map;
  * @see JvmPlatform
  */
 public final class CompositeDumpService implements HeapDumpService {
+
+    private static final Logger LOG = WatchdogLogger.forClass(CompositeDumpService.class);
 
     /**
      * Watchdog configuration providing the output directory and other settings
@@ -94,7 +98,7 @@ public final class CompositeDumpService implements HeapDumpService {
     public CompositeDumpService(WatchdogConfig config) {
         this.config = config;
         this.chains = buildChains();
-        System.out.println("[OomWatchdog][Dump] Platform: " + JvmPlatform.summary());
+        WatchdogLogger.config(LOG, "Platform: {0}", JvmPlatform.summary());
     }
 
     // -------------------------------------------------------------------------
@@ -127,7 +131,7 @@ public final class CompositeDumpService implements HeapDumpService {
         try {
             Files.createDirectories(Paths.get(config.getHeapDumpDirectory()));
         } catch (Exception e) {
-            System.err.println("[OomWatchdog][Dump] Cannot create dump directory: " + e.getMessage());
+            WatchdogLogger.warning(LOG, e, "Cannot create dump directory: {0}", e.getMessage());
             return results;
         }
 
@@ -136,7 +140,7 @@ public final class CompositeDumpService implements HeapDumpService {
             String path = buildPath(snapshot, type);
             List<DumpStrategy> chain = chains.get(type);
             if (chain == null) {
-                System.err.println("[OomWatchdog][Dump] No strategy chain for type: " + type);
+                WatchdogLogger.warning(LOG, "No strategy chain for type: {0}", type);
                 continue;
             }
 
@@ -148,20 +152,19 @@ public final class CompositeDumpService implements HeapDumpService {
                     result = strategy.attempt(snapshot, path);
                 } catch (Exception e) {
                     // Strategies should not throw, but guard defensively
-                    System.err.println("[OomWatchdog][Dump] Strategy " + strategy.name()
-                            + " threw: " + e.getMessage());
+                    WatchdogLogger.warning(LOG, e, "Strategy {0} threw: {1}",
+                            strategy.name(), e.getMessage());
                 }
                 if (result != null) {
-                    System.out.println("[OomWatchdog][Dump] " + type
-                            + " succeeded via " + strategy.name() + " → " + result);
+                    WatchdogLogger.info(LOG, "{0} succeeded via {1} \u2192 {2}",
+                            type, strategy.name(), result);
                     results.add(result);
                     succeeded = true;
                     break; // short-circuit: no need to try lower-priority strategies
                 }
             }
             if (!succeeded) {
-                System.err.println("[OomWatchdog][Dump] " + type
-                        + " – all strategies exhausted. No dump produced.");
+                WatchdogLogger.warning(LOG, "{0} \u2013 all strategies exhausted. No dump produced.", type);
             }
         }
         return results;

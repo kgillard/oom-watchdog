@@ -1,0 +1,54 @@
+=== Thread Dump ===
+Process : 45971@kr15py
+Time    : Wed Sep 16 11:11:43 AEST 2026
+Threads : 7
+
+"main" id=1 state=WAITING
+  waiting on lock: java.lang.Thread@514da9ae
+  at java.base@17.0.15/java.lang.Object.wait(Native Method)
+  at java.base@17.0.15/java.lang.Thread.join(Thread.java:1315)
+  at java.base@17.0.15/java.lang.Thread.join(Thread.java:1383)
+  at app//com.ibm.oomwatchdog.WatchdogMain.main(WatchdogMain.java:137)
+
+"Reference Handler" id=2 state=RUNNABLE
+  at java.base@17.0.15/java.lang.ref.Reference.waitForReferencePendingList(Native Method)
+  at java.base@17.0.15/java.lang.ref.Reference.processPendingReferences(Reference.java:253)
+  at java.base@17.0.15/java.lang.ref.Reference$ReferenceHandler.run(Reference.java:215)
+
+"Finalizer" id=3 state=WAITING
+  waiting on lock: java.lang.ref.ReferenceQueue$Lock@76e1a970
+  at java.base@17.0.15/java.lang.Object.wait(Native Method)
+  at java.base@17.0.15/java.lang.ref.ReferenceQueue.remove(ReferenceQueue.java:155)
+  at java.base@17.0.15/java.lang.ref.ReferenceQueue.remove(ReferenceQueue.java:176)
+  at java.base@17.0.15/java.lang.ref.Finalizer$FinalizerThread.run(Finalizer.java:172)
+
+"Signal Dispatcher" id=4 state=RUNNABLE
+
+"Notification Thread" id=12 state=RUNNABLE
+
+"Common-Cleaner" id=13 state=TIMED_WAITING
+  waiting on lock: java.lang.ref.ReferenceQueue$Lock@4c179dcd
+  at java.base@17.0.15/java.lang.Object.wait(Native Method)
+  at java.base@17.0.15/java.lang.ref.ReferenceQueue.remove(ReferenceQueue.java:155)
+  at java.base@17.0.15/jdk.internal.ref.CleanerImpl.run(CleanerImpl.java:140)
+  at java.base@17.0.15/java.lang.Thread.run(Thread.java:842)
+  at java.base@17.0.15/jdk.internal.misc.InnocuousThread.run(InnocuousThread.java:162)
+
+"oom-watchdog" id=15 state=RUNNABLE
+  at java.management@17.0.15/sun.management.ThreadImpl.dumpThreads0(Native Method)
+  at java.management@17.0.15/sun.management.ThreadImpl.dumpAllThreads(ThreadImpl.java:521)
+  at java.management@17.0.15/sun.management.ThreadImpl.dumpAllThreads(ThreadImpl.java:509)
+  at app//com.ibm.oomwatchdog.dump.HotSpotHeapDumpService.dumpThreads(HotSpotHeapDumpService.java:232)
+  at app//com.ibm.oomwatchdog.dump.HotSpotHeapDumpService.dispatchDump(HotSpotHeapDumpService.java:96)
+  at app//com.ibm.oomwatchdog.dump.HotSpotHeapDumpService.dump(HotSpotHeapDumpService.java:77)
+  at app//com.ibm.oomwatchdog.monitor.OomWatchdog.poll(OomWatchdog.java:132)
+  at app//com.ibm.oomwatchdog.monitor.OomWatchdog$$Lambda$16/0x0000000601004000.run(Unknown Source)
+  at java.base@17.0.15/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:539)
+  at java.base@17.0.15/java.util.concurrent.FutureTask.runAndReset(FutureTask.java:305)
+  at java.base@17.0.15/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305)
+  at java.base@17.0.15/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+  at java.base@17.0.15/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+  at java.base@17.0.15/java.lang.Thread.run(Thread.java:842)
+  Locked synchronizers:
+    - java.util.concurrent.ThreadPoolExecutor$Worker
+

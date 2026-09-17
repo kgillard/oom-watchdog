@@ -6,6 +6,7 @@ import java.util.Collections;
 import java.util.EnumSet;
 import java.util.Locale;
 import java.util.Set;
+import java.util.logging.Level;
 
 /**
  * Immutable configuration for {@code OomWatchdog}.
@@ -17,7 +18,7 @@ import java.util.Set;
  * {@link Builder#build()} to produce the validated, immutable config.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.3.0
+ * @version 1.6.0
  * @since 1.0.0
  */
 public final class WatchdogConfig {
@@ -48,6 +49,9 @@ public final class WatchdogConfig {
     // Locale for i18n alert messages and diagnosis strings
     private final Locale locale;                 // default Locale.getDefault()
 
+    // Minimum log level for internal watchdog diagnostics
+    private final Level logLevel;                // default Level.INFO
+
     private WatchdogConfig(Builder b) {
         this.warningHeapThreshold    = b.warningHeapThreshold;
         this.criticalHeapThreshold   = b.criticalHeapThreshold;
@@ -62,6 +66,7 @@ public final class WatchdogConfig {
         this.qradarHost              = b.qradarHost;
         this.qradarPort              = b.qradarPort;
         this.locale                  = b.locale;
+        this.logLevel                = b.logLevel;
     }
 
     /** @return warning heap threshold (0–1); default {@code 0.80} */
@@ -90,6 +95,40 @@ public final class WatchdogConfig {
      */
     public Locale       getLocale()                  { return locale; }
 
+    /**
+     * Returns the minimum log level for internal watchdog diagnostic messages.
+     *
+     * <p>This level is applied to the root {@code "com.trongus.oom"} JUL logger
+     * when {@link com.trongus.oom.logging.WatchdogLogger#initialise(Level)} is called
+     * with this value.  The default is {@link Level#INFO}.
+     *
+     * @return the configured internal log level; never {@code null}
+     */
+    public Level        getLogLevel()                { return logLevel; }
+
+    /**
+     * Returns a new {@link Builder} pre-populated with the settings from this configuration.
+     *
+     * @return a builder copy initialized from this instance
+     */
+    public Builder toBuilder() {
+        Builder b = new Builder();
+        b.warningHeapThreshold    = this.warningHeapThreshold;
+        b.criticalHeapThreshold   = this.criticalHeapThreshold;
+        b.gcOverheadThreshold     = this.gcOverheadThreshold;
+        b.leakDetectionWindowSize = this.leakDetectionWindowSize;
+        b.pollIntervalMs          = this.pollIntervalMs;
+        b.heapDumpDirectory       = this.heapDumpDirectory;
+        b.dumpTypes               = this.dumpTypes.isEmpty()
+                ? EnumSet.noneOf(DumpType.class)
+                : EnumSet.copyOf(this.dumpTypes);
+        b.qradarHost              = this.qradarHost;
+        b.qradarPort              = this.qradarPort;
+        b.locale                  = this.locale;
+        b.logLevel                = this.logLevel;
+        return b;
+    }
+
     /** Returns a builder pre-loaded with safe defaults. */
     public static Builder defaults() {
         return new Builder();
@@ -116,6 +155,7 @@ public final class WatchdogConfig {
         private String          qradarHost              = "localhost";
         private int             qradarPort              = 514;
         private Locale          locale                  = Locale.getDefault();
+        private Level           logLevel                = Level.INFO;
 
         private Builder() {}
 
@@ -138,6 +178,18 @@ public final class WatchdogConfig {
          * @return this builder (fluent API)
          */
         public Builder locale(Locale v)                  { this.locale = v;                   return this; }
+
+        /**
+         * Sets the minimum log level for internal watchdog diagnostics.
+         *
+         * <p>This level is passed to
+         * {@link com.trongus.oom.logging.WatchdogLogger#initialise(Level)} at startup.
+         * Defaults to {@link Level#INFO}.
+         *
+         * @param v the desired log level; must not be {@code null}
+         * @return this builder (fluent API)
+         */
+        public Builder logLevel(Level v)                 { this.logLevel = v;                 return this; }
 
         /** Convenience: parse a comma-separated string of DumpType names. */
         public Builder dumpTypesFromString(String csv) {

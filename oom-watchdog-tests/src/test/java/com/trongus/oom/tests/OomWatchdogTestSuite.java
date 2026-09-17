@@ -11,6 +11,9 @@ import com.trongus.oom.tests.model.JvmSnapshotTest;
 import com.trongus.oom.tests.model.OomRiskLevelTest;
 import com.trongus.oom.tests.monitor.ThresholdRiskAssessorTest;
 import com.trongus.oom.tests.platform.JvmPlatformTest;
+import com.trongus.oom.tests.remote.TargetDescriptorTest;
+import com.trongus.oom.tests.remote.TargetRegistryTest;
+import com.trongus.oom.tests.remote.WatchdogDaemonTest;
 import org.junit.runner.RunWith;
 import org.junit.runners.Suite;
 
@@ -60,6 +63,10 @@ import org.junit.runners.Suite;
     ThresholdRiskAssessorTest.class,
     // platform
     JvmPlatformTest.class,
+    // remote
+    TargetDescriptorTest.class,
+    TargetRegistryTest.class,
+    WatchdogDaemonTest.class,
     // integration
     OomWatchdogIntegrationTest.class,
 })

@@ -1,5 +1,6 @@
 package com.trongus.oom.alert;
 
+import com.trongus.oom.logging.WatchdogLogger;
 import com.trongus.oom.model.JvmSnapshot;
 
 import java.io.IOException;
@@ -15,6 +16,7 @@ import java.util.Arrays;
 import java.util.Date;
 import java.util.Locale;
 import java.util.TimeZone;
+import java.util.logging.Logger;
 
 /**
  * Forwards OOM alerts to IBM QRadar as LEEF 2.0 syslog events over UDP or TCP.
@@ -39,6 +41,8 @@ import java.util.TimeZone;
  * (guaranteed delivery) via the constructor.
  */
 public final class QRadarAlertChannel implements AlertChannel {
+
+    private static final Logger LOG = WatchdogLogger.forClass(QRadarAlertChannel.class);
 
     /** Transport protocol for syslog delivery to QRadar. */
     public enum Transport { UDP, TCP }
@@ -86,7 +90,7 @@ public final class QRadarAlertChannel implements AlertChannel {
                 sendTcp(payload);
             }
         } catch (IOException e) {
-            System.err.println("[OomWatchdog][QRadar] Failed to send LEEF event: " + e.getMessage());
+            WatchdogLogger.warning(LOG, e, "Failed to send LEEF event: {0}", e.getMessage());
         }
     }
 
@@ -130,6 +134,9 @@ public final class QRadarAlertChannel implements AlertChannel {
         StringBuilder attrs = new StringBuilder();
         attrs.append("sev=").append(sev).append('\t');
         attrs.append("cat=JVM_OOM_Risk").append('\t');
+        if (snap.getTargetName() != null) {
+            attrs.append("targetJvm=").append(sanitise(snap.getTargetName())).append('\t');
+        }
         attrs.append("process=").append(sanitise(snap.getProcessName())).append('\t');
         attrs.append("heapUsedMB=").append(snap.getHeapUsedBytes() / mb).append('\t');
         attrs.append("heapMaxMB=").append(snap.getHeapMaxBytes() / mb).append('\t');

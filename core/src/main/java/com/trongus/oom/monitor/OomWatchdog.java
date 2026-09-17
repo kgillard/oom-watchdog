@@ -5,6 +5,7 @@ import com.trongus.oom.collector.JvmDiagnosticsCollector;
 import com.trongus.oom.config.WatchdogConfig;
 import com.trongus.oom.dump.DumpType;
 import com.trongus.oom.dump.HeapDumpService;
+import com.trongus.oom.logging.WatchdogLogger;
 import com.trongus.oom.model.JvmSnapshot;
 import com.trongus.oom.model.OomRiskLevel;
 
@@ -18,6 +19,7 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.logging.Logger;
 
 /**
  * OomWatchdog – the central orchestrator.
@@ -48,7 +50,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * {@link #lastLevel} is an {@link AtomicReference} for consistent memory visibility.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.5.0
+ * @version 1.6.0
  * @since 1.0.0
  * @see JvmDiagnosticsCollector
  * @see RiskAssessor
@@ -56,6 +58,8 @@ import java.util.concurrent.atomic.AtomicReference;
  * @see HeapDumpService
  */
 public final class OomWatchdog {
+
+    private static final Logger LOG = WatchdogLogger.forClass(OomWatchdog.class);
 
     private final WatchdogConfig          config;
     private final JvmDiagnosticsCollector collector;
@@ -113,8 +117,7 @@ public final class OomWatchdog {
                 0L,
                 config.getPollIntervalMs(),
                 TimeUnit.MILLISECONDS);
-        System.out.println("[OomWatchdog] Started – polling every "
-                + config.getPollIntervalMs() + " ms.");
+        WatchdogLogger.info(LOG, "Started \u2013 polling every {0} ms.", config.getPollIntervalMs());
     }
 
     /**
@@ -126,7 +129,7 @@ public final class OomWatchdog {
             task.cancel(false);
         }
         scheduler.shutdown();
-        System.out.println("[OomWatchdog] Stopped.");
+        WatchdogLogger.info(LOG, "Stopped.");
     }
 
     // -------------------------------------------------------------------------
@@ -170,8 +173,9 @@ public final class OomWatchdog {
                     try {
                         channel.alert(toReport);
                     } catch (Exception e) {
-                        System.err.println("[OomWatchdog] Alert channel "
-                                + channel.channelName() + " failed: " + e.getMessage());
+                        WatchdogLogger.warning(LOG, e,
+                                "Alert channel {0} failed: {1}",
+                                channel.channelName(), e.getMessage());
                     }
                 }
             }
@@ -180,7 +184,7 @@ public final class OomWatchdog {
 
         } catch (Exception e) {
             // The watchdog must not crash the host process.
-            System.err.println("[OomWatchdog] Poll cycle error: " + e.getMessage());
+            WatchdogLogger.warning(LOG, e, "Poll cycle error: {0}", e.getMessage());
         }
     }
 
