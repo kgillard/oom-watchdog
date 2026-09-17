@@ -3,11 +3,11 @@
 > **Preemptively detect and alert on JVM Out-of-Memory conditions — before the process crashes.**
 
 [![Build](https://img.shields.io/badge/build-passing-brightgreen)]()
-[![Tests](https://img.shields.io/badge/tests-189%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-200%20passing-brightgreen)]()
 [![Security Audit](https://img.shields.io/badge/security%20audit-4%20passes%20clean-brightgreen)]()
 [![JDK](https://img.shields.io/badge/JDK-8%20%E2%80%93%2026%2B-blue)]()
 [![Vendors](https://img.shields.io/badge/JVM-HotSpot%20%7C%20OpenJ9%20%7C%20GraalVM-blue)]()
-[![Release](https://img.shields.io/badge/release-v1.5.0-blue)](https://github.com/kgillard/oom-watchdog/releases/tag/v1.5.0)
+[![Release](https://img.shields.io/badge/release-v1.7.0-blue)](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.0)
 
 ---
 
@@ -222,47 +222,432 @@ A single-line structured entry is also appended for machine parsing:
 
 ### Multi-Target Daemon Mode (Monitoring External JVMs via JMX)
 
-`WatchdogDaemon` monitors multiple external JVM processes concurrently via standard JMX (JSR-160). This is ideal for monitoring IBM QRadar (`hostcontext`, `tomcat`), WebSphere Application Server, WebSphere Liberty, Cognos, and custom microservices from a single watchdog process.
+`WatchdogDaemon` monitors multiple external JVM processes **concurrently** via standard JMX
+(JSR-160). A single watchdog process can simultaneously cover IBM QRadar components
+(`hostcontext`, `tomcat`), WebSphere Application Server, WebSphere Liberty, Cognos Analytics,
+and any custom microservice — each with independent thresholds, poll rates, and dump
+preferences. One failure or unreachable target does not affect the others.
 
-#### Enabling JMX on QRadar and Target JVMs
+- [Step 1 — Enable JMX on each target JVM](#step-1--enable-jmx-on-each-target-jvm)
+- [Step 2 — Write your `targets.properties`](#step-2--write-your-targetsproperties)
+  - [Property reference](#property-reference)
+  - [IBM QRadar — hostcontext](#ibm-qradar--hostcontext)
+  - [IBM QRadar — Tomcat](#ibm-qradar--tomcat)
+  - [WebSphere Application Server (WAS)](#websphere-application-server-was)
+  - [WebSphere Liberty / Open Liberty](#websphere-liberty--open-liberty)
+  - [IBM Cognos Analytics](#ibm-cognos-analytics)
+  - [JMX authentication](#jmx-authentication)
+  - [Validation rules](#validation-rules)
+- [Step 3 — Run the daemon](#step-3--run-the-daemon)
+- [How the daemon handles unreachable targets](#how-the-daemon-handles-unreachable-targets)
 
-Add standard JMX flags to the target JVM startup options (e.g. `/opt/qradar/systemd/bin/hostcontext.sh` or Tomcat `setenv.sh`):
+---
+
+#### Step 1 — Enable JMX on each target JVM
+
+Remote JMX requires the target JVM to open a management port at startup. Add the following
+JVM flags to the target process's startup script. **The watchdog never modifies the target
+JVM** — it only reads from it over the JMX connection.
+
+**Minimal (unauthenticated, localhost only — development/internal use):**
 
 ```bash
--Dcom.sun.management.jmxremote \
--Dcom.sun.management.jmxremote.port=7777 \
--Dcom.sun.management.jmxremote.ssl=false \
+-Dcom.sun.management.jmxremote
+-Dcom.sun.management.jmxremote.port=<PORT>
+-Dcom.sun.management.jmxremote.rmi.port=<PORT>
+-Dcom.sun.management.jmxremote.ssl=false
 -Dcom.sun.management.jmxremote.authenticate=false
+-Djava.rmi.server.hostname=127.0.0.1
 ```
 
-#### Configuring `targets.properties`
+Setting `jmxremote.rmi.port` to the same value as `jmxremote.port` keeps both the registry
+and RMI object server on a single well-known port, which is required when firewall rules or
+Docker port mappings are in use.
+
+**With password authentication (production):**
+
+```bash
+-Dcom.sun.management.jmxremote
+-Dcom.sun.management.jmxremote.port=<PORT>
+-Dcom.sun.management.jmxremote.rmi.port=<PORT>
+-Dcom.sun.management.jmxremote.ssl=false
+-Dcom.sun.management.jmxremote.authenticate=true
+-Dcom.sun.management.jmxremote.password.file=/etc/jmx/jmxremote.password
+-Dcom.sun.management.jmxremote.access.file=/etc/jmx/jmxremote.access
+-Djava.rmi.server.hostname=<WATCHDOG_ACCESSIBLE_IP>
+```
+
+`jmxremote.password` example (mode `600`, owned by the JVM process user):
+
+```
+# username  password
+oomwatchdog  s3cr3t
+```
+
+`jmxremote.access` example:
+
+```
+oomwatchdog  readonly
+```
+
+Credentials are stored only in the properties file and in the `TargetDescriptor` in memory.
+They are **never written to any log** — the watchdog masks passwords with `***` in all
+diagnostic output.
+
+---
+
+#### Step 2 — Write your `targets.properties`
+
+Each target is a logical name you choose (e.g. `hostcontext`, `tomcat`, `was`) followed by a
+set of `target.<name>.<property>` keys. Lines beginning with `#` are comments and are ignored.
+
+A complete example file is provided at
+`core/src/main/resources/targets.properties.example`.
+
+##### Property reference
+
+| Property | Required | Default | Description |
+|---|---|---|---|
+| `target.<name>.jmx-url` | **Yes** | — | JMX Service URL. Always in the form `service:jmx:rmi:///jndi/rmi://<host>:<port>/jmxrmi` |
+| `target.<name>.warn` | No | `0.80` | Heap used / max ratio (0.0–1.0) that triggers a **WARNING** alert |
+| `target.<name>.crit` | No | `0.90` | Heap used / max ratio (0.0–1.0) that triggers a **CRITICAL** alert and dump |
+| `target.<name>.gc` | No | `0.50` | Fraction of uptime spent in GC (0.0–1.0) that contributes to risk escalation |
+| `target.<name>.poll-ms` | No | `5000` | Milliseconds between JMX collections. Minimum: `100` |
+| `target.<name>.dump-types` | No | _(none)_ | Comma-separated list of dump artefacts to capture at CRITICAL. Values: `heap`, `thread`, `class_histogram`, `core` |
+| `target.<name>.dump-dir` | No | `./dumps/<name>` | Filesystem directory where dump files are written |
+| `target.<name>.username` | No | _(none)_ | JMX authentication username |
+| `target.<name>.password` | No | _(none)_ | JMX authentication password |
+
+> **Constraint:** `warn` must be strictly less than `crit`. Providing equal values or
+> `warn >= crit` causes a startup validation error for that target.
+
+---
+
+##### IBM QRadar — hostcontext
+
+`hostcontext` is the core event pipeline JVM in QRadar. It processes incoming events and
+feeds the Ariel database. OOM here causes event loss and pipeline stalls.
+
+**Enable JMX** — add to `/opt/qradar/systemd/bin/hostcontext.sh` (or the systemd
+`Environment=` override for the `hostcontext` service unit):
+
+```bash
+-Dcom.sun.management.jmxremote
+-Dcom.sun.management.jmxremote.port=7777
+-Dcom.sun.management.jmxremote.rmi.port=7777
+-Dcom.sun.management.jmxremote.ssl=false
+-Dcom.sun.management.jmxremote.authenticate=false
+-Djava.rmi.server.hostname=127.0.0.1
+```
+
+**`targets.properties` entry:**
 
 ```properties
-# QRadar hostcontext
+# IBM QRadar – hostcontext (event processing JVM)
+# JVM: IBM J9 / OpenJ9  |  Typical heap: 2 GB – 8 GB
 target.hostcontext.jmx-url    = service:jmx:rmi:///jndi/rmi://localhost:7777/jmxrmi
 target.hostcontext.warn       = 0.75
 target.hostcontext.crit       = 0.85
+target.hostcontext.gc         = 0.40
+target.hostcontext.poll-ms    = 3000
 target.hostcontext.dump-types = heap,thread
 target.hostcontext.dump-dir   = /var/log/qradar/dumps/hostcontext
-
-# Tomcat Web Server
-target.tomcat.jmx-url         = service:jmx:rmi:///jndi/rmi://localhost:8090/jmxrmi
-target.tomcat.warn            = 0.80
-target.tomcat.crit            = 0.90
-
-# WebSphere Liberty
-target.liberty.jmx-url        = service:jmx:rmi:///jndi/rmi://localhost:9443/jmxrmi
 ```
 
-#### Running in Daemon Mode
+**Rationale for these settings:**
+
+- `warn=0.75` / `crit=0.85` — tighter than defaults because `hostcontext` heap is large and
+  the J9 `gencon` GC policy can exhaust remaining headroom quickly once high watermarks are
+  reached.
+- `gc=0.40` — J9 `gencon` runs frequent nursery collections; a lower GC threshold catches
+  runaway scavenge cycles earlier.
+- `poll-ms=3000` — 3-second polling matches the typical QRadar pipeline heartbeat period.
+- `dump-types=heap,thread` — heap dump identifies retained event objects; thread dump shows
+  which pipeline threads are blocked or looping.
+
+---
+
+##### IBM QRadar — Tomcat
+
+Tomcat serves the QRadar Console web UI and REST API. OOM here causes the UI to become
+unresponsive and API calls to time out.
+
+**Enable JMX** — add to `/opt/tomcat/bin/setenv.sh` or `/opt/qradar/bin/tomcat.sh`:
+
+```bash
+CATALINA_OPTS="$CATALINA_OPTS \
+  -Dcom.sun.management.jmxremote \
+  -Dcom.sun.management.jmxremote.port=8090 \
+  -Dcom.sun.management.jmxremote.rmi.port=8090 \
+  -Dcom.sun.management.jmxremote.ssl=false \
+  -Dcom.sun.management.jmxremote.authenticate=false \
+  -Djava.rmi.server.hostname=127.0.0.1"
+```
+
+**`targets.properties` entry:**
+
+```properties
+# IBM QRadar – Tomcat (Console UI + REST API)
+# JVM: HotSpot  |  Typical heap: 1 GB – 4 GB
+target.tomcat.jmx-url         = service:jmx:rmi:///jndi/rmi://localhost:8090/jmxrmi
+target.tomcat.warn             = 0.80
+target.tomcat.crit             = 0.90
+target.tomcat.gc               = 0.50
+target.tomcat.poll-ms          = 15000
+target.tomcat.dump-types       = heap,thread,class_histogram
+target.tomcat.dump-dir         = /var/log/qradar/dumps/tomcat
+```
+
+**Rationale:**
+
+- `warn=0.80` / `crit=0.90` — standard defaults are appropriate; Tomcat's HotSpot G1GC
+  handles moderate heap pressure well.
+- `poll-ms=15000` — 15-second polling is sufficient for a UI server that accumulates memory
+  gradually via session growth.
+- `dump-types=heap,thread,class_histogram` — the class histogram is particularly useful here
+  to identify which Tomcat session objects or cached JSP results are being retained.
+
+---
+
+##### WebSphere Application Server (WAS)
+
+WAS Traditional runs on IBM J9. Each WAS server process is an independent JVM and should be
+declared as its own target.
+
+**Enable JMX** — add to the JVM Custom Properties in the WAS Admin Console
+(**Servers → Server Types → WebSphere application servers → `<server>` → Java and Process
+Management → Process Definition → Java Virtual Machine → Custom Properties**) or directly in
+`server.xml`:
+
+```bash
+-Dcom.sun.management.jmxremote
+-Dcom.sun.management.jmxremote.port=8880
+-Dcom.sun.management.jmxremote.rmi.port=8880
+-Dcom.sun.management.jmxremote.ssl=false
+-Dcom.sun.management.jmxremote.authenticate=false
+-Djava.rmi.server.hostname=127.0.0.1
+```
+
+> **Note:** WAS also exposes its own SOAP/RMI admin connector on port 8879. This is separate
+> from the standard JMX RMI connector used here. Use the `-Dcom.sun.management.jmxremote.*`
+> flags above — not the WAS admin connector URL.
+
+**`targets.properties` entry:**
+
+```properties
+# IBM WebSphere Application Server (WAS Traditional)
+# JVM: IBM J9  |  Typical heap: 1 GB – 4 GB  |  GC policy: gencon or optthruput
+target.was.jmx-url             = service:jmx:rmi:///jndi/rmi://localhost:8880/jmxrmi
+target.was.warn                = 0.80
+target.was.crit                = 0.90
+target.was.gc                  = 0.40
+target.was.poll-ms             = 30000
+target.was.dump-types          = heap,thread
+target.was.dump-dir            = /opt/IBM/WebSphere/AppServer/logs/oom-dumps
+```
+
+**Rationale:**
+
+- `gc=0.40` — J9 `gencon` performs many short scavenge cycles; a lower GC threshold
+  triggers earlier than HotSpot's G1 would require.
+- `poll-ms=30000` — aligns with WAS PMI sampling cadence (10–60 s). More frequent polling
+  adds negligible overhead but `30000` is a comfortable default.
+- `dump-dir` — writing dumps to the WAS logs directory keeps artefacts co-located with
+  `SystemErr.log` and FFDC data for easier incident correlation.
+
+---
+
+##### WebSphere Liberty / Open Liberty
+
+Liberty runs on IBM J9 or OpenJ9 (and fully supports HotSpot). Each Liberty server process
+is a separate JVM and should be its own target.
+
+**Enable JMX** — add to `jvm.options` in `${server.config.dir}`:
+
+```
+-Dcom.sun.management.jmxremote
+-Dcom.sun.management.jmxremote.port=9050
+-Dcom.sun.management.jmxremote.rmi.port=9050
+-Dcom.sun.management.jmxremote.ssl=false
+-Dcom.sun.management.jmxremote.authenticate=false
+-Djava.rmi.server.hostname=127.0.0.1
+```
+
+Alternatively, enable the `localConnector-1.0` or `restConnector-2.0` feature in
+`server.xml` for Liberty-native JMX access (the standard RMI connector above is simpler and
+requires no `server.xml` changes).
+
+**`targets.properties` entry:**
+
+```properties
+# IBM WebSphere Liberty / Open Liberty
+# JVM: IBM J9 / OpenJ9 (HotSpot also supported)  |  Typical heap: 512 MB – 2 GB
+target.liberty.jmx-url         = service:jmx:rmi:///jndi/rmi://localhost:9050/jmxrmi
+target.liberty.warn            = 0.75
+target.liberty.crit            = 0.88
+target.liberty.gc              = 0.45
+target.liberty.poll-ms         = 10000
+target.liberty.dump-types      = heap,thread
+target.liberty.dump-dir        = /opt/IBM/WebSphere/Liberty/usr/servers/defaultServer/logs/oom-dumps
+```
+
+**Rationale:**
+
+- `warn=0.75` / `crit=0.88` — Liberty microservice heaps are often smaller and less elastic
+  than WAS heaps; tighter thresholds give more warning time.
+- `gc=0.45` — OpenJ9's balanced GC policy can mask growing heap pressure until a concurrent
+  GC cycle stalls; the lower threshold detects this earlier.
+- `poll-ms=10000` — 10-second polling is appropriate for REST-facing services where load
+  spikes are frequent and short.
+
+---
+
+##### IBM Cognos Analytics
+
+Cognos runs **three separate JVM processes** — each declared as its own target with
+independent thresholds.
+
+| Target name | Cognos component | Typical heap | Primary OOM causes |
+|---|---|---|---|
+| `cognos-atc` | Application Tier Component (ATC) | 4 GB – 8 GB | Large report datasets, PDF rendering, session caches |
+| `cognos-cm` | Content Manager (CM) | 2 GB – 4 GB | JDBC result caches, XML metadata trees |
+| `cognos-gw` | Gateway / Dispatcher | 1 GB – 2 GB | HTTP session routing, request buffering |
+
+**Enable JMX** — add to each Cognos JVM's startup configuration
+(`cognosservice.xml` or the relevant wrapper configuration):
+
+```bash
+-Dcom.sun.management.jmxremote
+-Dcom.sun.management.jmxremote.port=<PORT>
+-Dcom.sun.management.jmxremote.rmi.port=<PORT>
+-Dcom.sun.management.jmxremote.ssl=false
+-Dcom.sun.management.jmxremote.authenticate=false
+-Djava.rmi.server.hostname=127.0.0.1
+```
+
+Use a distinct port for each component (e.g. 9300, 9301, 9302).
+
+**`targets.properties` entry:**
+
+```properties
+# IBM Cognos – Application Tier Component (ATC)
+# JVM: IBM J9  |  Typical heap: 4 GB – 8 GB
+target.cognos-atc.jmx-url      = service:jmx:rmi:///jndi/rmi://localhost:9300/jmxrmi
+target.cognos-atc.warn         = 0.80
+target.cognos-atc.crit         = 0.90
+target.cognos-atc.gc           = 0.40
+target.cognos-atc.poll-ms      = 15000
+target.cognos-atc.dump-types   = heap,thread,class_histogram
+target.cognos-atc.dump-dir     = /opt/IBM/cognos/analytics/logs/oom-dumps/atc
+
+# IBM Cognos – Content Manager (CM)
+# JVM: IBM J9  |  Typical heap: 2 GB – 4 GB
+target.cognos-cm.jmx-url       = service:jmx:rmi:///jndi/rmi://localhost:9301/jmxrmi
+target.cognos-cm.warn          = 0.80
+target.cognos-cm.crit          = 0.90
+target.cognos-cm.gc            = 0.40
+target.cognos-cm.poll-ms       = 15000
+target.cognos-cm.dump-types    = heap,thread
+target.cognos-cm.dump-dir      = /opt/IBM/cognos/analytics/logs/oom-dumps/cm
+
+# IBM Cognos – Gateway / Dispatcher
+# JVM: IBM J9  |  Typical heap: 1 GB – 2 GB
+target.cognos-gw.jmx-url       = service:jmx:rmi:///jndi/rmi://localhost:9302/jmxrmi
+target.cognos-gw.warn          = 0.80
+target.cognos-gw.crit          = 0.90
+target.cognos-gw.gc            = 0.50
+target.cognos-gw.poll-ms       = 10000
+target.cognos-gw.dump-types    = thread
+target.cognos-gw.dump-dir      = /opt/IBM/cognos/analytics/logs/oom-dumps/gw
+```
+
+**Rationale:**
+
+- ATC is the highest memory consumer; `class_histogram` dumps identify which report objects
+  and datasets are being retained across requests.
+- CM's primary risk is JDBC result-set caches growing unbounded; heap + thread dumps reveal
+  which queries are outstanding.
+- Gateway is the lowest risk; a thread dump alone is usually sufficient to diagnose request
+  routing issues.
+
+---
+
+##### JMX authentication
+
+When `authenticate=true` is set on the target JVM, supply credentials per target:
+
+```properties
+target.hostcontext.username    = oomwatchdog
+target.hostcontext.password    = s3cr3t
+```
+
+Credentials are read by `TargetRegistry` at startup. They are held in memory as part of the
+`TargetDescriptor` and passed to `JMXConnectorFactory.connect()` as a
+`JMXConnector.CREDENTIALS` environment entry. **They are never written to any log file** —
+`TargetDescriptor.toString()` replaces passwords with `***`.
+
+---
+
+##### Validation rules
+
+`TargetRegistry` enforces the following at startup. A misconfigured target throws an
+`IllegalArgumentException` identifying the offending target by name; other targets continue
+loading normally.
+
+| Rule | Error |
+|---|---|
+| `jmx-url` is missing or blank | `IllegalArgumentException` |
+| `warn >= crit` | `IllegalStateException` ("warnThreshold must be strictly less than critThreshold") |
+| `warn` or `crit` ≤ 0.0 or ≥ 1.0 | `IllegalArgumentException` |
+| `gc` ≤ 0.0 or ≥ 1.0 | `IllegalArgumentException` |
+| `poll-ms` < 100 | `IllegalArgumentException` |
+| Unrecognised `dump-types` value | value silently ignored; valid values loaded |
+
+---
+
+#### Step 3 — Run the daemon
 
 ```bash
 java -jar oom-watchdog.jar \
     --daemon \
     --targets-file /etc/oom-watchdog/targets.properties \
-    --qradar-host 127.0.0.1 \
+    --qradar-host 192.168.1.10 \
     --qradar-port 514
 ```
+
+`--qradar-host` adds a shared `QRadarAlertChannel` to every target's alert pipeline. It
+supplements (not replaces) the per-target console and file log channels that the daemon
+always creates automatically.
+
+To omit QRadar alerting and use only file logs:
+
+```bash
+java -jar oom-watchdog.jar \
+    --daemon \
+    --targets-file /etc/oom-watchdog/targets.properties
+```
+
+On startup the daemon logs one line per successfully initialised target:
+
+```
+INFO: Started watchdog for target [hostcontext] (JMX: service:jmx:rmi:///jndi/rmi://localhost:7777/jmxrmi)
+INFO: Started watchdog for target [tomcat]      (JMX: service:jmx:rmi:///jndi/rmi://localhost:8090/jmxrmi)
+INFO: WatchdogDaemon successfully initialized 2 active monitor(s).
+```
+
+---
+
+#### How the daemon handles unreachable targets
+
+If a target JVM's JMX endpoint cannot be reached, `JmxDiagnosticsCollector` retries up to
+**3 times** with a **2-second back-off** between attempts. If all retries fail, the daemon
+does not crash — it generates a synthetic snapshot with `riskLevel=OOM_FIRING` and
+`processName="<name> [UNREACHABLE]"`, which immediately fires all alert channels (including
+QRadar at severity 10). This means a JVM that has already crashed, or whose JMX port was
+never opened, generates an immediate operational alert through the normal pipeline.
+
+Once the target comes back online, the connection is re-established transparently on the next
+poll cycle.
 
 ---
 
