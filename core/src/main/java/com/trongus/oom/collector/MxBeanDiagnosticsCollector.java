@@ -1,6 +1,7 @@
 package com.trongus.oom.collector;
 
 import com.trongus.oom.config.WatchdogConfig;
+import com.trongus.oom.i18n.Messages;
 import com.trongus.oom.model.JvmSnapshot;
 import com.trongus.oom.model.OomRiskLevel;
 
@@ -25,6 +26,13 @@ import java.util.Map;
  * <p>The collector is stateful in one narrow respect: it keeps a rolling
  * window of post-GC heap samples to calculate the leak-trend slope.
  * All other state lives in the returned {@link JvmSnapshot}.
+ *
+ * <p>Diagnosis note strings are produced in the locale declared on the
+ * supplied {@link WatchdogConfig}.
+ *
+ * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
+ * @version 1.3.0
+ * @since 1.0.0
  */
 public final class MxBeanDiagnosticsCollector implements JvmDiagnosticsCollector {
 
@@ -33,13 +41,20 @@ public final class MxBeanDiagnosticsCollector implements JvmDiagnosticsCollector
     private static final RuntimeMXBean RUNTIME_MX = ManagementFactory.getRuntimeMXBean();
 
     private final WatchdogConfig config;
+    private final Messages       messages;
 
     // Rolling window for post-GC heap trend (timestampMs → heapUsedAfterGc bytes)
     private final Deque<long[]> postGcWindow; // each entry = {timestampMs, heapUsedBytes}
     private long prevTotalGcTime = 0L;
 
+    /**
+     * Constructs a collector with the given configuration.
+     *
+     * @param config the watchdog configuration; must not be {@code null}
+     */
     public MxBeanDiagnosticsCollector(WatchdogConfig config) {
-        this.config = config;
+        this.config       = config;
+        this.messages     = new Messages(config.getLocale());
         this.postGcWindow = new ArrayDeque<>(config.getLeakDetectionWindowSize() + 1);
     }
 
@@ -161,30 +176,37 @@ public final class MxBeanDiagnosticsCollector implements JvmDiagnosticsCollector
         StringBuilder sb = new StringBuilder();
 
         if (noGcBeans || totalGcTime == 0L) {
-            sb.append("[GC] No GC activity recorded – GC may be disabled or not yet triggered. ");
+            sb.append("[GC] ").append(messages.get("diag.gc.none")).append(" ");
         } else {
-            sb.append(String.format("[GC] Total GC time: %d ms | Overhead: %.1f%%. ",
-                    totalGcTime, gcOverhead * 100));
+            sb.append("[GC] ")
+              .append(messages.format("diag.gc.summary", totalGcTime, gcOverhead * 100))
+              .append(" ");
             if (gcOverhead > config.getGcOverheadThreshold()) {
-                sb.append(String.format(
-                    "WARNING: GC overhead %.1f%% exceeds threshold %.1f%%. ",
-                    gcOverhead * 100, config.getGcOverheadThreshold() * 100));
+                sb.append(messages.format("diag.gc.warning",
+                        gcOverhead * 100, config.getGcOverheadThreshold() * 100))
+                  .append(" ");
             }
         }
 
-        sb.append(String.format("[Heap] Used %.1f%% of max. ", heapRatio * 100));
+        sb.append("[Heap] ")
+          .append(messages.format("diag.heap", heapRatio * 100))
+          .append(" ");
 
         if (!Double.isNaN(growthRate)) {
             double growthMbPerHour = growthRate * 3_600_000.0 / (1024.0 * 1024.0);
             if (growthRate > 0) {
-                sb.append(String.format(
-                    "[Leak] Post-GC heap growing at %.2f MB/hour – possible memory leak. ",
-                    growthMbPerHour));
+                sb.append("[Leak] ")
+                  .append(messages.format("diag.leak.growing", growthMbPerHour))
+                  .append(" ");
             } else {
-                sb.append("[Leak] Post-GC heap stable – no leak trend detected. ");
+                sb.append("[Leak] ")
+                  .append(messages.get("diag.leak.stable"))
+                  .append(" ");
             }
         } else {
-            sb.append("[Leak] Insufficient post-GC samples for trend analysis. ");
+            sb.append("[Leak] ")
+              .append(messages.get("diag.leak.insufficient"))
+              .append(" ");
         }
 
         return sb.toString().trim();

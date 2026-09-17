@@ -1,21 +1,29 @@
 package com.trongus.oom.alert;
 
+import com.trongus.oom.i18n.Messages;
 import com.trongus.oom.model.JvmSnapshot;
 
+import java.util.Locale;
 import java.util.Map;
 
 /**
  * Shared, stateless formatting utilities for OOM alert messages.
  *
- * <p>Both {@link #toHumanReadable(JvmSnapshot)} and {@link #toSingleLine(JvmSnapshot)}
- * sanitise all free-text fields (diagnosis notes, process name, heap dump path) before
- * embedding them so that special characters cannot break the output format.
+ * <p>Both {@link #toHumanReadable(JvmSnapshot, Messages)} and
+ * {@link #toSingleLine(JvmSnapshot)} sanitise all free-text fields
+ * (diagnosis notes, process name, heap dump path) before embedding them
+ * so that special characters cannot break the output format.
  *
- * <p>This class is package-private; only alert-channel implementations within this
- * package may use it directly.
+ * <p>Section headings, labels, and status messages are resolved through a
+ * {@link Messages} instance so that alert output is produced in the locale
+ * configured on the watchdog.  When callers supply {@code null} for
+ * {@code messages}, English defaults are used as a safe fallback.
+ *
+ * <p>This class is package-private; only alert-channel implementations within
+ * this package may use it directly.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.0.0
+ * @version 1.3.0
  * @since 1.0.0
  * @see AlertChannel
  * @see FileLogAlertChannel
@@ -27,6 +35,9 @@ final class AlertFormatter {
     private AlertFormatter() {}
 
     private static final long MB = 1024L * 1024L;
+
+    /** English fallback — used when callers pass {@code null} for {@code messages}. */
+    private static final Messages EN = new Messages(Locale.ENGLISH);
 
     /**
      * Sanitises a free-text field for safe embedding in human-readable multi-line output.
@@ -55,68 +66,87 @@ final class AlertFormatter {
         return input.replace('\n', ' ').replace('\r', ' ').replace('"', '\'');
     }
 
+    // ── overloads for back-compat with package-internal callers ──────────────
+
+    /**
+     * Returns a multi-line, human-readable summary using English defaults.
+     *
+     * @param snap the snapshot to format; must not be {@code null}
+     * @return formatted multi-line string
+     * @see #toHumanReadable(JvmSnapshot, Messages)
+     */
+    static String toHumanReadable(JvmSnapshot snap) {
+        return toHumanReadable(snap, EN);
+    }
+
     /**
      * Returns a multi-line, human-readable summary of the snapshot suitable
      * for console output, log files, or email bodies.
      *
-     * <p>All free-text fields (process name, diagnosis notes, heap dump path) are
-     * sanitised via {@link #sanitiseMultiLine(String)} before embedding.
+     * <p>Section headings and labels are resolved from the supplied
+     * {@link Messages} instance so that the output is produced in the
+     * watchdog's configured locale.  All free-text fields (process name,
+     * diagnosis notes, heap dump path) are sanitised via
+     * {@link #sanitiseMultiLine(String)} before embedding.
      *
-     * @param snap the snapshot to format; must not be {@code null}
+     * @param snap     the snapshot to format; must not be {@code null}
+     * @param messages locale-aware message source; {@code null} falls back to English
      * @return formatted multi-line string
      */
-    static String toHumanReadable(JvmSnapshot snap) {
+    static String toHumanReadable(JvmSnapshot snap, Messages messages) {
+        if (messages == null) messages = EN;
         StringBuilder sb = new StringBuilder();
-        sb.append("=== JVM OOM Alert ===\n");
-        sb.append(String.format("  Severity   : %s%n",  snap.getRiskLevel()));
-        sb.append(String.format("  Process    : %s%n",  sanitiseMultiLine(snap.getProcessName())));
-        sb.append(String.format("  Timestamp  : %tc%n", snap.getTimestampMs()));
-        sb.append("\n-- Heap --\n");
-        sb.append(String.format("  Used       : %d MB%n",      snap.getHeapUsedBytes()      / MB));
-        sb.append(String.format("  Committed  : %d MB%n",      snap.getHeapCommittedBytes() / MB));
-        sb.append(String.format("  Max (-Xmx) : %d MB%n",      snap.getHeapMaxBytes()       / MB));
-        sb.append(String.format("  Usage      : %.1f%%%n",      snap.getHeapUsedRatio() * 100));
-        sb.append("\n-- Non-Heap (Metaspace / Code Cache) --\n");
-        sb.append(String.format("  Used       : %d MB%n",  snap.getNonHeapUsedBytes() / MB));
+        sb.append(messages.get("section.banner")).append("\n");
+        sb.append(String.format("  %-11s: %s%n",  messages.get("label.severity"),  snap.getRiskLevel()));
+        sb.append(String.format("  %-11s: %s%n",  messages.get("label.process"),   sanitiseMultiLine(snap.getProcessName())));
+        sb.append(String.format("  %-11s: %tc%n", messages.get("label.timestamp"), snap.getTimestampMs()));
+        sb.append("\n").append(messages.get("section.heap")).append("\n");
+        sb.append(String.format("  %-11s: %d %s%n", messages.get("label.used"),      snap.getHeapUsedBytes()      / MB, messages.get("label.unit.mb")));
+        sb.append(String.format("  %-11s: %d %s%n", messages.get("label.committed"), snap.getHeapCommittedBytes() / MB, messages.get("label.unit.mb")));
+        sb.append(String.format("  %-11s: %d %s%n", messages.get("label.max"),       snap.getHeapMaxBytes()       / MB, messages.get("label.unit.mb")));
+        sb.append(String.format("  %-11s: %.1f%%%n", messages.get("label.usage"),    snap.getHeapUsedRatio() * 100));
+        sb.append("\n").append(messages.get("section.nonheap")).append("\n");
+        sb.append(String.format("  %-11s: %d %s%n", messages.get("label.used"), snap.getNonHeapUsedBytes() / MB, messages.get("label.unit.mb")));
         long nhMax = snap.getNonHeapMaxBytes();
-        sb.append(String.format("  Max        : %s%n",
-                nhMax < 0 ? "unlimited" : (nhMax / MB) + " MB"));
-        sb.append("\n-- Memory Pools --\n");
+        sb.append(String.format("  %-11s: %s%n", messages.get("label.max.plain"),
+                nhMax < 0 ? messages.get("label.nonheap.unlimited") : (nhMax / MB) + " " + messages.get("label.unit.mb")));
+        sb.append("\n").append(messages.get("section.pools")).append("\n");
         for (Map.Entry<String, Long> e : snap.getPoolUsedBytes().entrySet()) {
-            sb.append(String.format("  %-40s : %d MB%n", e.getKey(), e.getValue() / MB));
+            sb.append(String.format("  %-40s : %d %s%n", e.getKey(), e.getValue() / MB, messages.get("label.unit.mb")));
         }
-        sb.append("\n-- Garbage Collection --\n");
+        sb.append("\n").append(messages.get("section.gc")).append("\n");
         if (snap.getGcCollectionCounts().isEmpty()) {
-            sb.append("  No GC beans available.\n");
+            sb.append("  ").append(messages.get("label.gc.none")).append("\n");
         } else {
             for (Map.Entry<String, Long> e : snap.getGcCollectionCounts().entrySet()) {
                 long time = snap.getGcCollectionTimesMs().getOrDefault(e.getKey(), 0L);
-                sb.append(String.format("  %-40s count=%-6d time=%d ms%n",
-                        e.getKey(), e.getValue(), time));
+                sb.append(String.format("  %-40s count=%-6d time=%d %s%n",
+                        e.getKey(), e.getValue(), time, messages.get("label.unit.ms")));
             }
-            sb.append(String.format("  Total GC time  : %d ms%n",   snap.getTotalGcTimeMs()));
-            sb.append(String.format("  JVM uptime     : %d ms%n",   snap.getJvmUptimeMs()));
-            sb.append(String.format("  GC overhead    : %.1f%%%n",  snap.getGcOverheadRatio() * 100));
+            sb.append(String.format("  %-13s: %d %s%n", messages.get("label.gc.total"),   snap.getTotalGcTimeMs(),              messages.get("label.unit.ms")));
+            sb.append(String.format("  %-13s: %d %s%n", messages.get("label.gc.uptime"),   snap.getJvmUptimeMs(),                messages.get("label.unit.ms")));
+            sb.append(String.format("  %-13s: %.1f%%%n", messages.get("label.gc.overhead"), snap.getGcOverheadRatio() * 100));
         }
-        sb.append("\n-- Leak Trend --\n");
+        sb.append("\n").append(messages.get("section.leak")).append("\n");
         if (snap.getPostGcHeapUsedBytes() >= 0) {
-            sb.append(String.format("  Post-GC heap   : %d MB%n",
-                    snap.getPostGcHeapUsedBytes() / MB));
+            sb.append(String.format("  %-13s: %d %s%n", messages.get("label.leak.postgc"),
+                    snap.getPostGcHeapUsedBytes() / MB, messages.get("label.unit.mb")));
         }
         double slope = snap.getPostGcHeapGrowthRatePerMs();
         if (Double.isNaN(slope)) {
-            sb.append("  Growth rate    : insufficient data\n");
+            sb.append(String.format("  %-13s: %s%n", messages.get("label.leak.growth"), messages.get("label.leak.insufficient")));
         } else {
             double mbPerHour = slope * 3_600_000.0 / MB;
-            sb.append(String.format("  Growth rate    : %.2f MB/hour%n", mbPerHour));
+            sb.append(String.format("  %-13s: %.2f %s%n", messages.get("label.leak.growth"), mbPerHour, messages.get("label.leak.mphour")));
         }
-        sb.append("\n-- Diagnosis --\n");
+        sb.append("\n").append(messages.get("section.diagnosis")).append("\n");
         sb.append("  ").append(sanitiseMultiLine(snap.getDiagnosisNotes())).append("\n");
         if (snap.getHeapDumpPath() != null) {
-            sb.append("\n-- Heap Dump --\n");
-            sb.append("  Path: ").append(sanitiseMultiLine(snap.getHeapDumpPath())).append("\n");
+            sb.append("\n").append(messages.get("section.dump")).append("\n");
+            sb.append("  ").append(messages.get("label.dump.path")).append(": ")
+              .append(sanitiseMultiLine(snap.getHeapDumpPath())).append("\n");
         }
-        sb.append("=====================\n");
+        sb.append(messages.get("section.footer")).append("\n");
         return sb.toString();
     }
 

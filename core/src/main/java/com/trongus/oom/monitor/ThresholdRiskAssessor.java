@@ -1,81 +1,111 @@
 package com.trongus.oom.monitor;
 
 import com.trongus.oom.config.WatchdogConfig;
+import com.trongus.oom.diagnosis.OomCause;
+import com.trongus.oom.diagnosis.OomCauseAnalyser;
+import com.trongus.oom.i18n.Messages;
 import com.trongus.oom.model.JvmSnapshot;
 import com.trongus.oom.model.OomRiskLevel;
 
 /**
- * Threshold-based {@link RiskAssessor}.
+ * Threshold-based {@link RiskAssessor} with i18n-aware diagnosis output and
+ * integrated OOM cause analysis.
  *
- * <p>Rules (evaluated in priority order, highest first):
+ * <h2>Decision rules (highest priority first)</h2>
  * <ol>
- *   <li>{@code CRITICAL} – heap used ≥ critical threshold, OR GC overhead ≥ GC threshold
- *       AND heap ≥ warning threshold (runaway GC + high heap = imminent OOM)</li>
+ *   <li>{@code CRITICAL} – heap used ≥ critical threshold, OR GC overhead ≥ GC
+ *       threshold AND heap ≥ warning threshold (runaway GC + high heap = imminent OOM)</li>
  *   <li>{@code WARNING} – heap used ≥ warning threshold, OR GC overhead ≥ GC threshold
  *       alone, OR a positive post-GC growth trend is detected</li>
  *   <li>{@code OK} – none of the above</li>
  * </ol>
  *
- * The returned snapshot's {@code diagnosisNotes} are prepended with an
- * assessment summary so every alert channel has full context.
+ * <p>The returned snapshot's {@code diagnosisNotes} are prepended with a
+ * localised assessment summary and enriched with an {@link OomCause} explanation
+ * so that every alert channel has full context.
+ *
+ * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
+ * @version 1.3.0
+ * @since 1.0.0
+ * @see RiskAssessor
+ * @see OomCauseAnalyser
  */
 public final class ThresholdRiskAssessor implements RiskAssessor {
 
-    private final WatchdogConfig config;
+    private final WatchdogConfig  config;
+    private final Messages        messages;
+    private final OomCauseAnalyser causeAnalyser;
 
+    /**
+     * Constructs a {@code ThresholdRiskAssessor} using the locale declared
+     * in the supplied config.
+     *
+     * @param config the watchdog configuration; must not be {@code null}
+     * @throws NullPointerException if {@code config} is {@code null}
+     */
     public ThresholdRiskAssessor(WatchdogConfig config) {
-        this.config = config;
+        if (config == null) throw new NullPointerException("config");
+        this.config        = config;
+        this.messages      = new Messages(config.getLocale());
+        this.causeAnalyser = new OomCauseAnalyser(
+                config.getCriticalHeapThreshold(),
+                config.getGcOverheadThreshold(),
+                messages);
     }
 
     @Override
     public JvmSnapshot assess(JvmSnapshot snap) {
-        double heapRatio    = snap.getHeapUsedRatio();
-        double gcOverhead   = snap.getGcOverheadRatio();
-        double growthRate   = snap.getPostGcHeapGrowthRatePerMs();
-        boolean leaking     = !Double.isNaN(growthRate) && growthRate > 0;
+        double heapRatio  = snap.getHeapUsedRatio();
+        double gcOverhead = snap.getGcOverheadRatio();
+        double growthRate = snap.getPostGcHeapGrowthRatePerMs();
+        boolean leaking   = !Double.isNaN(growthRate) && growthRate > 0;
 
         OomRiskLevel level;
         StringBuilder summary = new StringBuilder("[Assessment] ");
 
-        boolean heapCritical  = heapRatio  >= config.getCriticalHeapThreshold();
-        boolean heapWarning   = heapRatio  >= config.getWarningHeapThreshold();
-        boolean gcHigh        = gcOverhead >= config.getGcOverheadThreshold();
+        boolean heapCritical = heapRatio  >= config.getCriticalHeapThreshold();
+        boolean heapWarning  = heapRatio  >= config.getWarningHeapThreshold();
+        boolean gcHigh       = gcOverhead >= config.getGcOverheadThreshold();
 
         if (heapCritical || (gcHigh && heapWarning)) {
             level = OomRiskLevel.CRITICAL;
-            summary.append("CRITICAL – OOM imminent. ");
+            summary.append(messages.get("assess.critical")).append(" ");
             if (heapCritical) {
-                summary.append(String.format(
-                    "Heap at %.1f%% (threshold %.1f%%). ",
-                    heapRatio * 100, config.getCriticalHeapThreshold() * 100));
+                summary.append(messages.format("assess.critical.heap",
+                        heapRatio * 100, config.getCriticalHeapThreshold() * 100))
+                       .append(" ");
             }
             if (gcHigh) {
-                summary.append(String.format(
-                    "GC overhead %.1f%% (threshold %.1f%%). ",
-                    gcOverhead * 100, config.getGcOverheadThreshold() * 100));
+                summary.append(messages.format("assess.critical.gc",
+                        gcOverhead * 100, config.getGcOverheadThreshold() * 100))
+                       .append(" ");
             }
         } else if (heapWarning || gcHigh || leaking) {
             level = OomRiskLevel.WARNING;
-            summary.append("WARNING – OOM risk elevated. ");
+            summary.append(messages.get("assess.warning")).append(" ");
             if (heapWarning) {
-                summary.append(String.format(
-                    "Heap at %.1f%% (threshold %.1f%%). ",
-                    heapRatio * 100, config.getWarningHeapThreshold() * 100));
+                summary.append(messages.format("assess.warning.heap",
+                        heapRatio * 100, config.getWarningHeapThreshold() * 100))
+                       .append(" ");
             }
             if (gcHigh) {
-                summary.append(String.format(
-                    "GC overhead %.1f%% (threshold %.1f%%). ",
-                    gcOverhead * 100, config.getGcOverheadThreshold() * 100));
+                summary.append(messages.format("assess.warning.gc",
+                        gcOverhead * 100, config.getGcOverheadThreshold() * 100))
+                       .append(" ");
             }
             if (leaking) {
                 double mbPerHour = growthRate * 3_600_000.0 / (1024.0 * 1024.0);
-                summary.append(String.format(
-                    "Post-GC heap growing at %.2f MB/hour. ", mbPerHour));
+                summary.append(messages.format("assess.warning.leak", mbPerHour))
+                       .append(" ");
             }
         } else {
             level = OomRiskLevel.OK;
-            summary.append("OK – all metrics within normal bounds. ");
+            summary.append(messages.get("assess.ok")).append(" ");
         }
+
+        // Append OOM cause analysis
+        OomCause cause = causeAnalyser.analyse(heapRatio, gcOverhead, growthRate);
+        summary.append("[Cause] ").append(cause.getExplanation());
 
         String enrichedNotes = summary.toString().trim() + " | " + snap.getDiagnosisNotes();
 

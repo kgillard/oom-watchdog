@@ -1,4 +1,4 @@
-# OOM Watchdog – Architecture
+# OOM Watchdog – Architecture (v1.3.0)
 
 ## Overview
 
@@ -6,6 +6,10 @@ OOM Watchdog is a zero-dependency, production-quality JVM memory watchdog librar
 preemptively detects Out-Of-Memory conditions and fires structured alerts before the JVM
 crashes.  It supports **all major JVM vendors** (HotSpot, IBM J9/OpenJ9, GraalVM JVM,
 GraalVM Native Image) and **JDK 8 through 26+**.
+
+**v1.3.0 additions:** `OomCauseAnalyser` (root-cause analysis), `OomCause`/`OomCauseCategory`
+value objects, `Messages` i18n wrapper, and 9-locale resource bundles.  All alert text,
+section headings, and diagnosis strings are now locale-aware.
 
 The design follows the five SOLID principles throughout: every class has one reason to
 change, new behaviour is added by extension rather than modification, subtypes are fully
@@ -260,18 +264,30 @@ flowchart TD
 ## Module Structure
 
 ```
-oom-watchdog/                  Maven multi-module root
+oom-watchdog/                  Maven multi-module root (v1.3.0)
 ├── core/                      oom-watchdog.jar  (fat jar via maven-shade-plugin)
 │   └── src/main/java/com/trongus/oom/
 │       ├── WatchdogMain.java  CLI entry point
-│       ├── alert/             AlertChannel ISP + 3 implementations + AlertFormatter
+│       ├── alert/             AlertChannel ISP + 6 implementations + AlertFormatter (i18n)
 │       ├── collector/         JvmDiagnosticsCollector + MxBeanDiagnosticsCollector
-│       ├── config/            WatchdogConfig (immutable, builder)
+│       ├── config/            WatchdogConfig (immutable, builder, locale)
+│       ├── diagnosis/         OomCause + OomCauseCategory + OomCauseAnalyser  ← NEW v1.3.0
 │       ├── dump/              HeapDumpService + CompositeDumpService + DumpType + strategies
+│       ├── i18n/              Messages (UTF-8 ResourceBundle wrapper)          ← NEW v1.3.0
 │       ├── model/             JvmSnapshot + OomRiskLevel
 │       ├── monitor/           OomWatchdog + RiskAssessor + ThresholdRiskAssessor
 │       ├── platform/          JvmPlatform (static detection)
 │       └── test/              OomSimulator (3-phase heap exhaustion)
+│   └── src/main/resources/com/trongus/oom/i18n/    ← NEW v1.3.0
+│       ├── Messages.properties       English (base / fallback)
+│       ├── Messages_de.properties    German
+│       ├── Messages_es.properties    Spanish
+│       ├── Messages_fr.properties    French
+│       ├── Messages_ja.properties    Japanese (UTF-8)
+│       ├── Messages_ko.properties    Korean (UTF-8)
+│       ├── Messages_pt_BR.properties Brazilian Portuguese
+│       ├── Messages_zh_CN.properties Simplified Chinese (UTF-8)
+│       └── Messages_zh_TW.properties Traditional Chinese (UTF-8)
 │
 ├── test-harness/              test-harness.jar
 │   └── src/main/java/com/trongus/oom/harness/
@@ -294,6 +310,39 @@ oom-watchdog/                  Maven multi-module root
 
 ---
 
+## Logging Destinations by Platform
+
+The following table shows exactly where OOM Watchdog alert output appears for every supported runtime. All channels are composable; add multiple channels to send alerts to multiple destinations simultaneously.
+
+| Runtime / Platform | Alert Channel(s) | Log file / destination | Format | JUL level |
+|--------------------|-----------------|----------------------|--------|-----------|
+| **Any JVM** (stdout/err) | `ConsoleAlertChannel` | `System.err` | Multi-line human-readable | n/a |
+| **Any JVM** (file) | `FileLogAlertChannel` | Configured file path (append, UTF-8) | Single-line + multi-line | n/a |
+| **Any JVM** (SIEM) | `QRadarAlertChannel` | QRadar SIEM via UDP or TCP port 514 | LEEF 2.0 syslog | n/a |
+| **HotSpot** (Oracle/OpenJDK/Azul/Corretto) | `FileLogAlertChannel` | `/var/log/oom-watchdog.log` (example) | Single-line + multi-line | n/a |
+| **OpenJ9 / IBM J9** (standalone) | `FileLogAlertChannel` | `/var/log/oom-watchdog.log` (example) | Single-line + multi-line | n/a |
+| **GraalVM JVM** | `FileLogAlertChannel` | `/var/log/oom-watchdog.log` (example) | Single-line + multi-line | n/a |
+| **GraalVM Native Image** | `FileLogAlertChannel` | `/var/log/oom-watchdog.log` (example) | Single-line + multi-line | n/a |
+| **WAS** (traditional) | `WasAlertChannel` | `${SERVER_LOG_ROOT}/SystemErr.log` | Key=value + FFDC ID | `WARNING` / `SEVERE` |
+| **WAS** (traditional) | `WasAlertChannel` | `${SERVER_LOG_ROOT}/SystemOut.log` | — | Never (watchdog omits INFO) |
+| **WAS** (traditional) | `WasAlertChannel` | `${SERVER_LOG_ROOT}/ffdc/` | FFDC cross-reference only | `SEVERE` triggers FFDC |
+| **Liberty / Open Liberty** | `LibertyAlertChannel` | `${server.output.dir}/logs/messages.log` | Key=value (always present) | `WARNING` / `SEVERE` |
+| **Liberty** (JSON mode) | `LibertyAlertChannel` | `messages.log` | JSON object per event | `WARNING` / `SEVERE` |
+| **Liberty** (foreground) | `LibertyAlertChannel` | `console.log` | Mirrors messages.log | `WARNING` / `SEVERE` |
+| **Liberty** (trace enabled) | `LibertyAlertChannel` | `trace.log` | All levels | `WARNING` / `SEVERE` |
+| **Cognos ATC JVM** | `CognosAlertChannel` | `oom-watchdog-ATC.log` (configured) | Pipe-delimited | n/a (file write) |
+| **Cognos CM JVM** | `CognosAlertChannel` | `oom-watchdog-CM.log` (configured) | Pipe-delimited | n/a (file write) |
+| **Cognos Gateway JVM** | `CognosAlertChannel` | `oom-watchdog-GW.log` (configured) | Pipe-delimited | n/a (file write) |
+| **Cognos on WAS** (secondary) | `CognosAlertChannel` | `SystemErr.log` (via JUL) | Key=value | `WARNING` / `SEVERE` |
+| **Cognos on Liberty** (secondary) | `CognosAlertChannel` | `messages.log` (via JUL) | Key=value | `WARNING` / `SEVERE` |
+
+**Notes:**
+- "JUL level" refers to the `java.util.logging.Level` emitted. WAS and Liberty intercept JUL automatically; no custom handler registration is required.
+- `WARNING` is emitted for `OomRiskLevel.WARNING`; `SEVERE` is emitted for `CRITICAL` and `OOM_FIRING`.
+- For Cognos, the dedicated `.log` file is the **primary** output. The JUL secondary output only fires if Cognos runs inside WAS or Liberty.
+
+---
+
 ## Key Design Decisions
 
 | Decision | Rationale |
@@ -307,12 +356,16 @@ oom-watchdog/                  Maven multi-module root
 | `AlertFormatter` sanitises all free-text fields | Prevents control-character injection into log/syslog output |
 | `AlertFormatter` package-private | Formatting is an implementation detail; only alert channels need it |
 | `WatchdogConfig` immutable builder with full validation | Config cannot drift at runtime; rejects out-of-range values at construction |
+| `WatchdogConfig.locale()` | Single locale setting propagates to Messages, OomCauseAnalyser, and AlertFormatter |
 | LEEF 2.0 for QRadar | Native IBM SIEM format; field-indexed for high-speed correlation |
 | TCP socket connect + read timeout (5 s) | Slow/unreachable QRadar host cannot block the watchdog poll thread |
 | UDP payload capped at 65 007 bytes | Prevents silent datagram truncation on standard Ethernet MTUs |
 | `gcore` path canonicalization + 60 s timeout | Prevents path-traversal; avoids hung dump process blocking the JVM |
 | `AtomicInteger` counters in `HarnessAlertRecorder` | Thread-safe read-modify-write without external synchronisation |
 | All file writes use explicit `StandardCharsets.UTF_8` | Consistent output across all platforms; no platform-default charset risk |
+| `ResourceBundle.Control` with UTF-8 reader | Prevents ISO-8859-1 corruption of CJK double-byte characters in `.properties` files |
+| `OomCauseAnalyser` stateless | Can be shared across threads; no synchronisation cost |
+| `OomCause` immutable value object | Safe to pass across threads with no defensive copy |
 
 ---
 
@@ -340,8 +393,8 @@ and confirmed **no further issues** — the codebase is fully hardened.
 
 ## Release Artefacts
 
-The v1.0.0 release publishes two executable fat JARs built with `maven-shade-plugin`.
-Both are attached to the [GitHub release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.0.0).
+The v1.3.0 release publishes two executable fat JARs built with `maven-shade-plugin`.
+Both are attached to the [GitHub release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.3.0).
 
 | Artefact | Main class | Contents |
 |----------|-----------|----------|

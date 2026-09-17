@@ -7,18 +7,18 @@
 [![Security Audit](https://img.shields.io/badge/security%20audit-3%20passes%20clean-brightgreen)]()
 [![JDK](https://img.shields.io/badge/JDK-8%20%E2%80%93%2026%2B-blue)]()
 [![Vendors](https://img.shields.io/badge/JVM-HotSpot%20%7C%20OpenJ9%20%7C%20GraalVM-blue)]()
- [![Release](https://img.shields.io/badge/release-v1.2.0-blue)](https://github.com/kgillard/oom-watchdog/releases/tag/v1.2.0)
+[![Release](https://img.shields.io/badge/release-v1.3.0-blue)](https://github.com/kgillard/oom-watchdog/releases/tag/v1.3.0)
 
 ---
 
 ## Download
 
-Pre-built JARs are available in the [v1.2.0 release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.2.0):
+Pre-built JARs are available in the [v1.3.0 release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.3.0):
 
 | Artefact | Description | Size |
 |----------|-------------|------|
-| [`oom-watchdog.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.2.0/oom-watchdog.jar) | Fat JAR — monitoring agent + CLI entry point | ~79 KB |
-| [`test-harness.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.2.0/test-harness.jar) | Fat JAR — interactive OOM test harness | ~92 KB |
+| [`oom-watchdog.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.3.0/oom-watchdog.jar) | Fat JAR — monitoring agent + CLI entry point | ~79 KB |
+| [`test-harness.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.3.0/test-harness.jar) | Fat JAR — interactive OOM test harness | ~92 KB |
 
 ---
 
@@ -38,6 +38,11 @@ On the first `CRITICAL` event in an episode, the dump service captures diagnosti
 (heap dump, thread dump, class histogram, core dump) — but only **once per episode** to
 prevent dump storms.
 
+**New in v1.3.0:** The `OomCauseAnalyser` produces a plain-language explanation of the
+most likely OOM root cause (runaway GC, heap exhaustion, memory leak, GC overhead).
+All alert text is now fully internationalised (i18n) across 9 locales: `en`, `de`, `es`,
+`fr`, `ja`, `ko`, `pt_BR`, `zh_CN`, `zh_TW`.
+
 ---
 
 ## Quick start
@@ -47,7 +52,7 @@ prevent dump storms.
 ```bash
 # Download the release JAR
 curl -L -o oom-watchdog.jar \
-  https://github.com/kgillard/oom-watchdog/releases/download/v1.2.0/oom-watchdog.jar
+  https://github.com/kgillard/oom-watchdog/releases/download/v1.3.0/oom-watchdog.jar
 
 # Run against a target JVM process (monitoring mode)
 java -jar oom-watchdog.jar \
@@ -70,6 +75,7 @@ WatchdogConfig config = WatchdogConfig.defaults()
     .pollIntervalMs(5_000)
     .heapDumpDirectory("/var/dumps")
     .dumpTypes(EnumSet.of(DumpType.HEAP, DumpType.THREAD))
+    .locale(Locale.ENGLISH)          // optional; defaults to Locale.getDefault()
     .build();
 
 OomWatchdog watchdog = new OomWatchdog(
@@ -133,6 +139,266 @@ OK  →  WARNING  →  CRITICAL  →  OOM_FIRING
 
 ---
 
+## Alert channels and logging destinations
+
+OOM Watchdog ships six alert channel implementations. Each targets a different runtime environment. All channels are composable — you can register any combination of them on a single watchdog instance.
+
+### Channel summary
+
+| Channel | Output destination | Best for |
+|---------|--------------------|----------|
+| `ConsoleAlertChannel` | `System.err` | Any JVM — development, containers, scripts |
+| `FileLogAlertChannel` | Append-only UTF-8 file | Any JVM — production file-based log pipelines |
+| `QRadarAlertChannel` | IBM QRadar SIEM (LEEF 2.0 syslog UDP/TCP) | Any JVM with SIEM integration |
+| `WasAlertChannel` | WAS `SystemErr.log` via JUL | WebSphere Application Server (traditional) |
+| `LibertyAlertChannel` | Liberty `messages.log` via JUL + JSON | WebSphere Liberty / Open Liberty |
+| `CognosAlertChannel` | Cognos pipe-delimited log file + JUL | IBM Cognos Analytics (ATC / CM / Gateway JVM) |
+
+---
+
+### Standard JVM (HotSpot, OpenJ9, GraalVM) — no app server
+
+Use `ConsoleAlertChannel` and/or `FileLogAlertChannel`. Both require no external dependencies and work on every JVM that supports `java.lang.management`.
+
+```java
+new ConsoleAlertChannel()                          // → System.err
+new FileLogAlertChannel("/var/log/oom.log")        // → UTF-8 append file
+```
+
+**Log format — console / file:**
+
+```
+=== JVM OOM Alert ===
+  Severity   : CRITICAL
+  Process    : 98765@prod-host
+  Timestamp  : Wed Sep 17 08:00:00 AEST 2025
+
+-- Heap --
+  Used       : 921 MB
+  Committed  : 1024 MB
+  Max (-Xmx) : 1024 MB
+  Usage      : 90.0%
+
+-- Non-Heap (Metaspace / Code Cache) --
+  Used       : 128 MB
+  Max        : unlimited
+
+-- Memory Pools --
+  G1 Eden Space                            : 128 MB
+  G1 Old Gen                               : 793 MB
+
+-- Garbage Collection --
+  G1 Young Generation                      count=1420   time=6200 ms
+  G1 Old Generation                        count=3      time=8100 ms
+  Total GC time  : 14300 ms
+  JVM uptime     : 60000 ms
+  GC overhead    : 23.8%
+
+-- Leak Trend --
+  Post-GC heap   : 860 MB
+  Growth rate    : 42.30 MB/hour
+
+-- Diagnosis --
+  [Assessment] CRITICAL – OOM imminent. ... [Cause] Heap used 92.0% of maximum
+  capacity (critical threshold 90.0%). An OutOfMemoryError may be thrown on the
+  next large allocation.
+======================
+```
+
+A single-line structured entry is also appended for machine parsing:
+
+```
+2025-09-17T08:00:00.000+1000 severity=CRITICAL process=98765@prod-host heapUsedMB=921 heapMaxMB=1024 heapPct=90.0 nonHeapUsedMB=128 gcOverheadPct=23.8 totalGcTimeMs=14300 postGcGrowth=42.30 MB/h diagnosis="..."
+```
+
+---
+
+### IBM QRadar SIEM
+
+`QRadarAlertChannel` sends LEEF 2.0 syslog events over UDP (default) or TCP. Combines with any other channel.
+
+```java
+new QRadarAlertChannel("siem.corp.com", 514, Transport.UDP)
+new QRadarAlertChannel("siem.corp.com", 6514, Transport.TCP)  // TLS proxy
+```
+
+**LEEF 2.0 event format:**
+
+```
+<13>Sep 17 08:00:00 prod-host LEEF:2.0|IBM|OomWatchdog|1.1|OOM_CRITICAL|
+sev=9	cat=JVM_OOM_Risk	process=98765@prod-host	heapUsedMB=921	heapMaxMB=1024
+heapPct=90.0	nonHeapUsedMB=128	gcOverheadPct=23.8	totalGcTimeMs=14300
+postGcGrowth=42.30 MB/h	riskLevel=CRITICAL	msg=...
+```
+
+| `sev` value | Risk level |
+|------------|------------|
+| `1` | OK |
+| `5` | WARNING |
+| `9` | CRITICAL |
+| `10` | OOM_FIRING |
+
+---
+
+### WebSphere Application Server (WAS, traditional)
+
+`WasAlertChannel` relies on WAS's built-in interception of `java.util.logging` (JUL). No configuration is required for log routing — WAS handles it automatically at runtime.
+
+```java
+new WasAlertChannel()
+```
+
+**Where alerts appear:**
+
+| Log file | JUL level written | When |
+|----------|------------------|------|
+| `SystemErr.log` | `WARNING` | Risk level = `WARNING` |
+| `SystemErr.log` | `SEVERE` | Risk level = `CRITICAL` or `OOM_FIRING` |
+| `SystemOut.log` | — | Never (watchdog only writes WARNING/SEVERE) |
+| `ffdc/` | — | Correlated via the 8-hex-char incident ID included in every alert |
+
+**Enabling the logger in WAS Admin Console:**
+
+1. Navigate to **Servers → Server Types → WebSphere application servers → `<server>` → Troubleshooting → Logging and Tracing → Change Log Detail Levels**.
+2. Add entry: `com.trongus.oom.*=ALL`
+3. Click **Apply**. No restart required.
+
+**Recommended poll interval:** 30 s — aligns with WAS PMI 10–60 s sampling cadence.
+
+**JVM (WAS default):** IBM J9 with `gencon` GC policy. Heap typically 1 GB – 4 GB.
+
+---
+
+### WebSphere Liberty / Open Liberty
+
+`LibertyAlertChannel` routes through Liberty's unified JUL pipeline. No server restart or additional JAR is required.
+
+```java
+new LibertyAlertChannel()
+```
+
+**Where alerts appear:**
+
+| Log file | Condition |
+|----------|-----------|
+| `messages.log` | Always (INFO and above) — `WARNING` and `SEVERE` records always present |
+| `console.log` | When Liberty runs in foreground / `server run` mode |
+| `trace.log` | Only if `traceSpecification="com.trongus.oom.*=all"` is active |
+
+**Liberty `server.xml` configuration (recommended):**
+
+```xml
+<!-- Standard enhanced format -->
+<logging traceSpecification="com.trongus.oom.*=all"
+         messageFormat="ENHANCED"
+         logDirectory="${server.output.dir}/logs" />
+
+<!-- JSON format for log aggregators (Elastic, Splunk, IBM Log Analysis) -->
+<logging messageFormat="JSON"
+         jsonFieldMappings="ibm_userDir:userDir,ibm_serverName:serverName"
+         traceSpecification="com.trongus.oom.*=all" />
+```
+
+When JSON logging is active, `LibertyAlertChannel` embeds a JSON fragment as the JUL message body, making all OOM fields (`oomRiskLevel`, `heapPct`, `gcOverheadPct`, etc.) directly addressable as top-level JSON keys in your log aggregator.
+
+**MicroProfile Health integration:**
+
+```java
+@Liveness
+@ApplicationScoped
+public class OomHealthCheck implements HealthCheck {
+
+    @Inject
+    private LibertyAlertChannel oomChannel;
+
+    @Override
+    public HealthCheckResponse call() {
+        return HealthCheckResponse.named("jvm-oom-risk")
+                .status(oomChannel.isHealthy())
+                .withData("riskLevel", oomChannel.getLastRiskLevel().name())
+                .build();
+    }
+}
+```
+
+Liberty's `/health/live` endpoint reports `DOWN` automatically when the JVM is at `CRITICAL` or `OOM_FIRING`.
+
+**JVM (Liberty default):** IBM J9 / OpenJ9. HotSpot is also fully supported.
+
+---
+
+### IBM Cognos Analytics
+
+Cognos Analytics runs **three separate JVM processes** — each must be monitored independently with its own `OomWatchdog` instance.
+
+| Component | JVM | Recommended `-Xmx` | Primary OOM causes |
+|-----------|-----|--------------------|--------------------|
+| Application Tier Component (ATC) | IBM J9 | 4 GB – 8 GB | Large report datasets, PDF rendering, session caches |
+| Content Manager (CM) | IBM J9 | 2 GB – 4 GB | JDBC result caches, XML metadata trees |
+| Gateway / Dispatcher | IBM J9 | 1 GB – 2 GB | HTTP session routing, request buffering |
+
+```java
+// One instance per JVM process
+new CognosAlertChannel("ATC", "/opt/IBM/cognos/analytics/logs/oom-watchdog-ATC.log")
+new CognosAlertChannel("CM",  "/opt/IBM/cognos/analytics/logs/oom-watchdog-CM.log")
+new CognosAlertChannel("Gateway", "/opt/IBM/cognos/analytics/logs/oom-watchdog-GW.log")
+```
+
+**Where alerts appear:**
+
+| Destination | Format | Consumed by |
+|-------------|--------|-------------|
+| Dedicated `.log` file (primary) | Pipe-delimited structured log | Cognos Log Server, Cognos Audit DB |
+| JUL record (secondary) | Key=value | Liberty/WAS `messages.log` / `SystemErr.log` if hosted on app server |
+
+**Pipe-delimited log format:**
+
+```
+2025-09-17T08:00:00.000+1000|ATC|cognos-host|CRITICAL|921|1024|90.0|23.8|12345@cognos-host|[Assessment] CRITICAL – OOM imminent. ...
+```
+
+Fields: `timestamp | component | server | riskLevel | heapUsedMB | heapMaxMB | heapPct | gcOverheadPct | process | notes [| heapDumpPath]`
+
+**Cognos Log Server configuration** — add to `cognosservice.xml`:
+
+```xml
+<param name="Log.outputFile">/opt/IBM/cognos/analytics/logs/oom-watchdog-ATC.log</param>
+```
+
+---
+
+## OOM cause analysis (v1.3.0)
+
+Every alert now includes a plain-language root cause diagnosis produced by `OomCauseAnalyser`:
+
+| `OomCauseCategory` | Signals | Explanation |
+|--------------------|---------|-------------|
+| `RUNAWAY_GC_WITH_HIGH_HEAP` | heap ≥ critical AND GC overhead ≥ threshold | JVM spending most of its time in GC and cannot reclaim enough memory |
+| `HEAP_EXHAUSTION` | heap ≥ critical threshold | Available free heap too small for typical allocations |
+| `GC_OVERHEAD_EXCEEDED` | GC overhead ≥ threshold (heap healthy) | JVM wasting too much CPU on GC relative to useful work |
+| `MEMORY_LEAK_TREND` | positive post-GC growth slope | Live object retention growing steadily — probable memory leak |
+| `NONE` | all metrics OK | No OOM risk detected |
+
+The explanation is embedded in the `[Cause]` section of every diagnosis note and alert message.
+
+---
+
+## Internationalisation (v1.3.0)
+
+All alert text, section headings, and diagnosis strings are locale-aware. Set the locale on `WatchdogConfig`:
+
+```java
+WatchdogConfig config = WatchdogConfig.defaults()
+    .locale(Locale.JAPANESE)
+    .build();
+```
+
+Supported locales: `en` (default), `de`, `es`, `fr`, `ja`, `ko`, `pt_BR`, `zh_CN`, `zh_TW`.
+
+Resource bundles are stored as UTF-8 `.properties` files under `com/trongus/oom/i18n/` and are loaded with an explicit UTF-8 reader — double-byte CJK characters are never corrupted.
+
+---
+
 ## Alert output
 
 ### Console / log file — human-readable
@@ -169,9 +435,11 @@ OK  →  WARNING  →  CRITICAL  →  OOM_FIRING
   Growth rate    : 42.30 MB/hour
 
 -- Diagnosis --
-  [GC] Total GC time: 14300 ms | Overhead: 23.8%. [Heap] Used 90.0% of max.
-  [Leak] Post-GC heap growing at 42.30 MB/hour – possible memory leak.
-=====================
+  [Assessment] CRITICAL – OOM imminent. Heap at 90.0% (threshold 90.0%).
+  [Cause] Heap used 92.0% of maximum capacity (critical threshold 90.0%).
+  Available free heap is too small to service typical allocation requests.
+  An OutOfMemoryError may be thrown on the next large allocation.
+======================
 ```
 
 ### Structured single-line (syslog / file)
@@ -183,7 +451,7 @@ OK  →  WARNING  →  CRITICAL  →  OOM_FIRING
 ### QRadar — LEEF 2.0 UDP/TCP syslog
 
 ```
-LEEF:2.0|trongus|OomWatchdog|1.1|OOM_ALERT|devTime=... sev=9 src=prod-host ... heapPct=90.0 gcOverheadPct=23.8 ...
+LEEF:2.0|IBM|OomWatchdog|1.1|OOM_CRITICAL|sev=9	heapPct=90.0	gcOverheadPct=23.8	...
 ```
 
 ---
@@ -253,14 +521,26 @@ oom-watchdog/
 ├── core/                            → oom-watchdog.jar (fat jar)
 │   └── src/main/java/com/trongus/oom/
 │       ├── WatchdogMain.java        CLI entry point
-│       ├── alert/                   AlertChannel + 3 impls + AlertFormatter
+│       ├── alert/                   AlertChannel + 6 impls + AlertFormatter (i18n)
 │       ├── collector/               MxBeanDiagnosticsCollector
-│       ├── config/                  WatchdogConfig (immutable builder)
+│       ├── config/                  WatchdogConfig (immutable builder, locale)
+│       ├── diagnosis/               OomCause + OomCauseCategory + OomCauseAnalyser (NEW)
 │       ├── dump/                    CompositeDumpService + 6 strategies
+│       ├── i18n/                    Messages (UTF-8 ResourceBundle wrapper) (NEW)
 │       ├── model/                   JvmSnapshot + OomRiskLevel
 │       ├── monitor/                 OomWatchdog + ThresholdRiskAssessor
 │       ├── platform/                JvmPlatform (static detection)
 │       └── test/                    OomSimulator
+│   └── src/main/resources/com/trongus/oom/i18n/
+│       ├── Messages.properties      English (base / fallback)
+│       ├── Messages_de.properties   German
+│       ├── Messages_es.properties   Spanish
+│       ├── Messages_fr.properties   French
+│       ├── Messages_ja.properties   Japanese (UTF-8, double-byte)
+│       ├── Messages_ko.properties   Korean (UTF-8, double-byte)
+│       ├── Messages_pt_BR.properties Brazilian Portuguese
+│       ├── Messages_zh_CN.properties Simplified Chinese (UTF-8, double-byte)
+│       └── Messages_zh_TW.properties Traditional Chinese (UTF-8, double-byte)
 ├── test-harness/                    → test-harness.jar
 │   └── src/main/java/com/trongus/oom/harness/
 │       ├── TestHarnessMain.java
@@ -307,7 +587,7 @@ per-issue table.  Highlights:
 | `gcore` execution | Output path canonicalized (`getCanonicalPath()`); 60-second timeout + `destroyForcibly()`; output capped at 4 096 bytes |
 | Alert formatting | `AlertFormatter.sanitiseMultiLine()` / `sanitiseSingleLine()` strip control characters and quote injection |
 | Snapshot integrity | `JvmSnapshot.Builder` map setters take defensive `LinkedHashMap` copies |
-| Charset safety | All file writes use explicit `StandardCharsets.UTF_8` — no platform-default charset risk |
+| Charset safety | All file writes use explicit `StandardCharsets.UTF_8`; resource bundles loaded with explicit UTF-8 reader |
 | Thread safety | `HarnessAlertRecorder` alert counters use `AtomicInteger.incrementAndGet()` |
 
 ---
