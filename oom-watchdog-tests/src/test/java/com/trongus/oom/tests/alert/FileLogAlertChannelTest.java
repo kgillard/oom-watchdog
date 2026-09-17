@@ -27,7 +27,7 @@ import static org.junit.Assert.*;
  * <p>Because {@code AlertFormatter} is package-private, its formatting is
  * exercised indirectly through the file channel.
  *
- * @author Trongus OOM Watchdog
+ * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
  * @version 1.0.0
  * @since 1.0.0
  * @see FileLogAlertChannel

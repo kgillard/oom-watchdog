@@ -55,7 +55,7 @@ import java.util.List;
  *   java -Xmx96m -jar test-harness.jar
  * }</pre>
  *
- * @author Trongus OOM Watchdog
+ * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
  * @version 1.0.0
  * @since 1.0.0
  * @see com.trongus.oom.monitor.OomWatchdog

@@ -127,7 +127,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * LAST 10 MINUTES
  * }</pre>
  *
- * @author Trongus OOM Watchdog
+ * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
  * @version 1.1.0
  * @since 1.1.0
  * @see QRadarAlertChannel

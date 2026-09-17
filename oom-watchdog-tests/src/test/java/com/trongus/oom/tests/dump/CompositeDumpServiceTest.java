@@ -31,7 +31,7 @@ import static org.junit.Assert.*;
  * checking for an exact file at a specific location (which would depend on OS
  * temp permissions).
  *
- * @author Trongus OOM Watchdog
+ * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
  * @version 1.0.0
  * @since 1.0.0
  * @see CompositeDumpService

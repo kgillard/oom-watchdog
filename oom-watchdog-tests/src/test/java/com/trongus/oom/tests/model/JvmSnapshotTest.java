@@ -21,7 +21,7 @@ import static org.junit.Assert.*;
  *   <li>Map accessor unmodifiability</li>
  * </ul>
  *
- * @author Trongus OOM Watchdog
+ * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
  * @version 1.0.0
  * @since 1.0.0
  * @see JvmSnapshot

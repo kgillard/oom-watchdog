@@ -52,7 +52,7 @@ import java.util.List;
  * Custom implementations must also be thread-safe (e.g. use {@code synchronized}
  * on shared mutable state or prefer immutable / volatile fields).
  *
- * @author Trongus OOM Watchdog
+ * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
  * @version 1.0.0
  * @since 1.0.0
  * @see AlertChannel

@@ -183,7 +183,7 @@ OK  →  WARNING  →  CRITICAL  →  OOM_FIRING
 ### QRadar — LEEF 2.0 UDP/TCP syslog
 
 ```
-LEEF:2.0|Trongus|OomWatchdog|1.0|OOM_ALERT|devTime=... sev=9 src=prod-host ... heapPct=90.0 gcOverheadPct=23.8 ...
+LEEF:2.0|trongus|OomWatchdog|1.1|OOM_ALERT|devTime=... sev=9 src=prod-host ... heapPct=90.0 gcOverheadPct=23.8 ...
 ```
 
 ---
@@ -320,4 +320,4 @@ Apache 2.0 — see [LICENSE](LICENSE).
 
 ## Author
 
-Trongus OOM Watchdog project — `com.trongus.oom`
+trongus OOM Watchdog project — `com.trongus.oom`

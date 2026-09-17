@@ -80,7 +80,7 @@ import java.util.logging.Logger;
  * later.  No Liberty-specific classes are imported; integration relies solely on
  * standard {@code java.util.logging}, which Liberty intercepts at runtime.
  *
- * @author Trongus OOM Watchdog
+ * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
  * @version 1.2.0
  * @since 1.2.0
  * @see AlertChannel

@@ -14,7 +14,7 @@ import com.trongus.oom.model.JvmSnapshot;
  * <p>Implementations must be thread-safe: {@link #alert(JvmSnapshot)} may be
  * called concurrently from the watchdog's scheduler thread.
  *
- * @author Trongus OOM Watchdog
+ * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
  * @version 1.0.0
  * @since 1.0.0
  * @see com.trongus.oom.alert.ConsoleAlertChannel

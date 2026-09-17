@@ -16,7 +16,7 @@ import com.trongus.oom.model.JvmSnapshot;
  *   <li>Be callable from a single scheduler thread without external synchronisation.</li>
  * </ul>
  *
- * @author Trongus OOM Watchdog
+ * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
  * @version 1.0.0
  * @since 1.0.0
  * @see com.trongus.oom.collector.MxBeanDiagnosticsCollector

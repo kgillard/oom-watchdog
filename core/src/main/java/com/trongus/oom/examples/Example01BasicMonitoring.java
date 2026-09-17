@@ -33,7 +33,7 @@ import java.util.Collections;
  * <p>Nothing is printed until heap usage exceeds 80 % of {@code -Xmx}.  At that point
  * you will see a multi-line {@code === JVM OOM Alert ===} block on stdout every 5 seconds.
  *
- * @author Trongus OOM Watchdog
+ * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
  * @version 1.0.0
  * @since 1.0.0
  * @see Example02AlertChannels

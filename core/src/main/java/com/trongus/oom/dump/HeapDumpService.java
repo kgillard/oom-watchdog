@@ -20,7 +20,7 @@ import java.util.List;
  * Higher-level orchestration (scheduling, alerting, retry) belongs to separate
  * interfaces rather than being mixed into this contract.</p>
  *
- * @author Trongus OOM Watchdog
+ * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
  * @version 1.0.0
  * @since 1.0.0
  * @see CompositeDumpService

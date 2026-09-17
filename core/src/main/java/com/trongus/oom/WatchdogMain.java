@@ -137,7 +137,7 @@ import java.util.Set;
  *     --poll-ms 1000
  * }</pre>
  *
- * @author Trongus OOM Watchdog
+ * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
  * @version 1.0.0
  * @since 1.0.0
  * @see com.trongus.oom.config.WatchdogConfig
@@ -342,7 +342,7 @@ public final class WatchdogMain {
      * <p>Parses key-value pairs ({@code --key value}) and boolean switches ({@code --flag}),
      * applying defaults and basic range validation.
      *
-     * @author Trongus OOM Watchdog
+     * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
      * @version 1.0.0
      * @since 1.0.0
      * @see WatchdogMain

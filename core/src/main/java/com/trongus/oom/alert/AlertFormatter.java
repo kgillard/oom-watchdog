@@ -14,7 +14,7 @@ import java.util.Map;
  * <p>This class is package-private; only alert-channel implementations within this
  * package may use it directly.
  *
- * @author Trongus OOM Watchdog
+ * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
  * @version 1.0.0
  * @since 1.0.0
  * @see AlertChannel

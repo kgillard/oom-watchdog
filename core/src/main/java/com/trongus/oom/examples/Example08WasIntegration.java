@@ -65,7 +65,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * {@code @WebListener}.  No {@code web.xml} entry is needed when servlet 3.0+ annotations
  * are enabled (WAS 8.5+).
  *
- * @author Trongus OOM Watchdog
+ * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
  * @version 1.2.0
  * @since 1.2.0
  * @see WasAlertChannel

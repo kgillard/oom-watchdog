@@ -28,7 +28,7 @@ import java.util.Map;
  * <h2>Thread safety</h2>
  * Instances are fully thread-safe because they are immutable.
  *
- * @author Trongus OOM Watchdog
+ * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
  * @version 1.0.0
  * @since 1.0.0
  * @see com.trongus.oom.collector.JvmDiagnosticsCollector

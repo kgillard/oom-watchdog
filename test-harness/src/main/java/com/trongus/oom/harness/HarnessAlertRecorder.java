@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * and recording generated dump file locations so the test harness can assert on watchdog
  * escalation correctness prior to JVM termination.
  *
- * @author Trongus OOM Watchdog
+ * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
  * @version 1.0.0
  * @since 1.0.0
  * @see com.trongus.oom.alert.AlertChannel

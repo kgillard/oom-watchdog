@@ -54,7 +54,7 @@ import java.util.Map;
  * strategy that returns a non-{@code null} path wins and short-circuits the
  * rest of the chain for that dump type.
  *
- * @author Trongus OOM Watchdog
+ * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
  * @version 1.0.0
  * @since 1.0.0
  * @see HeapDumpService

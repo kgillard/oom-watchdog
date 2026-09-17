@@ -73,7 +73,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * <param name="Log.flushInterval">30</param>
  * }</pre>
  *
- * @author Trongus OOM Watchdog
+ * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
  * @version 1.2.0
  * @since 1.2.0
  * @see CognosAlertChannel

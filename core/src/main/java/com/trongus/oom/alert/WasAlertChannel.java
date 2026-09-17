@@ -60,7 +60,7 @@ import java.util.logging.Logger;
  * log lines or FFDC entries.  No user-supplied input is written to log messages without
  * prior sanitisation.
  *
- * @author Trongus OOM Watchdog
+ * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
  * @version 1.2.0
  * @since 1.2.0
  * @see AlertChannel

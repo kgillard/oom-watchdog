@@ -34,7 +34,7 @@ import java.util.List;
  *   java -Xmx64m -jar oom-watchdog.jar --test-mode
  * }</pre>
  *
- * @author Trongus OOM Watchdog
+ * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
  * @version 1.0.0
  * @since 1.0.0
  * @see com.trongus.oom.monitor.OomWatchdog
@@ -47,7 +47,7 @@ public final class OomSimulator implements Runnable {
      * Enables callers (such as command-line entry points or test runners) to observe and log
      * progression through the leak, burst, and OOM stages.
      *
-     * @author Trongus OOM Watchdog
+     * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
      * @version 1.0.0
      * @since 1.0.0
      */

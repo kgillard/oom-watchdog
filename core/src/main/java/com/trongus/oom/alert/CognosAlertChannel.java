@@ -84,7 +84,7 @@ import java.util.logging.Logger;
  * {@code -XX:HeapDumpPath=/opt/IBM/cognos/analytics/logs/heapdumps} to each JVM
  * argument list in the Cognos service configuration.
  *
- * @author Trongus OOM Watchdog
+ * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
  * @version 1.2.0
  * @since 1.2.0
  * @see AlertChannel

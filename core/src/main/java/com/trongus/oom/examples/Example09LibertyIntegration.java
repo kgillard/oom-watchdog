@@ -58,7 +58,7 @@ import java.util.concurrent.atomic.AtomicReference;
  *       where heap spikes can be rapid.</li>
  * </ul>
  *
- * @author Trongus OOM Watchdog
+ * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
  * @version 1.2.0
  * @since 1.2.0
  * @see LibertyAlertChannel
