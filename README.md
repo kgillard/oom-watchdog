@@ -7,18 +7,18 @@
 [![Security Audit](https://img.shields.io/badge/security%20audit-4%20passes%20clean-brightgreen)]()
 [![JDK](https://img.shields.io/badge/JDK-8%20%E2%80%93%2026%2B-blue)]()
 [![Vendors](https://img.shields.io/badge/JVM-HotSpot%20%7C%20OpenJ9%20%7C%20GraalVM-blue)]()
-[![Release](https://img.shields.io/badge/release-v1.7.0-blue)](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.0)
+[![Release](https://img.shields.io/badge/release-v1.7.1-blue)](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.1)
 
 ---
 
 ## Download
 
-Pre-built JARs are available in the [v1.7.0 release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.0):
+Pre-built JARs are available in the [v1.7.1 release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.1):
 
 | Artefact | Description | Size |
 |----------|-------------|------|
-| [`oom-watchdog.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.7.0/oom-watchdog.jar) | Fat JAR — monitoring agent + CLI entry point | ~179 KB |
-| [`test-harness.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.7.0/test-harness.jar) | Fat JAR — interactive OOM test harness | ~192 KB |
+| [`oom-watchdog.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.7.1/oom-watchdog.jar) | Fat JAR — monitoring agent + CLI entry point | ~157 KB |
+| [`test-harness.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.7.1/test-harness.jar) | Fat JAR — interactive OOM test harness | ~171 KB |
 
 ---
 

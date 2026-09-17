@@ -1,4 +1,4 @@
-# OOM Watchdog – Architecture (v1.7.0)
+# OOM Watchdog – Architecture (v1.7.1)
 
 ## Overview
 
@@ -449,7 +449,7 @@ flowchart TD
 ## Module Structure
 
 ```
-oom-watchdog/                  Maven multi-module root (v1.7.0)
+oom-watchdog/                  Maven multi-module root (v1.7.1)
 ├── core/                      oom-watchdog.jar  (fat jar via maven-shade-plugin)
 │   └── src/main/java/com/trongus/oom/
 │       ├── WatchdogMain.java  CLI entry point (local + daemon modes)
@@ -611,8 +611,8 @@ Pass 5 (v1.7.0) identified and fixed 4 issues in the new remote JMX monitoring s
 
 ## Release Artefacts
 
-The v1.7.0 release publishes two executable fat JARs built with `maven-shade-plugin`.
-Both will be attached to the [GitHub release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.0).
+The v1.7.1 release publishes two executable fat JARs built with `maven-shade-plugin`.
+Both will be attached to the [GitHub release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.1).
 
 | Artefact | Main class | Contents | Size (approx) |
 |----------|-----------|----------|---------------|

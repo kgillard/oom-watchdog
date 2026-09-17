@@ -56,7 +56,7 @@ import java.util.logging.Logger;
  * <p>Designed to be invoked periodically from a single watchdog scheduler thread.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.0
+ * @version 1.7.1
  * @since 1.7.0
  * @see TargetDescriptor
  * @see JvmDiagnosticsCollector
