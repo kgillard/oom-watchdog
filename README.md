@@ -222,13 +222,10 @@ new QRadarAlertChannel("siem.corp.com", 514, Transport.UDP)
 new QRadarAlertChannel("siem.corp.com", 6514, Transport.TCP)  // TLS proxy
 ```
 
-**LEEF 2.0 event format:**
+**LEEF 2.0 event format** (single line on the wire; `<TAB>` = literal tab delimiter):
 
 ```
-<13>Sep 17 08:00:00 prod-host LEEF:2.0|IBM|OomWatchdog|1.1|OOM_CRITICAL|
-sev=9	cat=JVM_OOM_Risk	process=98765@prod-host	heapUsedMB=921	heapMaxMB=1024
-heapPct=90.0	nonHeapUsedMB=128	gcOverheadPct=23.8	totalGcTimeMs=14300
-postGcGrowth=42.30 MB/h	riskLevel=CRITICAL	msg=...
+<13>Sep 17 08:00:00 prod-host LEEF:2.0|IBM|OomWatchdog|1.1|OOM_CRITICAL|sev=9<TAB>cat=JVM_OOM_Risk<TAB>process=98765@prod-host<TAB>heapUsedMB=921<TAB>heapMaxMB=1024<TAB>heapPct=90.0<TAB>nonHeapUsedMB=128<TAB>gcOverheadPct=23.8<TAB>totalGcTimeMs=14300<TAB>postGcGrowth=42.30 MB/h<TAB>riskLevel=CRITICAL<TAB>msg=...
 ```
 
 | `sev` value | Risk level |
@@ -451,7 +448,7 @@ Resource bundles are stored as UTF-8 `.properties` files under `com/trongus/oom/
 ### QRadar — LEEF 2.0 UDP/TCP syslog
 
 ```
-LEEF:2.0|IBM|OomWatchdog|1.1|OOM_CRITICAL|sev=9	heapPct=90.0	gcOverheadPct=23.8	...
+LEEF:2.0|IBM|OomWatchdog|1.1|OOM_CRITICAL|sev=9<TAB>heapPct=90.0<TAB>gcOverheadPct=23.8<TAB>...
 ```
 
 ---

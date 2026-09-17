@@ -55,7 +55,7 @@ and are documented in detail below.
 
 ```bash
 curl -L -o oom-watchdog.jar \
-  https://github.com/kgillard/oom-watchdog/releases/download/v1.2.0/oom-watchdog.jar
+  https://github.com/kgillard/oom-watchdog/releases/download/v1.3.0/oom-watchdog.jar
 ```
 
 No installation, no classpath setup — the JAR is a self-contained fat JAR with no
@@ -167,16 +167,16 @@ Then reference it in your `pom.xml`:
 
 ```xml
 <dependency>
-    <groupId>com.trongus</groupId>
+    <groupId>com.trongus.oom</groupId>
     <artifactId>oom-watchdog-core</artifactId>
-    <version>1.0.0</version>
+    <version>1.3.0</version>
 </dependency>
 ```
 
 Or in Gradle:
 
 ```groovy
-implementation 'com.trongus:oom-watchdog-core:1.0.0'
+implementation 'com.trongus.oom:oom-watchdog-core:1.3.0'
 ```
 
 ### 2.2 Minimal wiring
@@ -473,19 +473,43 @@ resilience, TLS relay, and AQL correlation queries.
 ### 8.1 LEEF 2.0 wire format (complete)
 
 Every alert emitted by `QRadarAlertChannel` is a syslog RFC 3164 message with a LEEF 2.0
-payload.  The complete wire format for a CRITICAL event (tab characters shown as `→`):
+payload.  LEEF attributes are separated by **literal tab characters** (`\t`).
+The complete wire format for a CRITICAL event is a **single line** on the wire
+(`<TAB>` marks each tab delimiter):
 
 ```
-<13>Sep 17 08:00:00 prod-host LEEF:2.0|IBM|OomWatchdog|1.1|OOM_CRITICAL|
-sev=9→cat=JVM_OOM_Risk→process=98765@prod-host
-heapUsedMB=921→heapMaxMB=1024→heapPct=90.0
-nonHeapUsedMB=128→gcOverheadPct=23.8→totalGcTimeMs=14300
-gc_G1_Young_Generation_count=1420→gc_G1_Young_Generation_timeMs=6200
-gc_G1_Old_Generation_count=3→gc_G1_Old_Generation_timeMs=8100
-postGcGrowth=42.30 MB/h→riskLevel=CRITICAL
-heapDump=/var/dumps/oom_heap_98765_20251017_080000_001.hprof
-msg=[Assessment] CRITICAL – OOM imminent. Heap at 90.0% ...
+<13>Sep 17 08:00:00 prod-host LEEF:2.0|IBM|OomWatchdog|1.1|OOM_CRITICAL|sev=9<TAB>cat=JVM_OOM_Risk<TAB>process=98765@prod-host<TAB>heapUsedMB=921<TAB>heapMaxMB=1024<TAB>heapPct=90.0<TAB>nonHeapUsedMB=128<TAB>gcOverheadPct=23.8<TAB>totalGcTimeMs=14300<TAB>postGcGrowth=42.30 MB/h<TAB>riskLevel=CRITICAL<TAB>gc_G1_Young_Generation_count=1420<TAB>gc_G1_Young_Generation_timeMs=6200<TAB>gc_G1_Old_Generation_count=3<TAB>gc_G1_Old_Generation_timeMs=8100<TAB>heapDump=/var/dumps/oom_heap_98765_20251017_080000_001.hprof<TAB>msg=[Assessment] CRITICAL – OOM imminent. Heap at 90.0% ...
 ```
+
+The same message formatted for readability (each `<TAB>` is a literal tab on the wire):
+
+| Attribute | Example value |
+|-----------|--------------|
+| Syslog header | `<13>Sep 17 08:00:00 prod-host` |
+| LEEF header | `LEEF:2.0\|IBM\|OomWatchdog\|1.1\|OOM_CRITICAL\|` |
+| `sev` | `9` |
+| `cat` | `JVM_OOM_Risk` |
+| `process` | `98765@prod-host` |
+| `heapUsedMB` | `921` |
+| `heapMaxMB` | `1024` |
+| `heapPct` | `90.0` |
+| `nonHeapUsedMB` | `128` |
+| `gcOverheadPct` | `23.8` |
+| `totalGcTimeMs` | `14300` |
+| `postGcGrowth` | `42.30 MB/h` |
+| `riskLevel` | `CRITICAL` |
+| `gc_G1_Young_Generation_count` | `1420` |
+| `gc_G1_Young_Generation_timeMs` | `6200` |
+| `gc_G1_Old_Generation_count` | `3` |
+| `gc_G1_Old_Generation_timeMs` | `8100` |
+| `heapDump` | `/var/dumps/oom_heap_98765_20251017_080000_001.hprof` |
+| `msg` | `[Assessment] CRITICAL – OOM imminent. Heap at 90.0% ...` |
+
+**Why `IBM` as the LEEF vendor field?**
+`QRadarAlertChannel` sets `VENDOR = "IBM"` because LEEF 2.0 is an IBM-defined protocol
+and `IBM` is the registered vendor identifier that causes QRadar's built-in LEEF DSM to
+parse the event without any manual DSM mapping.  The trongus brand name appears in the
+`process` and `msg` fields of each event, not in the LEEF vendor header.
 
 **Field reference:**
 
@@ -1041,7 +1065,7 @@ mvn test -pl oom-watchdog-tests
 
 ## 13. IBM Application Server and Cognos Integration
 
-OOM Watchdog 1.2.0 adds three new `AlertChannel` implementations targeting IBM
+OOM Watchdog 1.3.0 adds three new `AlertChannel` implementations targeting IBM
 application server platforms.  Each channel uses `java.util.logging` (JUL), which is
 intercepted at runtime by WAS, Liberty, and Cognos without any additional dependencies.
 
