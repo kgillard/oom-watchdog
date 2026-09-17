@@ -34,12 +34,16 @@ graph TD
     W --> A["RiskAssessor"]
     W --> CH["AlertChannel(s)"]
     W --> D["HeapDumpService"]
+    W --> WC["WatchdogConfig"]
 
     C -->|impl| MX["MxBeanDiagnosticsCollector"]
     A -->|impl| TR["ThresholdRiskAssessor"]
     CH -->|impl| CON["ConsoleAlertChannel"]
     CH -->|impl| FILE["FileLogAlertChannel"]
     CH -->|impl| QR["QRadarAlertChannel (LEEF 2.0)"]
+    CH -->|impl| WAS["WasAlertChannel (JUL → SystemErr.log)"]
+    CH -->|impl| LIB["LibertyAlertChannel (JUL → messages.log)"]
+    CH -->|impl| COG["CognosAlertChannel (pipe-delimited log)"]
     D -->|impl| CDS["CompositeDumpService"]
 
     CDS --> S1["HotSpotHeapDumpStrategy"]
@@ -50,22 +54,28 @@ graph TD
     CDS --> S6["CoreDumpStrategy"]
 
     MX -->|reads| JP["JvmPlatform (static detection)"]
+    CDS -->|reads| JP
     MX -->|produces| SNAP["JvmSnapshot (immutable value object)"]
-    TR -->|consumes| SNAP
-    TR -->|produces| SNAP2["JvmSnapshot (with OomRiskLevel)"]
-    CH -->|consumes| SNAP2
-    D -->|consumes| SNAP2
+    TR -->|consumes/produces| SNAP
+
+    TR -->|uses| CA["OomCauseAnalyser"]
+    TR -->|uses| MSG["Messages (i18n)"]
+    MX -->|uses| MSG
+    CA -->|produces| OC["OomCause + OomCauseCategory"]
 
     subgraph model
         SNAP
         ORL["OomRiskLevel (OK/WARNING/CRITICAL/OOM_FIRING)"]
     end
 
-    subgraph config
-        WC["WatchdogConfig (immutable, builder)"]
+    subgraph i18n
+        MSG
+        OC
     end
 
-    W --- WC
+    subgraph config
+        WC
+    end
 ```
 
 ---
@@ -81,6 +91,10 @@ classDiagram
         -List~AlertChannel~ alertChannels
         -HeapDumpService dumpService
         -ScheduledExecutorService scheduler
+        -ScheduledFuture task
+        -AtomicBoolean dumpTakenThisEpisode
+        -AtomicReference~OomRiskLevel~ lastLevel
+        +OomWatchdog(WatchdogConfig, JvmDiagnosticsCollector, RiskAssessor, List, HeapDumpService)
         +start()
         +stop()
         +getLastRiskLevel() OomRiskLevel
@@ -110,56 +124,108 @@ classDiagram
 
     class MxBeanDiagnosticsCollector {
         -WatchdogConfig config
+        -Messages messages
         -Deque~long[]~ postGcWindow
+        -long prevTotalGcTime
+        +MxBeanDiagnosticsCollector(WatchdogConfig)
         +collect() JvmSnapshot
-        -computeSlope(List~long[]~) double
+        -computeSlope(Deque~long[]~) double
     }
 
     class ThresholdRiskAssessor {
         -WatchdogConfig config
+        -Messages messages
+        -OomCauseAnalyser causeAnalyser
+        +ThresholdRiskAssessor(WatchdogConfig)
         +assess(JvmSnapshot) JvmSnapshot
     }
 
-    class ConsoleAlertChannel
+    class ConsoleAlertChannel {
+        +alert(JvmSnapshot)
+        +channelName() String
+    }
+
     class FileLogAlertChannel {
         -Path logPath
+        +FileLogAlertChannel(String)
+        +alert(JvmSnapshot)
     }
+
     class QRadarAlertChannel {
-        -String host
-        -int port
-        -String protocol
+        -String qradarHost
+        -int qradarPort
+        -Transport transport
+        -String localHostname
+        +QRadarAlertChannel(String, int, Transport)
+        +alert(JvmSnapshot)
+    }
+
+    class WasAlertChannel {
+        +alert(JvmSnapshot)
+        +channelName() String
+    }
+
+    class LibertyAlertChannel {
+        -AtomicReference~OomRiskLevel~ lastRiskLevel
+        +alert(JvmSnapshot)
+        +isHealthy() boolean
+        +getLastRiskLevel() OomRiskLevel
+    }
+
+    class CognosAlertChannel {
+        -String cognosComponent
+        -String logFilePath
+        +CognosAlertChannel(String, String)
+        +alert(JvmSnapshot)
     }
 
     class AlertFormatter {
         <<package-private>>
-        +toHumanReadable(JvmSnapshot) String$
-        +toSingleLine(JvmSnapshot) String$
+        +toHumanReadable(JvmSnapshot) String
+        +toHumanReadable(JvmSnapshot, Messages) String
+        +toSingleLine(JvmSnapshot) String
+        -sanitiseMultiLine(String) String
+        -sanitiseSingleLine(String) String
     }
 
     class CompositeDumpService {
         -WatchdogConfig config
         -Map~DumpType, List~DumpStrategy~~ chains
+        +CompositeDumpService(WatchdogConfig)
         +dump(JvmSnapshot, List~DumpType~) List~String~
-        -buildChains() Map$
+        -buildChains() Map
         -buildPath(JvmSnapshot, DumpType) String
     }
 
     class DumpStrategy {
         <<interface>>
+        +type() DumpType
         +attempt(JvmSnapshot, String) String
         +name() String
     }
 
     class JvmSnapshot {
-        +processName String
-        +timestampMs long
-        +heapUsedBytes long
-        +heapMaxBytes long
-        +heapUsedRatio double
-        +gcOverheadRatio double
-        +postGcHeapGrowthRatePerMs double
-        +riskLevel OomRiskLevel
+        +String processName
+        +long timestampMs
+        +long heapUsedBytes
+        +long heapCommittedBytes
+        +long heapMaxBytes
+        +double heapUsedRatio
+        +long nonHeapUsedBytes
+        +long nonHeapMaxBytes
+        +Map~String,Long~ poolUsedBytes
+        +Map~String,Long~ gcCollectionCounts
+        +Map~String,Long~ gcCollectionTimesMs
+        +long totalGcTimeMs
+        +long jvmUptimeMs
+        +double gcOverheadRatio
+        +long postGcHeapUsedBytes
+        +double postGcHeapGrowthRatePerMs
+        +OomRiskLevel riskLevel
+        +String diagnosisNotes
+        +String heapDumpPath
         +withHeapDumpPath(String) JvmSnapshot
+        +toBuilder() Builder
     }
 
     class OomRiskLevel {
@@ -171,21 +237,60 @@ classDiagram
     }
 
     class WatchdogConfig {
-        +warningHeapThreshold double
-        +criticalHeapThreshold double
-        +gcOverheadThreshold double
-        +pollIntervalMs long
-        +heapDumpDirectory String
-        +dumpTypes Set~DumpType~
+        +double warningHeapThreshold
+        +double criticalHeapThreshold
+        +double gcOverheadThreshold
+        +int leakDetectionWindowSize
+        +long pollIntervalMs
+        +String heapDumpDirectory
+        +Set~DumpType~ dumpTypes
+        +String qradarHost
+        +int qradarPort
+        +Locale locale
+        +defaults() Builder
+        +getLocale() Locale
     }
 
     class JvmPlatform {
-        +JDK_VERSION int$
-        +IS_GRAAL_NATIVE bool$
-        +IS_J9 bool$
-        +IS_HOTSPOT bool$
-        +PID long$
+        +int JDK_VERSION$
+        +boolean IS_GRAAL_NATIVE$
+        +boolean IS_GRAAL_JVM$
+        +boolean IS_J9$
+        +boolean IS_HOTSPOT$
+        +long PID$
         +summary() String$
+    }
+
+    class OomCauseAnalyser {
+        -double criticalHeapThreshold
+        -double gcOverheadThreshold
+        -Messages messages
+        +OomCauseAnalyser(double, double, Messages)
+        +analyse(double, double, double) OomCause
+    }
+
+    class OomCause {
+        -OomCauseCategory category
+        -String explanation
+        +getCategory() OomCauseCategory
+        +getExplanation() String
+    }
+
+    class OomCauseCategory {
+        <<enumeration>>
+        NONE
+        MEMORY_LEAK_TREND
+        GC_OVERHEAD_EXCEEDED
+        HEAP_EXHAUSTION
+        RUNAWAY_GC_WITH_HIGH_HEAP
+    }
+
+    class Messages {
+        -ResourceBundle bundle
+        -Locale locale
+        +Messages(Locale)
+        +get(String) String
+        +format(String, Object...) String
     }
 
     OomWatchdog --> JvmDiagnosticsCollector
@@ -199,13 +304,23 @@ classDiagram
     ConsoleAlertChannel ..|> AlertChannel
     FileLogAlertChannel ..|> AlertChannel
     QRadarAlertChannel ..|> AlertChannel
+    WasAlertChannel ..|> AlertChannel
+    LibertyAlertChannel ..|> AlertChannel
+    CognosAlertChannel ..|> AlertChannel
     CompositeDumpService ..|> HeapDumpService
 
     FileLogAlertChannel --> AlertFormatter
     ConsoleAlertChannel --> AlertFormatter
     CompositeDumpService --> DumpStrategy
+    CompositeDumpService --> JvmPlatform
     MxBeanDiagnosticsCollector --> JvmSnapshot
+    MxBeanDiagnosticsCollector --> JvmPlatform
+    MxBeanDiagnosticsCollector --> Messages
     ThresholdRiskAssessor --> JvmSnapshot
+    ThresholdRiskAssessor --> Messages
+    ThresholdRiskAssessor --> OomCauseAnalyser
+    OomCauseAnalyser --> OomCause
+    OomCause --> OomCauseCategory
     JvmSnapshot --> OomRiskLevel
 ```
 
@@ -226,20 +341,24 @@ sequenceDiagram
     WD->>COL: collect()
     COL-->>WD: JvmSnapshot(riskLevel=OK)
     WD->>ASS: assess(snapshot)
-    ASS-->>WD: JvmSnapshot(riskLevel=CRITICAL)
+    ASS-->>WD: JvmSnapshot(riskLevel=CRITICAL, diagnosisNotes=...)
+
+    alt riskLevel == OK
+        WD->>WD: dumpTakenThisEpisode.set(false)
+    end
 
     alt riskLevel >= WARNING
-        alt riskLevel >= CRITICAL and not dumpTaken
+        alt riskLevel >= CRITICAL AND dumpTakenThisEpisode.compareAndSet(false,true)
             WD->>DUMP: dump(snapshot, dumpTypes)
-            DUMP-->>WD: ["/dumps/oom_heap_…hprof"]
-            WD->>WD: snapshot.withHeapDumpPath(paths)
+            DUMP-->>WD: ["/dumps/oom_heap_….hprof", …]
+            WD->>WD: toReport = snapshot.withHeapDumpPath(paths)
         end
         loop for each AlertChannel
-            WD->>CH: alert(enrichedSnapshot)
+            WD->>CH: alert(toReport)
         end
     end
 
-    WD->>WD: lastLevel = riskLevel
+    WD->>WD: lastLevel.set(riskLevel)
 ```
 
 ---
@@ -252,9 +371,9 @@ flowchart TD
 
     TYPE -->|HEAP| H1[HotSpotHeapDumpStrategy\nHotSpotDiagnosticMXBean]
     H1 -->|success| DONE([path returned])
-    H1 -->|fail| H2[J9HeapDumpStrategy\nOpenJ9 com.ibm.jvm.Dump]
+    H1 -->|null - not HotSpot| H2[J9HeapDumpStrategy\nOpenJ9 com.ibm.jvm.Dump]
     H2 -->|success| DONE
-    H2 -->|fail| H3[GraalNativeHeapDumpStrategy\nVMRuntime / pool summary]
+    H2 -->|null - not J9| H3[GraalNativeHeapDumpStrategy\nVMRuntime / pool summary fallback]
     H3 --> DONE
 
     TYPE -->|THREAD| T1[ThreadDumpStrategy\nThreadMXBean universal]
@@ -276,17 +395,27 @@ oom-watchdog/                  Maven multi-module root (v1.5.0)
 ├── core/                      oom-watchdog.jar  (fat jar via maven-shade-plugin)
 │   └── src/main/java/com/trongus/oom/
 │       ├── WatchdogMain.java  CLI entry point
-│       ├── alert/             AlertChannel ISP + 6 implementations + AlertFormatter (i18n)
-│       ├── collector/         JvmDiagnosticsCollector + MxBeanDiagnosticsCollector
-│       ├── config/            WatchdogConfig (immutable, builder, locale)
-│       ├── diagnosis/         OomCause + OomCauseCategory + OomCauseAnalyser  ← NEW v1.5.0
-│       ├── dump/              HeapDumpService + CompositeDumpService + DumpType + strategies
-│       ├── i18n/              Messages (UTF-8 ResourceBundle wrapper)          ← NEW v1.5.0
-│       ├── model/             JvmSnapshot + OomRiskLevel
-│       ├── monitor/           OomWatchdog + RiskAssessor + ThresholdRiskAssessor
-│       ├── platform/          JvmPlatform (static detection)
+│       ├── alert/             AlertChannel (interface) + 6 implementations
+│       │                      (Console, FileLog, QRadar, Was, Liberty, Cognos)
+│       │                      + AlertFormatter (package-private, i18n-aware)
+│       ├── collector/         JvmDiagnosticsCollector (interface)
+│       │                      + MxBeanDiagnosticsCollector
+│       ├── config/            WatchdogConfig (immutable builder, locale)
+│       ├── diagnosis/         OomCause + OomCauseCategory + OomCauseAnalyser  ← v1.3.0
+│       ├── dump/              HeapDumpService (interface) + CompositeDumpService
+│       │                      + DumpType enum
+│       │   └── strategy/      DumpStrategy (interface) + 6 implementations
+│       │                      (HotSpotHeapDump, J9HeapDump, GraalNativeHeapDump,
+│       │                       ThreadDump, ClassHistogram, CoreDump)
+│       ├── examples/          11 runnable example classes (01–11)
+│       ├── i18n/              Messages (UTF-8 ResourceBundle wrapper)           ← v1.3.0
+│       ├── model/             JvmSnapshot (immutable value object)
+│       │                      + OomRiskLevel enum
+│       ├── monitor/           OomWatchdog + RiskAssessor (interface)
+│       │                      + ThresholdRiskAssessor
+│       ├── platform/          JvmPlatform (static detection, all fields final)
 │       └── test/              OomSimulator (3-phase heap exhaustion)
-│   └── src/main/resources/com/trongus/oom/i18n/    ← NEW v1.5.0
+│   └── src/main/resources/com/trongus/oom/i18n/
 │       ├── Messages.properties       English (base / fallback)
 │       ├── Messages_de.properties    German
 │       ├── Messages_es.properties    Spanish
@@ -302,10 +431,11 @@ oom-watchdog/                  Maven multi-module root (v1.5.0)
 │       ├── TestHarnessMain.java
 │       ├── DynamicOomClassGenerator.java  (javax.tools at runtime)
 │       ├── BuiltInHeapExhauster.java
-│       └── HarnessAlertRecorder.java
+│       └── HarnessAlertRecorder.java      (CopyOnWriteArrayList + AtomicInteger)
 │
 └── oom-watchdog-tests/        JUnit 4 test suite (189 tests)
     └── src/test/java/com/trongus/oom/tests/
+        ├── OomWatchdogTestSuite.java
         ├── model/             OomRiskLevelTest, JvmSnapshotTest
         ├── config/            WatchdogConfigTest
         ├── dump/              DumpTypeTest, CompositeDumpServiceTest
@@ -359,17 +489,20 @@ The following table shows exactly where OOM Watchdog alert output appears for ev
 | Strategy pattern for dump dispatch | Adding a new vendor dump requires only a new `DumpStrategy` class |
 | OLS slope on post-GC heap samples | Detects slow leaks that thresholds alone miss |
 | Episode deduplication in `OomWatchdog` | Prevents dump storms during a sustained critical episode |
+| `AtomicBoolean.compareAndSet(false,true)` for dump guard | Atomic check-and-set eliminates check-then-act race (SEC-2) |
+| `AtomicReference<OomRiskLevel>` for `lastLevel` | Consistent cross-thread memory visibility without `synchronized` (SEC-3) |
 | Immutable `JvmSnapshot` with `withHeapDumpPath()` copy | Thread-safe, trivially testable, no shared mutable state |
 | Defensive copies in `JvmSnapshot.Builder` map setters | Caller-mutated maps cannot corrupt in-flight snapshots |
 | `AlertFormatter` sanitises all free-text fields | Prevents control-character injection into log/syslog output |
 | `AlertFormatter` package-private | Formatting is an implementation detail; only alert channels need it |
 | `WatchdogConfig` immutable builder with full validation | Config cannot drift at runtime; rejects out-of-range values at construction |
-| `WatchdogConfig.locale()` | Single locale setting propagates to Messages, OomCauseAnalyser, and AlertFormatter |
+| `WatchdogConfig.locale()` | Single locale setting propagates to `Messages`, `OomCauseAnalyser`, and `AlertFormatter` |
 | LEEF 2.0 for QRadar | Native IBM SIEM format; field-indexed for high-speed correlation |
 | TCP socket connect + read timeout (5 s) | Slow/unreachable QRadar host cannot block the watchdog poll thread |
 | UDP payload capped at 65 007 bytes | Prevents silent datagram truncation on standard Ethernet MTUs |
 | `gcore` path canonicalization + 60 s timeout | Prevents path-traversal; avoids hung dump process blocking the JVM |
 | `AtomicInteger` counters in `HarnessAlertRecorder` | Thread-safe read-modify-write without external synchronisation |
+| `CopyOnWriteArrayList` for `HarnessAlertRecorder.dumpPaths` | Lock-free iteration from the results thread; no unsynchronised read race (SEC-4) |
 | All file writes use explicit `StandardCharsets.UTF_8` | Consistent output across all platforms; no platform-default charset risk |
 | `ResourceBundle.Control` with UTF-8 reader | Prevents ISO-8859-1 corruption of CJK double-byte characters in `.properties` files |
 | `OomCauseAnalyser` stateless | Can be shared across threads; no synchronisation cost |
@@ -379,23 +512,26 @@ The following table shows exactly where OOM Watchdog alert output appears for ev
 
 ## Security Hardening Summary
 
-Three security audit passes were performed.  Passes 1 and 2 identified and
-fixed the 11 issues listed below.  Pass 3 reviewed all remaining source files
-and confirmed **no further issues** — the codebase is fully hardened.
+Four security audit passes have been performed.  Passes 1 and 2 identified and
+fixed 11 issues.  Pass 3 reviewed all remaining source files and confirmed no
+further issues.  Pass 4 identified and fixed 3 concurrency issues (SEC-2, SEC-3, SEC-4).
 
-| # | File | Issue | Fix |
-|---|------|-------|-----|
-| 1 | `WatchdogConfig` | No range validation on numeric fields | `build()` rejects thresholds outside `(0,1)`, `pollIntervalMs < 100`, `leakDetectionWindowSize < 2`, `qradarPort` outside `[1,65535]`, blank `heapDumpDirectory` |
-| 2 | `WatchdogMain` | CLI values passed to builder without validation | Parser clamps/rejects out-of-range values before calling `build()` |
-| 3 | `QRadarAlertChannel` | TCP socket had no timeout | `socket.connect()` + `setSoTimeout()` both set to 5 s |
-| 4 | `QRadarAlertChannel` | UDP payload not length-checked | Payload truncated to `MAX_UDP_PAYLOAD = 65 007` bytes before send |
-| 5 | `CoreDumpStrategy` (+ `HotSpotHeapDumpService`) | `gcore` had no timeout; unbounded output accumulation | `waitFor(60, SECONDS)` + `destroyForcibly()`; output capped at 4 096 bytes |
-| 6 | `CoreDumpStrategy` (+ `HotSpotHeapDumpService`) | `outputPath` not canonicalized — path-traversal risk | `File.getCanonicalPath()` applied before passing to `ProcessBuilder` |
-| 7 | `DynamicOomClassGenerator` | `FileWriter` used platform default charset | Replaced with `OutputStreamWriter(…, UTF_8)` |
-| 8 | `HotSpotHeapDumpService` | All three `FileWriter` usages used platform default charset | Replaced with `OutputStreamWriter(…, UTF_8)` |
-| 9 | `AlertFormatter` | Free-text fields (`diagnosisNotes`, `processName`, `heapDumpPath`) embedded unsanitised | `sanitiseMultiLine()` strips control chars in human-readable output; `sanitiseSingleLine()` strips newlines + quotes in single-line output |
-| 10 | `JvmSnapshot.Builder` | Map setters stored caller's reference — mutation after build corrupts snapshot | Defensive `LinkedHashMap` copy taken in all three map setter methods |
-| 11 | `HarnessAlertRecorder` | `volatile int++` is not atomic under concurrent access | Replaced with `AtomicInteger.incrementAndGet()` |
+| # | Audit | File | Issue | Fix |
+|---|-------|------|-------|-----|
+| 1 | 1–2 | `WatchdogConfig` | No range validation on numeric fields | `build()` rejects thresholds outside `(0,1)`, `pollIntervalMs < 100`, `leakDetectionWindowSize < 2`, `qradarPort` outside `[1,65535]`, blank `heapDumpDirectory` |
+| 2 | 1–2 | `WatchdogMain` | CLI values passed to builder without validation | Parser clamps/rejects out-of-range values before calling `build()` |
+| 3 | 1–2 | `QRadarAlertChannel` | TCP socket had no timeout | `socket.connect()` + `setSoTimeout()` both set to 5 s |
+| 4 | 1–2 | `QRadarAlertChannel` | UDP payload not length-checked | Payload truncated to `MAX_UDP_PAYLOAD = 65 007` bytes before send |
+| 5 | 1–2 | `CoreDumpStrategy` | `gcore` had no timeout; unbounded output accumulation | `waitFor(60, SECONDS)` + `destroyForcibly()`; output capped at 4 096 bytes |
+| 6 | 1–2 | `CoreDumpStrategy` | `outputPath` not canonicalized — path-traversal risk | `File.getCanonicalPath()` applied before passing to `ProcessBuilder` |
+| 7 | 1–2 | `DynamicOomClassGenerator` | `FileWriter` used platform default charset | Replaced with `OutputStreamWriter(…, UTF_8)` |
+| 8 | 1–2 | `HotSpotHeapDumpService` | All three `FileWriter` usages used platform default charset | Replaced with `OutputStreamWriter(…, UTF_8)` |
+| 9 | 1–2 | `AlertFormatter` | Free-text fields embedded unsanitised | `sanitiseMultiLine()` strips control chars in human-readable output; `sanitiseSingleLine()` strips newlines + quotes in single-line output |
+| 10 | 1–2 | `JvmSnapshot.Builder` | Map setters stored caller's reference | Defensive `LinkedHashMap` copy taken in all three map setter methods |
+| 11 | 3 | `HarnessAlertRecorder` | `volatile int++` is not atomic under concurrent access | Replaced with `AtomicInteger.incrementAndGet()` |
+| SEC-2 | 4 | `OomWatchdog` | `volatile boolean dumpTakenForCurrentEpisode` — check-then-act race between poll cycles | Replaced with `AtomicBoolean.compareAndSet(false, true)` |
+| SEC-3 | 4 | `OomWatchdog` | `volatile OomRiskLevel lastLevel` — weak memory ordering for `getLastRiskLevel()` callers | Replaced with `AtomicReference<OomRiskLevel>` |
+| SEC-4 | 4 | `HarnessAlertRecorder` | `ArrayList dumpPaths` — `synchronized` writes but unsynchronised iteration in `printResults()` | Replaced with `CopyOnWriteArrayList` |
 
 ---
 
@@ -404,10 +540,10 @@ and confirmed **no further issues** — the codebase is fully hardened.
 The v1.5.0 release publishes two executable fat JARs built with `maven-shade-plugin`.
 Both are attached to the [GitHub release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.5.0).
 
-| Artefact | Main class | Contents |
-|----------|-----------|----------|
-| `oom-watchdog.jar` (~79 KB) | `com.trongus.oom.WatchdogMain` | `core` module + all runtime dependencies shaded |
-| `test-harness.jar` (~92 KB) | `com.trongus.oom.harness.TestHarnessMain` | `test-harness` + `core` modules shaded |
+| Artefact | Main class | Contents | Size (approx) |
+|----------|-----------|----------|---------------|
+| `oom-watchdog.jar` | `com.trongus.oom.WatchdogMain` | `core` module + all runtime dependencies shaded | ~161 KB |
+| `test-harness.jar` | `com.trongus.oom.harness.TestHarnessMain` | `test-harness` + `core` modules shaded | ~175 KB |
 
 ### Build reproducibility
 
@@ -508,24 +644,25 @@ graph TD
 
     subgraph OomWatchdog["OOM Watchdog (per JVM)"]
         direction TB
-        Collector["MxBeanDiagnosticsCollector<br/>(MemoryMXBean · GcMXBean)"]
-        Assessor["ThresholdRiskAssessor<br/>(heap % · GC overhead · leak trend)"]
+        Collector["MxBeanDiagnosticsCollector<br/>(MemoryMXBean · GcMXBean · RuntimeMXBean)"]
+        Assessor["ThresholdRiskAssessor<br/>(heap % · GC overhead · leak trend)<br/>uses OomCauseAnalyser + Messages"]
         Channels["AlertChannel chain"]
     end
 
-    subgraph Channels_Detail["Alert Channels (1.2.0)"]
+    subgraph Channels_Detail["Alert Channels"]
         WasChannel["WasAlertChannel<br/>JUL → SystemErr.log<br/>FFDC incident ID"]
         LibertyChannel["LibertyAlertChannel<br/>JUL → messages.log<br/>JSON fragment · isHealthy()"]
         CognosChannel["CognosAlertChannel<br/>pipe-delimited log file<br/>component · server · heapMb"]
         QRadarChannel["QRadarAlertChannel<br/>LEEF 2.0 syslog<br/>UDP or TCP"]
         FileChannel["FileLogAlertChannel<br/>structured file log"]
+        ConsoleChannel["ConsoleAlertChannel<br/>System.err"]
     end
 
-    WAS -->|JUL| WasChannel
-    Liberty -->|JUL| LibertyChannel
-    ATC -->|JUL + file| CognosChannel
-    CM -->|JUL + file| CognosChannel
-    GW -->|JUL + file| CognosChannel
+    WAS -->|hosts| WasChannel
+    Liberty -->|hosts| LibertyChannel
+    ATC -->|hosts| CognosChannel
+    CM -->|hosts| CognosChannel
+    GW -->|hosts| CognosChannel
 
     Collector --> Assessor --> Channels
     Channels --> WasChannel
@@ -533,10 +670,10 @@ graph TD
     Channels --> CognosChannel
     Channels --> QRadarChannel
     Channels --> FileChannel
+    Channels --> ConsoleChannel
 
     QRadarChannel -->|"LEEF 2.0 syslog (UDP/TCP)"| QRadar["IBM QRadar SIEM"]
     WasChannel -->|"SystemErr.log / FFDC"| WASLogs["WAS Log Files"]
     LibertyChannel -->|"messages.log (JSON)"| LibertyLogs["Liberty Log Files"]
     CognosChannel -->|"oom-watchdog-*.log"| CognosLogs["Cognos Log Server"]
 ```
-
