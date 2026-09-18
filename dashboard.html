@@ -239,11 +239,15 @@
       margin-bottom: 16px;
     }
     .mcard        { background: var(--surface); border: 1px solid var(--border);
-                    border-radius: var(--radius); padding: 12px 14px; }
+                    border-radius: var(--radius); padding: 12px 14px;
+                    cursor: grab; user-select: none; position: relative; transition: box-shadow 0.15s, opacity 0.15s; }
+    .mcard:active { cursor: grabbing; }
+    .mcard.drag-over  { box-shadow: 0 0 0 2px var(--accent); }
+    .mcard.dragging   { opacity: 0.4; }
     .mcard-label  { font-size: 10px; text-transform: uppercase; letter-spacing: 0.7px;
-                    color: var(--muted); margin-bottom: 4px; }
-    .mcard-value  { font-size: 24px; font-weight: 700; line-height: 1.2; }
-    .mcard-sub    { font-size: 11px; color: var(--muted); margin-top: 3px; }
+                    color: var(--muted); margin-bottom: 4px; pointer-events: none; }
+    .mcard-value  { font-size: 24px; font-weight: 700; line-height: 1.2; pointer-events: none; }
+    .mcard-sub    { font-size: 11px; color: var(--muted); margin-top: 3px; pointer-events: none; }
 
     /* ── Gauge bars ──────────────────────────────────────────────────────────── */
     .gauge-wrap { margin-top: 7px; }
@@ -341,7 +345,9 @@
     .dump-result.busy { background: #0f172a; border: 1px solid var(--muted); color: var(--muted); display: block; }
 
     /* ── Key/value info grids ────────────────────────────────────────────────── */
-    .info-grid { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin-top: 7px; }
+    /* max-content on col-1 means every label column is exactly as wide as its
+       longest label — no extra whitespace, no fixed min-width needed.          */
+    .info-grid { display: grid; grid-template-columns: max-content 1fr; gap: 3px 10px; margin-top: 7px; }
     .info-k    { font-size: 11px; color: var(--muted); white-space: nowrap; }
     .info-v    { font-size: 11px; color: var(--text); font-weight: 600; word-break: break-all; }
 
@@ -358,7 +364,6 @@
       grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
       gap: 0 28px;
     }
-    .jvm-detail-grid .info-k { min-width: 130px; }
     .cpu-bar-wrap { margin-top: 4px; }
     .cpu-badge {
       display: inline-block;
@@ -696,7 +701,7 @@ function buildPaneHtml(name) {
 
 // ── card builders ─────────────────────────────────────────────────────────────
 function mcardHtml(id, label, value, sub, withGauge) {
-  return '<div class="mcard">' +
+  return '<div class="mcard" draggable="true" data-card-id="' + id + '">' +
     '<div class="mcard-label">' + label + '</div>' +
     '<div class="mcard-value" id="' + id + '-val">' + value + '</div>' +
     '<div class="mcard-sub"   id="' + id + '-sub">' + sub   + '</div>' +
@@ -705,7 +710,7 @@ function mcardHtml(id, label, value, sub, withGauge) {
 }
 
 function processCardHtml(s) {
-  return '<div class="mcard">' +
+  return '<div class="mcard" draggable="true" data-card-id="' + s + '-proc-card">' +
     '<div class="mcard-label">JVM Process</div>' +
     '<div class="mcard-value" style="font-size:12px;word-break:break-all;line-height:1.4" id="' + s + '-proc">—</div>' +
     '<div class="info-grid" style="margin-top:7px">' +
@@ -717,7 +722,7 @@ function processCardHtml(s) {
 }
 
 function riskCardHtml(s) {
-  return '<div class="mcard">' +
+  return '<div class="mcard" draggable="true" data-card-id="' + s + '-risk-card">' +
     '<div class="mcard-label">Risk Level</div>' +
     '<div class="mcard-value" style="font-size:20px" id="' + s + '-risk-val">—</div>' +
     '<div class="mcard-sub" id="' + s + '-risk-sub">Waiting…</div>' +
@@ -1010,6 +1015,121 @@ function requestDump(slug, type, encoded) {
       [btnThread, btnHeap, btnCore].forEach(function(b) { if (b) b.disabled = false; });
     });
 }
+
+// ── card drag-and-drop + localStorage order persistence ───────────────────────
+// Storage key: "oom-card-order:<pane-slug>"
+// Stored value: JSON array of data-card-id strings in desired order.
+
+var _dragSrc = null;  // the card element being dragged
+
+function initCardDrag(gridEl) {
+  if (!gridEl) return;
+
+  function onDragStart(e) {
+    _dragSrc = e.currentTarget;
+    _dragSrc.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', _dragSrc.dataset.cardId || '');
+  }
+
+  function onDragEnd(e) {
+    e.currentTarget.classList.remove('dragging');
+    gridEl.querySelectorAll('.mcard').forEach(function(c) {
+      c.classList.remove('drag-over');
+    });
+    saveCardOrder(gridEl);
+  }
+
+  function onDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    var target = e.currentTarget;
+    if (target !== _dragSrc) {
+      gridEl.querySelectorAll('.mcard').forEach(function(c) { c.classList.remove('drag-over'); });
+      target.classList.add('drag-over');
+    }
+  }
+
+  function onDragLeave(e) {
+    e.currentTarget.classList.remove('drag-over');
+  }
+
+  function onDrop(e) {
+    e.preventDefault();
+    var target = e.currentTarget;
+    target.classList.remove('drag-over');
+    if (!_dragSrc || target === _dragSrc) return;
+
+    // Determine insertion position: insert _dragSrc before or after target
+    // based on which half of the target the pointer is in.
+    var rect    = target.getBoundingClientRect();
+    var midX    = rect.left + rect.width  / 2;
+    var midY    = rect.top  + rect.height / 2;
+    var afterX  = e.clientX > midX;
+    var afterY  = e.clientY > midY;
+
+    // Use column-flow heuristic: compare DOM index
+    var cards = Array.prototype.slice.call(gridEl.querySelectorAll('.mcard'));
+    var srcIdx = cards.indexOf(_dragSrc);
+    var tgtIdx = cards.indexOf(target);
+    var insertAfter = tgtIdx > srcIdx ? true : (afterX || afterY);
+
+    if (insertAfter) {
+      gridEl.insertBefore(_dragSrc, target.nextSibling);
+    } else {
+      gridEl.insertBefore(_dragSrc, target);
+    }
+    saveCardOrder(gridEl);
+  }
+
+  gridEl.querySelectorAll('.mcard').forEach(function(card) {
+    card.addEventListener('dragstart',  onDragStart);
+    card.addEventListener('dragend',    onDragEnd);
+    card.addEventListener('dragover',   onDragOver);
+    card.addEventListener('dragleave',  onDragLeave);
+    card.addEventListener('drop',       onDrop);
+  });
+}
+
+function saveCardOrder(gridEl) {
+  var paneEl = gridEl.closest('.tab-pane');
+  if (!paneEl) return;
+  var order = Array.prototype.slice.call(gridEl.querySelectorAll('.mcard'))
+    .map(function(c) { return c.dataset.cardId || ''; })
+    .filter(Boolean);
+  try {
+    localStorage.setItem('oom-card-order:' + paneEl.id, JSON.stringify(order));
+  } catch (e) { /* storage quota or private mode */ }
+}
+
+function restoreCardOrder(gridEl) {
+  var paneEl = gridEl.closest('.tab-pane');
+  if (!paneEl) return;
+  var raw;
+  try { raw = localStorage.getItem('oom-card-order:' + paneEl.id); } catch (e) { return; }
+  if (!raw) return;
+  var order;
+  try { order = JSON.parse(raw); } catch (e) { return; }
+  if (!Array.isArray(order)) return;
+
+  order.forEach(function(cardId) {
+    var card = gridEl.querySelector('[data-card-id="' + cardId + '"]');
+    if (card) gridEl.appendChild(card); // moves to end; iterating in saved order re-creates order
+  });
+}
+
+// Hook into ensureTabs / pane creation so drag is initialised on every new pane.
+var _origEnsureTabs = ensureTabs;
+ensureTabs = function() {
+  _origEnsureTabs();
+  document.querySelectorAll('.metric-grid').forEach(function(grid) {
+    // Only initialise once (guard with a data attribute)
+    if (grid.dataset.dragInit) return;
+    grid.dataset.dragInit = '1';
+    restoreCardOrder(grid);
+    initCardDrag(grid);
+  });
+};
 </script>
 </body>
 </html>
