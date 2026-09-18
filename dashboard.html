@@ -10,6 +10,7 @@
     :root {
       --bg:        #0f1117;
       --surface:   #1a1d27;
+      --surface2:  #222638;
       --border:    #2a2d3a;
       --text:      #e4e6f0;
       --muted:     #7a7e96;
@@ -21,89 +22,139 @@
       --radius:    10px;
     }
 
-    body { background: var(--bg); color: var(--text); font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+    body { background: var(--bg); color: var(--text);
+           font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
            font-size: 14px; line-height: 1.6; min-height: 100vh; }
 
+    /* ── header ── */
     header { background: var(--surface); border-bottom: 1px solid var(--border);
-             padding: 14px 24px; display: flex; align-items: center; gap: 16px; }
-    header h1 { font-size: 18px; font-weight: 700; letter-spacing: 0.3px; }
-    header .subtitle { color: var(--muted); font-size: 12px; }
+             padding: 12px 24px; display: flex; align-items: center; gap: 14px; }
+    header h1 { font-size: 17px; font-weight: 700; letter-spacing: 0.3px; flex: 1; }
+    .subtitle  { color: var(--muted); font-size: 11px; }
 
-    .risk-badge { padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700;
-                  letter-spacing: 0.5px; text-transform: uppercase; }
-    .risk-OK       { background: #14532d; color: var(--ok); }
-    .risk-WARNING  { background: #78350f; color: var(--warn); }
-    .risk-CRITICAL { background: #7f1d1d; color: var(--crit); }
-    .risk-OOM_FIRING { background: #581c87; color: var(--oom); }
-    .risk-UNKNOWN  { background: #1e293b; color: var(--muted); }
-
-    .toolbar { padding: 12px 24px; display: flex; align-items: center; gap: 12px;
+    /* ── toolbar ── */
+    .toolbar { padding: 10px 24px; display: flex; align-items: center; gap: 10px;
                border-bottom: 1px solid var(--border); flex-wrap: wrap; }
     .toolbar label { color: var(--muted); font-size: 12px; }
     .toolbar input[type=text] { background: var(--surface); border: 1px solid var(--border);
-                                 color: var(--text); border-radius: 6px; padding: 6px 10px;
-                                 font-size: 13px; width: 240px; }
+                                 color: var(--text); border-radius: 6px; padding: 5px 10px;
+                                 font-size: 13px; width: 220px; }
     .toolbar input[type=text]:focus { outline: none; border-color: var(--accent); }
+    .toolbar select { background: var(--surface); border: 1px solid var(--border);
+                      color: var(--text); border-radius: 6px; padding: 5px 8px; font-size: 13px; }
     .btn { background: var(--accent); color: #fff; border: none; border-radius: 6px;
-           padding: 7px 16px; font-size: 13px; cursor: pointer; font-weight: 600; }
+           padding: 6px 14px; font-size: 13px; cursor: pointer; font-weight: 600; }
     .btn:hover { opacity: 0.85; }
-    .btn.stop { background: var(--crit); }
-    #status-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
-    #status-dot.alive  { background: var(--ok); }
-    #status-dot.error  { background: var(--crit); }
+    .btn.stop { background: #374151; }
+    #status-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+    #status-dot.alive { background: var(--ok); }
+    #status-dot.error { background: var(--crit); }
     #status-text { font-size: 12px; color: var(--muted); }
 
-    main { padding: 20px 24px; max-width: 1200px; margin: 0 auto; }
+    /* ── risk badge ── */
+    .risk-badge { padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700;
+                  letter-spacing: 0.5px; text-transform: uppercase; }
+    .risk-OK        { background: #14532d; color: var(--ok); }
+    .risk-WARNING   { background: #78350f; color: var(--warn); }
+    .risk-CRITICAL  { background: #7f1d1d; color: var(--crit); }
+    .risk-OOM_FIRING{ background: #581c87; color: var(--oom); }
+    .risk-UNKNOWN   { background: #1e293b; color: var(--muted); }
 
-    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-bottom: 20px; }
+    /* ── tabs ── */
+    #tabs-bar { display: flex; gap: 0; padding: 0 24px;
+                border-bottom: 1px solid var(--border); background: var(--surface);
+                overflow-x: auto; scrollbar-width: thin; }
+    .tab-btn { background: none; border: none; border-bottom: 2px solid transparent;
+               color: var(--muted); padding: 9px 16px; font-size: 13px; cursor: pointer;
+               white-space: nowrap; display: flex; align-items: center; gap: 7px;
+               font-family: inherit; transition: color 0.15s; }
+    .tab-btn:hover  { color: var(--text); }
+    .tab-btn.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+    .tab-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+    .tab-dot.ok   { background: var(--ok);   }
+    .tab-dot.warn { background: var(--warn); }
+    .tab-dot.crit { background: var(--crit); }
+    .tab-dot.oom  { background: var(--oom);  }
 
-    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; }
-    .card-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); margin-bottom: 8px; }
-    .card-value { font-size: 28px; font-weight: 700; line-height: 1.2; }
-    .card-sub   { font-size: 12px; color: var(--muted); margin-top: 4px; }
+    /* ── main pane ── */
+    main { padding: 18px 24px; max-width: 1280px; margin: 0 auto; }
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
 
-    .gauge-wrap { margin-top: 10px; }
-    .gauge-bg   { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
-    .gauge-fill { height: 100%; border-radius: 4px; transition: width 0.4s ease, background 0.4s ease; width: 0%; background: var(--ok); }
+    /* ── metric grid ── */
+    .metric-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+                   gap: 14px; margin-bottom: 20px; }
 
-    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
-    .info-row { font-size: 12px; color: var(--muted); }
-    .info-val { color: var(--text); font-weight: 600; }
+    .mcard { background: var(--surface); border: 1px solid var(--border);
+             border-radius: var(--radius); padding: 14px 16px; }
+    .mcard-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.7px;
+                   color: var(--muted); margin-bottom: 4px; }
+    .mcard-value { font-size: 26px; font-weight: 700; line-height: 1.2; }
+    .mcard-sub   { font-size: 11px; color: var(--muted); margin-top: 3px; }
 
-    .section-title { font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase;
-                     letter-spacing: 0.6px; margin-bottom: 10px; }
+    /* ── gauge bar ── */
+    .gauge-wrap { margin-top: 8px; }
+    .gauge-bg   { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+    .gauge-fill { height: 100%; border-radius: 3px; width: 0%;
+                  transition: width 0.4s ease, background 0.4s ease; background: var(--ok); }
 
-    .diagnosis-box { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-                     padding: 14px 16px; font-size: 12px; color: var(--muted); line-height: 1.7;
-                     word-break: break-word; min-height: 52px; margin-bottom: 20px; }
-    .diagnosis-box span { color: var(--text); }
+    /* ── sparkline charts ── */
+    .charts-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+                   gap: 16px; margin-bottom: 20px; }
+    .chart-card { background: var(--surface); border: 1px solid var(--border);
+                  border-radius: var(--radius); padding: 14px 16px; }
+    .chart-title { font-size: 11px; font-weight: 600; color: var(--muted);
+                   text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 10px;
+                   display: flex; justify-content: space-between; align-items: center; }
+    .chart-cur { color: var(--text); font-size: 13px; font-weight: 700; }
+    svg.spark { display: block; width: 100%; height: 70px; overflow: visible; }
 
+    /* ── section title ── */
+    .sec-title { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase;
+                 letter-spacing: 0.6px; margin-bottom: 8px; }
+
+    /* ── diagnosis ── */
+    .diag-box { background: var(--surface); border: 1px solid var(--border);
+                border-radius: var(--radius); padding: 12px 14px; font-size: 12px;
+                color: var(--muted); line-height: 1.7; word-break: break-word;
+                min-height: 44px; margin-bottom: 18px; }
+    .diag-box span { color: var(--text); }
+
+    /* ── tables ── */
+    .table-card { background: var(--surface); border: 1px solid var(--border);
+                  border-radius: var(--radius); overflow: hidden; margin-bottom: 16px; }
+    .table-card-hdr { padding: 10px 14px; border-bottom: 1px solid var(--border); }
     table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    th { text-align: left; color: var(--muted); font-weight: 600; padding: 6px 10px; border-bottom: 1px solid var(--border); }
-    td { padding: 6px 10px; border-bottom: 1px solid rgba(255,255,255,0.04); }
+    th { text-align: left; color: var(--muted); font-weight: 600;
+         padding: 5px 10px; border-bottom: 1px solid var(--border); }
+    td { padding: 5px 10px; border-bottom: 1px solid rgba(255,255,255,0.04); }
     tr:last-child td { border-bottom: none; }
-    .table-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-                  overflow: hidden; margin-bottom: 20px; }
-    .table-card-header { padding: 12px 16px; border-bottom: 1px solid var(--border); }
 
+    /* ── alert log ── */
     #alert-log { list-style: none; }
-    #alert-log li { padding: 7px 10px; border-radius: 6px; margin-bottom: 6px; font-size: 12px;
+    #alert-log li { padding: 6px 10px; border-radius: 6px; margin-bottom: 5px; font-size: 12px;
                     display: flex; gap: 10px; align-items: flex-start; }
     #alert-log .ts  { color: var(--muted); white-space: nowrap; flex-shrink: 0; }
     #alert-log .msg { word-break: break-word; }
-    #alert-log li.lvl-WARNING  { background: #1c1507; border-left: 3px solid var(--warn); }
-    #alert-log li.lvl-CRITICAL { background: #1c0505; border-left: 3px solid var(--crit); }
-    #alert-log li.lvl-OOM_FIRING { background: #160b21; border-left: 3px solid var(--oom); }
+    #alert-log li.lvl-WARNING   { background: #1c1507; border-left: 3px solid var(--warn); }
+    #alert-log li.lvl-CRITICAL  { background: #1c0505; border-left: 3px solid var(--crit); }
+    #alert-log li.lvl-OOM_FIRING{ background: #160b21; border-left: 3px solid var(--oom); }
     #alert-log li.lvl-OK        { background: #051409; border-left: 3px solid var(--ok); }
 
-    footer { text-align: center; padding: 16px; color: var(--muted); font-size: 11px;
-             border-top: 1px solid var(--border); margin-top: 8px; }
-    footer a { color: var(--accent); text-decoration: none; }
-
+    /* ── dump path ── */
     .dump-path { background: #0c1929; border: 1px solid var(--border); border-radius: 6px;
-                 padding: 8px 12px; font-size: 12px; font-family: monospace; color: #93c5fd;
-                 margin-top: 8px; word-break: break-all; display: none; }
+                 padding: 7px 10px; font-size: 12px; font-family: monospace; color: #93c5fd;
+                 margin-top: 6px; word-break: break-all; display: none; }
     .dump-path.visible { display: block; }
+
+    /* ── info grid in process card ── */
+    .info-grid { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; margin-top: 8px; }
+    .info-k { font-size: 11px; color: var(--muted); }
+    .info-v { font-size: 11px; color: var(--text); font-weight: 600; }
+
+    footer { text-align: center; padding: 14px; color: var(--muted); font-size: 11px;
+             border-top: 1px solid var(--border); margin-top: 6px; }
+    footer a { color: var(--accent); text-decoration: none; }
   </style>
 </head>
 <body>
@@ -111,296 +162,488 @@
 <header>
   <div>
     <h1>⚡ OOM Watchdog Dashboard</h1>
-    <div class="subtitle">Real-time JVM health monitor</div>
+    <div class="subtitle">Real-time JVM health — heap, GC, and nursery metrics per monitored target</div>
   </div>
   <div id="risk-badge" class="risk-badge risk-UNKNOWN">—</div>
 </header>
 
 <div class="toolbar">
-  <label>Server URL</label>
-  <input type="text" id="server-url" value="http://localhost:9090" placeholder="http://localhost:9090">
+  <label>Server</label>
+  <input type="text" id="server-url" value="http://localhost:9090" placeholder="http://host:port">
+  <label>Interval</label>
+  <select id="poll-interval">
+    <option value="1000">1 s</option>
+    <option value="2000" selected>2 s</option>
+    <option value="5000">5 s</option>
+    <option value="10000">10 s</option>
+  </select>
   <button class="btn" id="btn-start" onclick="startPolling()">Connect</button>
   <button class="btn stop" id="btn-stop" onclick="stopPolling()" disabled>Disconnect</button>
   <div id="status-dot"></div>
   <div id="status-text">Not connected</div>
 </div>
 
-<main>
-  <div class="grid">
-    <!-- Heap Usage -->
-    <div class="card">
-      <div class="card-title">Heap Usage</div>
-      <div class="card-value" id="heap-pct">—</div>
-      <div class="card-sub" id="heap-mb">— MB / — MB</div>
-      <div class="gauge-wrap">
-        <div class="gauge-bg"><div class="gauge-fill" id="heap-gauge"></div></div>
-      </div>
-    </div>
+<div id="tabs-bar"></div>
 
-    <!-- GC Overhead -->
-    <div class="card">
-      <div class="card-title">GC Overhead</div>
-      <div class="card-value" id="gc-pct">—</div>
-      <div class="card-sub" id="gc-sub">Total GC time: — ms</div>
-      <div class="gauge-wrap">
-        <div class="gauge-bg"><div class="gauge-fill" id="gc-gauge"></div></div>
-      </div>
-    </div>
-
-    <!-- Nursery / Young Gen -->
-    <div class="card">
-      <div class="card-title">Young Gen / Nursery</div>
-      <div class="card-value" id="nursery-pct">—</div>
-      <div class="card-sub" id="nursery-mb">— MB used</div>
-      <div class="gauge-wrap">
-        <div class="gauge-bg"><div class="gauge-fill" id="nursery-gauge"></div></div>
-      </div>
-    </div>
-
-    <!-- Non-heap / Metaspace -->
-    <div class="card">
-      <div class="card-title">Non-Heap (Metaspace)</div>
-      <div class="card-value" id="nonheap-mb">—</div>
-      <div class="card-sub">MB used</div>
-    </div>
-
-    <!-- Process info -->
-    <div class="card">
-      <div class="card-title">JVM Process</div>
-      <div class="card-value" style="font-size:16px" id="process-name">—</div>
-      <div class="info-grid" style="margin-top:10px">
-        <div class="info-row">Uptime</div><div class="info-row info-val" id="uptime">—</div>
-        <div class="info-row">Crit threshold</div><div class="info-row info-val" id="crit-threshold">—</div>
-        <div class="info-row">Last poll</div><div class="info-row info-val" id="last-poll">—</div>
-      </div>
-    </div>
-
-    <!-- Risk level detail -->
-    <div class="card">
-      <div class="card-title">Risk Level</div>
-      <div id="risk-detail" class="card-value" style="font-size:22px">—</div>
-      <div class="card-sub" id="risk-sub">Waiting for data…</div>
-      <div id="dump-path-box" class="dump-path"></div>
-    </div>
-  </div>
-
-  <!-- Diagnosis notes -->
-  <div class="section-title">Diagnosis</div>
-  <div class="diagnosis-box"><span id="diagnosis-text">Waiting for first poll…</span></div>
-
-  <!-- Memory pools table -->
-  <div class="table-card">
-    <div class="table-card-header"><span class="section-title" style="margin:0">Memory Pools</span></div>
-    <table>
-      <thead><tr><th>Pool</th><th>Used (MB)</th></tr></thead>
-      <tbody id="pools-body"><tr><td colspan="2" style="color:var(--muted)">No data yet</td></tr></tbody>
-    </table>
-  </div>
-
-  <!-- GC collection counts table -->
-  <div class="table-card">
-    <div class="table-card-header"><span class="section-title" style="margin:0">GC Collections</span></div>
-    <table>
-      <thead><tr><th>Collector</th><th>Count</th></tr></thead>
-      <tbody id="gc-body"><tr><td colspan="2" style="color:var(--muted)">No data yet</td></tr></tbody>
-    </table>
-  </div>
-
-  <!-- Alert history -->
-  <div class="section-title">Alert History (last 50)</div>
-  <ul id="alert-log"><li style="color:var(--muted);font-size:12px;padding:6px 0">No alerts yet.</li></ul>
+<main id="main-content">
+  <p style="color:var(--muted);font-size:13px;padding:24px 0">
+    Enter the OOM Watchdog metrics server URL above and click <strong>Connect</strong>.
+  </p>
 </main>
 
 <footer>
   OOM Watchdog Dashboard &nbsp;·&nbsp;
   <a href="https://github.com/kgillard/oom-watchdog" target="_blank">kgillard/oom-watchdog</a>
-  &nbsp;·&nbsp; Data served by <code>--metrics-port</code> HTTP endpoint
+  &nbsp;·&nbsp; Heap · GC · pools read live from <code>java.lang.management</code> MXBeans
+  &nbsp;·&nbsp; Risk level &amp; diagnosis from watchdog assessment
 </footer>
 
 <script>
-  var pollTimer   = null;
-  var alertLog    = [];
-  var lastRisk    = null;
-  var POLL_MS     = 2000;
+'use strict';
 
-  function startPolling() {
-    var url = document.getElementById('server-url').value.trim().replace(/\/$/, '');
-    if (!url) { setStatus('error', 'Enter a server URL'); return; }
-    document.getElementById('btn-start').disabled = true;
-    document.getElementById('btn-stop').disabled  = false;
-    setStatus('alive', 'Connecting…');
-    pollOnce(url);
-    pollTimer = setInterval(function() { pollOnce(url); }, POLL_MS);
+// ── state ─────────────────────────────────────────────────────────────────────
+var pollTimer   = null;
+var POLL_MS     = 2000;
+var BASE_URL    = '';
+var HISTORY_LEN = 60;          // data points per sparkline
+var targets     = {};          // keyed by targetName
+var activeTab   = null;
+var alertLog    = [];
+
+// ── polling ───────────────────────────────────────────────────────────────────
+function startPolling() {
+  BASE_URL = document.getElementById('server-url').value.trim().replace(/\/$/, '');
+  if (!BASE_URL) { setStatus('error', 'Enter a server URL'); return; }
+  POLL_MS = parseInt(document.getElementById('poll-interval').value, 10) || 2000;
+  document.getElementById('btn-start').disabled = true;
+  document.getElementById('btn-stop').disabled  = false;
+  setStatus('alive', 'Connecting…');
+  pollOnce();
+  pollTimer = setInterval(pollOnce, POLL_MS);
+}
+
+function stopPolling() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  document.getElementById('btn-start').disabled = false;
+  document.getElementById('btn-stop').disabled  = true;
+  setStatus('', 'Disconnected');
+}
+
+function pollOnce() {
+  // Try /metrics/all first (multi-target); fall back to /metrics (single-target)
+  fetch(BASE_URL + '/metrics/all', { mode: 'cors' })
+    .then(function(r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
+    .then(function(arr) {
+      setStatus('alive', 'Live · ' + new Date().toLocaleTimeString());
+      if (!Array.isArray(arr)) arr = [arr];
+      arr.forEach(function(d) { ingress(d); });
+      renderAll();
+    })
+    .catch(function() {
+      // fall back to single /metrics endpoint
+      fetch(BASE_URL + '/metrics', { mode: 'cors' })
+        .then(function(r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        })
+        .then(function(d) {
+          setStatus('alive', 'Live · ' + new Date().toLocaleTimeString());
+          ingress(d);
+          renderAll();
+        })
+        .catch(function(e) {
+          setStatus('error', 'Error: ' + e.message);
+        });
+    });
+}
+
+function setStatus(cls, msg) {
+  document.getElementById('status-dot').className  = cls;
+  document.getElementById('status-text').textContent = msg;
+}
+
+// ── data model ────────────────────────────────────────────────────────────────
+function ingress(d) {
+  var name = d.targetName || d.processName || 'self';
+  if (!targets[name]) {
+    targets[name] = {
+      name: name,
+      history: { heap: [], gc: [], nursery: [], ts: [] },
+      latest: null,
+      alertHistory: []
+    };
+  }
+  var t = targets[name];
+  t.latest = d;
+
+  var h = t.history;
+  h.ts.push(d.timestampMs);
+  h.heap.push(parseFloat(d.heapUsedPct)   || 0);
+  h.gc.push  (parseFloat(d.gcOverheadPct) || 0);
+  h.nursery.push(parseFloat(d.nurseryUsedPct) || 0);
+  if (h.heap.length > HISTORY_LEN) {
+    h.heap.splice(0, 1); h.gc.splice(0, 1);
+    h.nursery.splice(0, 1); h.ts.splice(0, 1);
   }
 
-  function stopPolling() {
-    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-    document.getElementById('btn-start').disabled = false;
-    document.getElementById('btn-stop').disabled  = true;
-    setStatus('', 'Disconnected');
+  // alert history per-target
+  var risk = d.riskLevel || 'UNKNOWN';
+  var prev = t.alertHistory.length > 0 ? t.alertHistory[0].risk : null;
+  if (risk !== 'OK' && risk !== prev) {
+    t.alertHistory.unshift({ risk: risk, msg: d.diagnosisNotes, ts: d.timestampMs });
+    if (t.alertHistory.length > 50) t.alertHistory.pop();
+    // global alert log
+    alertLog.unshift({ target: name, risk: risk, msg: d.diagnosisNotes, ts: d.timestampMs });
+    if (alertLog.length > 100) alertLog.pop();
   }
+}
 
-  function pollOnce(baseUrl) {
-    fetch(baseUrl + '/metrics', { mode: 'cors' })
-      .then(function(r) {
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        return r.json();
-      })
-      .then(function(d) {
-        setStatus('alive', 'Live · ' + new Date().toLocaleTimeString());
-        render(d);
-      })
-      .catch(function(e) {
-        setStatus('error', 'Error: ' + e.message);
-      });
-  }
+// ── render ────────────────────────────────────────────────────────────────────
+function renderAll() {
+  ensureTabs();
+  var names = Object.keys(targets);
+  if (!activeTab || !targets[activeTab]) activeTab = names[0];
+  names.forEach(function(name) {
+    renderPane(name);
+  });
 
-  function setStatus(cls, msg) {
-    var dot  = document.getElementById('status-dot');
-    var text = document.getElementById('status-text');
-    dot.className = cls;
-    text.textContent = msg;
-  }
+  // Update overall risk badge = worst risk across all targets
+  var worst = 'OK';
+  names.forEach(function(name) {
+    var r = (targets[name].latest || {}).riskLevel || 'OK';
+    if (riskOrd(r) > riskOrd(worst)) worst = r;
+  });
+  var badge = document.getElementById('risk-badge');
+  badge.textContent = worst;
+  badge.className   = 'risk-badge risk-' + worst;
+}
 
-  function gaugeColor(pct, warnPct, critPct) {
-    if (pct >= critPct) return 'var(--crit)';
-    if (pct >= warnPct) return 'var(--warn)';
-    return 'var(--ok)';
-  }
+function ensureTabs() {
+  var bar   = document.getElementById('tabs-bar');
+  var names = Object.keys(targets);
 
-  function riskColor(level) {
-    if (level === 'OK')        return 'var(--ok)';
-    if (level === 'WARNING')   return 'var(--warn)';
-    if (level === 'CRITICAL')  return 'var(--crit)';
-    if (level === 'OOM_FIRING') return 'var(--oom)';
-    return 'var(--muted)';
-  }
-
-  function fmtUptime(ms) {
-    var s = Math.floor(ms / 1000);
-    var m = Math.floor(s / 60); s %= 60;
-    var h = Math.floor(m / 60); m %= 60;
-    return h + 'h ' + m + 'm ' + s + 's';
-  }
-
-  function render(d) {
-    if (d.status === 'no data yet') {
-      document.getElementById('status-text').textContent = 'Connected — waiting for first poll…';
-      return;
+  // Add missing tabs
+  names.forEach(function(name) {
+    if (!document.getElementById('tab-btn-' + slugify(name))) {
+      var btn = document.createElement('button');
+      btn.className = 'tab-btn' + (name === activeTab ? ' active' : '');
+      btn.id = 'tab-btn-' + slugify(name);
+      btn.innerHTML = '<span class="tab-dot" id="tab-dot-' + slugify(name) + '"></span>' + esc(name);
+      btn.onclick = (function(n) { return function() { switchTab(n); }; })(name);
+      bar.appendChild(btn);
     }
-
-    var heapPct   = parseFloat(d.heapUsedPct)   || 0;
-    var gcPct     = parseFloat(d.gcOverheadPct) || 0;
-    var nurseryPct= parseFloat(d.nurseryUsedPct)|| 0;
-    var critPct   = parseFloat(d.critThresholdPct) > 0 ? parseFloat(d.critThresholdPct) : 90;
-    var warnPct   = critPct * 0.88; // approximate if not exposed
-
-    // Risk badge
-    var risk = d.riskLevel || 'UNKNOWN';
-    document.getElementById('risk-badge').textContent = risk;
-    document.getElementById('risk-badge').className   = 'risk-badge risk-' + risk;
-    document.getElementById('risk-detail').textContent = risk;
-    document.getElementById('risk-detail').style.color = riskColor(risk);
-    document.getElementById('risk-sub').textContent =
-        'Critical threshold: ' + critPct.toFixed(1) + '%';
-
-    // Heap
-    setText('heap-pct',  heapPct.toFixed(1) + '%');
-    setText('heap-mb',   d.heapUsedMB.toFixed(1) + ' MB / ' + d.heapMaxMB.toFixed(1) + ' MB');
-    setGauge('heap-gauge', heapPct, gaugeColor(heapPct, warnPct, critPct));
-
-    // GC
-    setText('gc-pct',    gcPct.toFixed(2) + '%');
-    setText('gc-sub',    'Total GC time: ' + d.totalGcTimeMs + ' ms');
-    setGauge('gc-gauge', Math.min(gcPct * 2, 100), gaugeColor(gcPct, 25, 50));
-
-    // Nursery
-    setText('nursery-pct', nurseryPct.toFixed(1) + '%');
-    setText('nursery-mb',  d.nurseryUsedMB.toFixed(1) + ' MB used');
-    setGauge('nursery-gauge', nurseryPct, gaugeColor(nurseryPct, 70, 90));
-
-    // Non-heap
-    setText('nonheap-mb', d.nonHeapUsedMB.toFixed(1));
-
-    // Process
-    setText('process-name', d.processName || '—');
-    setText('uptime',       fmtUptime(d.jvmUptimeMs || 0));
-    setText('crit-threshold', critPct.toFixed(1) + '%');
-    setText('last-poll', new Date(d.timestampMs).toLocaleTimeString());
-
-    // Diagnosis
-    setText('diagnosis-text', d.diagnosisNotes || '—');
-
-    // Dump path
-    var dumpBox = document.getElementById('dump-path-box');
-    if (d.heapDumpPath) {
-      dumpBox.textContent = '📁 ' + d.heapDumpPath;
-      dumpBox.classList.add('visible');
-    } else {
-      dumpBox.classList.remove('visible');
+    // Ensure pane exists
+    var paneId = 'pane-' + slugify(name);
+    if (!document.getElementById(paneId)) {
+      var pane = document.createElement('div');
+      pane.className = 'tab-pane' + (name === activeTab ? ' active' : '');
+      pane.id = paneId;
+      pane.innerHTML = buildPaneHtml(name);
+      document.getElementById('main-content').innerHTML = ''; // clear placeholder once
+      document.getElementById('main-content').appendChild(pane);
     }
+  });
+}
 
-    // Memory pools
-    var poolsBody = document.getElementById('pools-body');
-    if (d.poolUsedMB && Object.keys(d.poolUsedMB).length > 0) {
-      poolsBody.innerHTML = Object.entries(d.poolUsedMB)
-        .sort(function(a,b){ return b[1]-a[1]; })
-        .map(function(e) {
-          return '<tr><td>' + escHtml(e[0]) + '</td><td>' + parseFloat(e[1]).toFixed(2) + '</td></tr>';
-        }).join('');
-    }
+function switchTab(name) {
+  activeTab = name;
+  document.querySelectorAll('.tab-btn').forEach(function(b) {
+    b.classList.toggle('active', b.id === 'tab-btn-' + slugify(name));
+  });
+  document.querySelectorAll('.tab-pane').forEach(function(p) {
+    p.classList.toggle('active', p.id === 'pane-' + slugify(name));
+  });
+}
 
-    // GC counts
-    var gcBody = document.getElementById('gc-body');
-    if (d.gcCounts && Object.keys(d.gcCounts).length > 0) {
-      gcBody.innerHTML = Object.entries(d.gcCounts)
-        .map(function(e) {
-          return '<tr><td>' + escHtml(e[0]) + '</td><td>' + e[1] + '</td></tr>';
-        }).join('');
-    }
+function buildPaneHtml(name) {
+  var s = slugify(name);
+  return [
+    '<div class="metric-grid" id="mgrid-' + s + '">',
+      mcardHtml(s + '-heap-pct',    'Heap Usage',        '—', '— MB / — MB', true),
+      mcardHtml(s + '-gc-pct',      'GC Overhead',       '—', 'Total GC: — ms', true),
+      mcardHtml(s + '-nursery-pct', 'Young Gen',         '—', '— MB used', true),
+      mcardHtml(s + '-nonheap-mb',  'Non-Heap',          '—', 'MB used', false),
+      processCardHtml(s),
+      riskCardHtml(s),
+    '</div>',
+    '<div class="charts-grid">',
+      chartCardHtml(s + '-chart-heap',    'Heap Usage %',     s + '-chart-heap-cur'),
+      chartCardHtml(s + '-chart-gc',      'GC Overhead %',    s + '-chart-gc-cur'),
+      chartCardHtml(s + '-chart-nursery', 'Young Gen %',      s + '-chart-nursery-cur'),
+    '</div>',
+    '<div class="sec-title">Diagnosis</div>',
+    '<div class="diag-box"><span id="' + s + '-diag">Waiting for first poll…</span></div>',
+    '<div class="table-card">',
+      '<div class="table-card-hdr"><span class="sec-title" style="margin:0">Memory Pools</span></div>',
+      '<table><thead><tr><th>Pool</th><th>Used (MB)</th></tr></thead>',
+      '<tbody id="' + s + '-pools">',
+        '<tr><td colspan="2" style="color:var(--muted)">No data yet</td></tr>',
+      '</tbody></table>',
+    '</div>',
+    '<div class="table-card">',
+      '<div class="table-card-hdr"><span class="sec-title" style="margin:0">GC Collections</span></div>',
+      '<table><thead><tr><th>Collector</th><th>Count</th></tr></thead>',
+      '<tbody id="' + s + '-gctable">',
+        '<tr><td colspan="2" style="color:var(--muted)">No data yet</td></tr>',
+      '</tbody></table>',
+    '</div>',
+    '<div class="sec-title">Alert History (this target)</div>',
+    '<ul id="' + s + '-alerts"><li style="color:var(--muted);font-size:12px;padding:6px 0">No alerts yet.</li></ul>',
+  ].join('');
+}
 
-    // Alert history — only record when risk is WARNING or above
-    if (risk !== lastRisk && risk !== 'OK') {
-      addAlert(risk, d.diagnosisNotes, d.timestampMs);
-    }
-    lastRisk = risk;
+function mcardHtml(id, label, value, sub, withGauge) {
+  return '<div class="mcard">' +
+    '<div class="mcard-label">' + label + '</div>' +
+    '<div class="mcard-value" id="' + id + '-val">' + value + '</div>' +
+    '<div class="mcard-sub" id="' + id + '-sub">' + sub + '</div>' +
+    (withGauge
+      ? '<div class="gauge-wrap"><div class="gauge-bg"><div class="gauge-fill" id="' + id + '-gauge"></div></div></div>'
+      : '') +
+    '</div>';
+}
+
+function processCardHtml(s) {
+  return '<div class="mcard">' +
+    '<div class="mcard-label">JVM Process</div>' +
+    '<div class="mcard-value" style="font-size:13px;word-break:break-all" id="' + s + '-proc">—</div>' +
+    '<div class="info-grid" style="margin-top:8px">' +
+      '<div class="info-k">Uptime</div><div class="info-v" id="' + s + '-uptime">—</div>' +
+      '<div class="info-k">Crit thr.</div><div class="info-v" id="' + s + '-crit-thr">—</div>' +
+      '<div class="info-k">Last poll</div><div class="info-v" id="' + s + '-lastpoll">—</div>' +
+    '</div>' +
+    '</div>';
+}
+
+function riskCardHtml(s) {
+  return '<div class="mcard">' +
+    '<div class="mcard-label">Risk Level</div>' +
+    '<div class="mcard-value" style="font-size:20px" id="' + s + '-risk-val">—</div>' +
+    '<div class="mcard-sub" id="' + s + '-risk-sub">Waiting…</div>' +
+    '<div class="dump-path" id="' + s + '-dump"></div>' +
+    '</div>';
+}
+
+function chartCardHtml(id, title, curId) {
+  return '<div class="chart-card">' +
+    '<div class="chart-title"><span>' + title + '</span><span class="chart-cur" id="' + curId + '">—</span></div>' +
+    '<svg class="spark" id="' + id + '" viewBox="0 0 300 70" preserveAspectRatio="none">' +
+      '<defs><linearGradient id="grad-' + id + '" x1="0" y1="0" x2="0" y2="1">' +
+        '<stop offset="0%" stop-color="#3b82f6" stop-opacity="0.35"/>' +
+        '<stop offset="100%" stop-color="#3b82f6" stop-opacity="0.02"/>' +
+      '</linearGradient></defs>' +
+      '<path id="' + id + '-area" fill="url(#grad-' + id + ')" d=""/>' +
+      '<path id="' + id + '-line" fill="none" stroke="#3b82f6" stroke-width="1.5" d=""/>' +
+      '<line id="' + id + '-thresh" x1="0" x2="300" y1="0" y2="0"' +
+            ' stroke="#ef4444" stroke-width="1" stroke-dasharray="4 3" opacity="0.5"/>' +
+    '</svg>' +
+    '</div>';
+}
+
+// ── per-pane render ───────────────────────────────────────────────────────────
+function renderPane(name) {
+  var t = targets[name];
+  if (!t || !t.latest) return;
+  var d  = t.latest;
+  var s  = slugify(name);
+
+  var heapPct    = parseFloat(d.heapUsedPct)    || 0;
+  var gcPct      = parseFloat(d.gcOverheadPct)  || 0;
+  var nurseryPct = parseFloat(d.nurseryUsedPct) || 0;
+  var critPct    = parseFloat(d.critThresholdPct) > 0 ? parseFloat(d.critThresholdPct) : 90;
+  var warnPct    = critPct * 0.88;
+  var risk       = d.riskLevel || 'UNKNOWN';
+
+  // Update tab indicator dot
+  var dot = document.getElementById('tab-dot-' + s);
+  if (dot) dot.className = 'tab-dot ' + riskDotClass(risk);
+
+  // Metric cards
+  setEl(s + '-heap-pct-val',  heapPct.toFixed(1) + '%');
+  setEl(s + '-heap-pct-sub',  fmt1(d.heapUsedMB) + ' MB / ' + fmt1(d.heapMaxMB) + ' MB');
+  setGauge(s + '-heap-pct-gauge', heapPct, gaugeColor(heapPct, warnPct, critPct));
+
+  setEl(s + '-gc-pct-val',    gcPct.toFixed(2) + '%');
+  setEl(s + '-gc-pct-sub',    'Total GC: ' + d.totalGcTimeMs + ' ms');
+  setGauge(s + '-gc-pct-gauge', Math.min(gcPct * 2, 100), gaugeColor(gcPct, 25, 50));
+
+  setEl(s + '-nursery-pct-val',  nurseryPct.toFixed(1) + '%');
+  setEl(s + '-nursery-pct-sub',  fmt1(d.nurseryUsedMB) + ' MB used');
+  setGauge(s + '-nursery-pct-gauge', nurseryPct, gaugeColor(nurseryPct, 70, 90));
+
+  setEl(s + '-nonheap-mb-val', fmt1(d.nonHeapUsedMB));
+
+  // Process card
+  setEl(s + '-proc',     d.processName || '—');
+  setEl(s + '-uptime',   fmtUptime(d.jvmUptimeMs || 0));
+  setEl(s + '-crit-thr', critPct.toFixed(1) + '%');
+  setEl(s + '-lastpoll', new Date(d.timestampMs).toLocaleTimeString());
+
+  // Risk card
+  var rEl = document.getElementById(s + '-risk-val');
+  if (rEl) { rEl.textContent = risk; rEl.style.color = riskColor(risk); }
+  setEl(s + '-risk-sub', 'Crit: ' + critPct.toFixed(1) + '%');
+
+  var dumpEl = document.getElementById(s + '-dump');
+  if (dumpEl) {
+    if (d.heapDumpPath) { dumpEl.textContent = '\uD83D\uDCC1 ' + d.heapDumpPath; dumpEl.classList.add('visible'); }
+    else                { dumpEl.classList.remove('visible'); }
   }
 
-  function addAlert(level, msg, ts) {
-    var li = document.createElement('li');
-    li.className = 'lvl-' + level;
-    var time = new Date(ts || Date.now()).toLocaleTimeString();
-    li.innerHTML =
-      '<span class="ts">' + time + '</span>' +
-      '<span class="msg">[' + escHtml(level) + '] ' + escHtml((msg || '').slice(0, 200)) + '</span>';
-    var log = document.getElementById('alert-log');
-    // Remove placeholder
-    if (log.children.length === 1 && log.children[0].style.color) log.innerHTML = '';
-    log.insertBefore(li, log.firstChild);
-    alertLog.unshift({level:level, msg:msg, ts:ts});
-    if (alertLog.length > 50) {
-      alertLog.pop();
-      if (log.children.length > 50) log.removeChild(log.lastChild);
-    }
+  // Diagnosis
+  setEl(s + '-diag', d.diagnosisNotes || '—');
+
+  // Memory pools table
+  var poolsEl = document.getElementById(s + '-pools');
+  if (poolsEl && d.poolUsedMB && Object.keys(d.poolUsedMB).length > 0) {
+    poolsEl.innerHTML = Object.entries(d.poolUsedMB)
+      .sort(function(a,b){ return b[1]-a[1]; })
+      .map(function(e) { return '<tr><td>' + esc(e[0]) + '</td><td>' + fmt2(e[1]) + '</td></tr>'; })
+      .join('');
   }
 
-  function setText(id, val) {
-    var el = document.getElementById(id);
-    if (el) el.textContent = val;
+  // GC counts table
+  var gcTableEl = document.getElementById(s + '-gctable');
+  if (gcTableEl && d.gcCounts && Object.keys(d.gcCounts).length > 0) {
+    gcTableEl.innerHTML = Object.entries(d.gcCounts)
+      .map(function(e) { return '<tr><td>' + esc(e[0]) + '</td><td>' + e[1] + '</td></tr>'; })
+      .join('');
   }
 
-  function setGauge(id, pct, color) {
-    var el = document.getElementById(id);
-    if (!el) return;
-    el.style.width = Math.min(Math.max(pct, 0), 100) + '%';
-    el.style.background = color;
+  // Target alert log
+  renderAlertLog(s + '-alerts', t.alertHistory);
+
+  // Sparklines
+  var h = t.history;
+  drawSparkline(s + '-chart-heap',    h.heap,    100, critPct, s + '-chart-heap-cur',    heapPct.toFixed(1) + '%', riskColor(risk));
+  drawSparkline(s + '-chart-gc',      h.gc,       100, 50,     s + '-chart-gc-cur',      gcPct.toFixed(2)   + '%', gaugeColor(gcPct, 25, 50));
+  drawSparkline(s + '-chart-nursery', h.nursery,  100, 90,     s + '-chart-nursery-cur', nurseryPct.toFixed(1) + '%', gaugeColor(nurseryPct, 70, 90));
+}
+
+function renderAlertLog(elId, history) {
+  var el = document.getElementById(elId);
+  if (!el) return;
+  if (!history || history.length === 0) return;
+  el.innerHTML = history.map(function(a) {
+    return '<li class="lvl-' + a.risk + '">' +
+      '<span class="ts">' + new Date(a.ts).toLocaleTimeString() + '</span>' +
+      '<span class="msg">[' + esc(a.risk) + '] ' + esc((a.msg || '').slice(0, 200)) + '</span>' +
+      '</li>';
+  }).join('');
+}
+
+// ── sparkline drawing ─────────────────────────────────────────────────────────
+function drawSparkline(svgId, data, maxVal, threshPct, curId, curText, lineColor) {
+  var svg      = document.getElementById(svgId);
+  var lineEl   = document.getElementById(svgId + '-line');
+  var areaEl   = document.getElementById(svgId + '-area');
+  var threshEl = document.getElementById(svgId + '-thresh');
+  if (!svg || !lineEl) return;
+
+  var W = 300, H = 70;
+  var n = data.length;
+
+  // Update current value label
+  var curEl = document.getElementById(curId);
+  if (curEl) { curEl.textContent = curText; curEl.style.color = lineColor; }
+
+  // Update threshold line
+  if (threshEl) {
+    var ty = H - (threshPct / maxVal) * H;
+    threshEl.setAttribute('y1', ty);
+    threshEl.setAttribute('y2', ty);
   }
 
-  function escHtml(s) {
-    return String(s || '')
-      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-      .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  if (n < 2) return;
+
+  // Update gradient stop color
+  var grad = document.getElementById('grad-' + svgId);
+  if (grad) {
+    var stops = grad.querySelectorAll('stop');
+    if (stops[0]) stops[0].setAttribute('stop-color', lineColor);
+    if (stops[1]) stops[1].setAttribute('stop-color', lineColor);
   }
+  if (lineEl) lineEl.setAttribute('stroke', lineColor);
+
+  // Build path points
+  var pts = [];
+  for (var i = 0; i < n; i++) {
+    var x = (i / (n - 1)) * W;
+    var y = H - Math.min(Math.max(data[i] / maxVal, 0), 1) * H;
+    pts.push([x, y]);
+  }
+
+  // Smooth polyline (cubic bezier)
+  var linePath = 'M ' + pts[0][0] + ' ' + pts[0][1];
+  for (var j = 1; j < pts.length; j++) {
+    var cx = (pts[j-1][0] + pts[j][0]) / 2;
+    linePath += ' C ' + cx + ' ' + pts[j-1][1] + ' ' + cx + ' ' + pts[j][1] + ' ' + pts[j][0] + ' ' + pts[j][1];
+  }
+  if (lineEl) lineEl.setAttribute('d', linePath);
+
+  // Area path: same line + close at bottom
+  var areaPath = linePath + ' L ' + pts[pts.length-1][0] + ' ' + H + ' L ' + pts[0][0] + ' ' + H + ' Z';
+  if (areaEl) areaEl.setAttribute('d', areaPath);
+}
+
+// ── helpers ───────────────────────────────────────────────────────────────────
+function setEl(id, val) {
+  var el = document.getElementById(id);
+  if (el) el.textContent = val;
+}
+
+function setGauge(id, pct, color) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  el.style.width      = Math.min(Math.max(pct, 0), 100) + '%';
+  el.style.background = color;
+}
+
+function gaugeColor(pct, warnPct, critPct) {
+  if (pct >= critPct) return 'var(--crit)';
+  if (pct >= warnPct) return 'var(--warn)';
+  return 'var(--ok)';
+}
+
+function riskColor(level) {
+  if (level === 'OK')         return 'var(--ok)';
+  if (level === 'WARNING')    return 'var(--warn)';
+  if (level === 'CRITICAL')   return 'var(--crit)';
+  if (level === 'OOM_FIRING') return 'var(--oom)';
+  return 'var(--muted)';
+}
+
+function riskDotClass(level) {
+  if (level === 'OK')         return 'ok';
+  if (level === 'WARNING')    return 'warn';
+  if (level === 'CRITICAL')   return 'crit';
+  if (level === 'OOM_FIRING') return 'oom';
+  return '';
+}
+
+function riskOrd(level) {
+  return { 'OK': 0, 'WARNING': 1, 'CRITICAL': 2, 'OOM_FIRING': 3 }[level] || 0;
+}
+
+function fmtUptime(ms) {
+  var s = Math.floor(ms / 1000);
+  var m = Math.floor(s / 60); s %= 60;
+  var h = Math.floor(m / 60); m %= 60;
+  return h + 'h ' + m + 'm ' + s + 's';
+}
+
+function fmt1(v) { return (parseFloat(v) || 0).toFixed(1); }
+function fmt2(v) { return (parseFloat(v) || 0).toFixed(2); }
+
+function slugify(s) { return String(s).replace(/[^A-Za-z0-9]/g, '_'); }
+
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+                         .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
 </script>
 </body>
 </html>
