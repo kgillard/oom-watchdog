@@ -379,9 +379,10 @@
     .cpu-badge.low  { background: #051409; color: var(--ok); border: 1px solid var(--ok); }
     .cpu-badge.med  { background: #1c1507; color: var(--warn); border: 1px solid var(--warn); }
     .cpu-badge.high { background: #1c0505; color: var(--crit); border: 1px solid var(--crit); }
-    .jvm-flags-list { margin: 2px 0 0 0; padding: 0; list-style: none; }
+    .jvm-flags-list { margin: 2px 0 0 0; padding: 0; list-style: none;
+                      overflow-x: auto; max-width: 100%; }
     .jvm-flags-list li { font-family: monospace; font-size: 10px; line-height: 1.7;
-                         word-break: break-word; color: var(--text); }
+                         white-space: nowrap; color: var(--text); }
 
     /* ── Footer ──────────────────────────────────────────────────────────────── */
     footer { text-align: left; padding: 7px 20px; color: var(--muted); font-size: 11px;
