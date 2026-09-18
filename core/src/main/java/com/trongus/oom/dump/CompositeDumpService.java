@@ -58,7 +58,7 @@ import java.util.logging.Logger;
  * rest of the chain for that dump type.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.6
+ * @version 1.7.7
  * @since 1.0.0
  * @see HeapDumpService
  * @see DumpStrategy

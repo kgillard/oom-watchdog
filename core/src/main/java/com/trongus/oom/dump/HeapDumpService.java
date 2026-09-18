@@ -21,7 +21,7 @@ import java.util.List;
  * interfaces rather than being mixed into this contract.</p>
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.6
+ * @version 1.7.7
  * @since 1.0.0
  * @see CompositeDumpService
  * @see DumpType

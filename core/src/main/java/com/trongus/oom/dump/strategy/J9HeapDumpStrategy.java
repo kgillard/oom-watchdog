@@ -14,7 +14,7 @@ import java.util.logging.Logger;
  * <p>Produces a Portable Heap Dump (PHD) file.  Works on: IBM J9 JDK 8+,
  * Eclipse OpenJ9 JDK 8+.  Silently returns {@code null} on any other JVM.
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.6
+ * @version 1.7.7
  * @since 1.7.0
  */
 public final class J9HeapDumpStrategy implements DumpStrategy {

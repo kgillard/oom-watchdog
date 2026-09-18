@@ -102,7 +102,7 @@ import java.util.logging.Logger;
  * </table>
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.6
+ * @version 1.7.7
  * @since 1.7.3
  * @see TlsConfig
  * @see OomWatchdog#getLastSnapshot()
