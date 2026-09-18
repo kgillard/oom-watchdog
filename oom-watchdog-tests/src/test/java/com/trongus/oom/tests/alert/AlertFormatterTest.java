@@ -147,7 +147,7 @@ public class AlertFormatterTest {
     @Test
     public void testMemoryPoolsSectionHeading() throws IOException {
         channel.alert(defaultSnap());
-        assertTrue("Pools section missing", read().contains("─ Pools ─"));
+        assertTrue("Pools section missing", read().contains("+-- Pools "));
     }
 
     /**
@@ -162,7 +162,7 @@ public class AlertFormatterTest {
         JvmSnapshot snap = snap(90L * MB, 100L * MB, -1L,
                 Double.NaN, -1L, null, counts, times, 10L, 60_000L, "diag");
         channel.alert(snap);
-        assertTrue("GC section missing", read().contains("─ GC ─"));
+        assertTrue("GC section missing", read().contains("+-- GC "));
     }
 
     /**
@@ -186,7 +186,7 @@ public class AlertFormatterTest {
     @Test
     public void testDiagnosisSectionHeading() throws IOException {
         channel.alert(defaultSnap());
-        assertTrue("Diagnosis section missing", read().contains("─ Diagnosis ─"));
+        assertTrue("Diagnosis section missing", read().contains("+-- Diagnosis "));
     }
 
     // ── numeric heap fields ───────────────────────────────────────────────────
@@ -247,7 +247,7 @@ public class AlertFormatterTest {
         channel.alert(defaultSnap());
         // No GC data → GC section not rendered; heap/diagnosis still present
         assertFalse("GC section should be absent with no GC data",
-                read().contains("─ GC ─"));
+                read().contains("+-- GC "));
     }
 
     /**
@@ -328,7 +328,7 @@ public class AlertFormatterTest {
                 0L, 60_000L, "diag");
         channel.alert(snap);
         String content = read();
-        assertTrue("Dump section missing", content.contains("─ Dump ─"));
+        assertTrue("Dump section missing", content.contains("+-- Dump "));
         assertTrue("Dump path missing", content.contains("/var/dumps/oom.hprof"));
     }
 
@@ -339,7 +339,7 @@ public class AlertFormatterTest {
     public void testNoHeapDumpSectionWhenPathAbsent() throws IOException {
         channel.alert(defaultSnap());
         assertFalse("Dump section should be absent when no path is set",
-                read().contains("─ Dump ─"));
+                read().contains("+-- Dump "));
     }
 
     // ── single-line format ────────────────────────────────────────────────────

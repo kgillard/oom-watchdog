@@ -111,105 +111,106 @@ final class AlertFormatter {
         double  slope     = snap.getPostGcHeapGrowthRatePerMs();
         String  uptimeStr = formatUptime(snap.getJvmUptimeMs());
 
-        // ── top border ────────────────────────────────────────────────────────
-        // Keep the header line fixed-width so it never overflows the terminal
-        // regardless of how long the process name or target label is.
-        String header = String.format(" %s  %s ", icon, risk);
+        // -- top border -------------------------------------------------------
+        // Pure ASCII box so alignment is exact on any terminal font or encoding.
+        String header = String.format("[ %s  %s ]", icon, risk);
         StringBuilder sb = new StringBuilder();
-        sb.append("┌─").append(header)
-          .append(repeat("─", Math.max(1, W - header.length()))).append("─┐\n");
+        sb.append("+").append(header)
+          .append(repeat("-", Math.max(1, W + 2 - header.length()))).append("+\n");
 
-        // ── process / target / timestamp on first content line ────────────────
+        // -- process / target / timestamp on first content line ---------------
         String ts = new java.text.SimpleDateFormat("HH:mm:ss").format(
                         new java.util.Date(snap.getTimestampMs()));
         String procLine = "  " + ts + "  " + process + target;
-        sb.append("│ ").append(padLine(procLine)).append(" │\n");
+        sb.append("| ").append(padLine(procLine)).append(" |\n");
 
-        // ── heap bar ──────────────────────────────────────────────────────────
+        // -- heap bar ---------------------------------------------------------
         String heapBar = heapBar((int) Math.round(heapPct));
         String heapLine = String.format("  Heap  %3d / %3d MB  %5.1f%%  %s",
                 heapUsed, heapMax, heapPct, heapBar);
         String gcStr = String.format("GC  %.1f%%  total %d ms", gcPct, gcTotal);
-        sb.append("│ ").append(padLine(heapLine + "   " + gcStr)).append(" │\n");
+        sb.append("| ").append(padLine(heapLine + "   " + gcStr)).append(" |\n");
 
-        // ── non-heap + uptime ─────────────────────────────────────────────────
+        // -- non-heap + uptime ------------------------------------------------
         String nhLine = String.format("  Metaspace  %d MB", nonHeap);
         String upLine = "Uptime  " + uptimeStr;
-        sb.append("│ ").append(padLine(nhLine + "    " + upLine)).append(" │\n");
+        sb.append("| ").append(padLine(nhLine + "    " + upLine)).append(" |\n");
 
-        // ── nursery row (only when data is available) ─────────────────────────
+        // -- nursery row (only when data is available) -------------------------
         double nurseryPct = snap.getNurseryUsedRatio();
         if (!Double.isNaN(nurseryPct) && nurseryPct > 0.0) {
             long nurseryMB = snap.getNurseryUsedBytes() / MB;
             String nline = String.format("  Young gen  %d MB  %.1f%%", nurseryMB, nurseryPct * 100.0);
-            sb.append("│ ").append(padLine(nline)).append(" │\n");
+            sb.append("| ").append(padLine(nline)).append(" |\n");
         }
 
-        // ── growth / leak row ─────────────────────────────────────────────────
+        // -- growth / leak row ------------------------------------------------
         if (!Double.isNaN(slope)) {
             double mbPerHour = slope * 3_600_000.0 / MB;
             String leakLine = mbPerHour > 0
-                    ? String.format("  Growth  %+.1f MB/h  ▲ possible leak", mbPerHour)
+                    ? String.format("  Growth  %+.1f MB/h  ^ possible leak", mbPerHour)
                     : String.format("  Growth  %.1f MB/h  (stable)", mbPerHour);
-            sb.append("│ ").append(padLine(leakLine)).append(" │\n");
+            sb.append("| ").append(padLine(leakLine)).append(" |\n");
         }
 
-        // ── memory pools (only non-zero) ──────────────────────────────────────
+        // -- memory pools (only non-zero) -------------------------------------
         boolean hasPool = false;
         for (Map.Entry<String, Long> e : snap.getPoolUsedBytes().entrySet()) {
             long v = e.getValue() / MB;
             if (v > 0) { hasPool = true; break; }
         }
         if (hasPool) {
-            sb.append("├─ Pools ").append(repeat("─", W - 7)).append("─┤\n");
+            sb.append("+-- Pools ").append(repeat("-", W - 7)).append("+\n");
             for (Map.Entry<String, Long> e : snap.getPoolUsedBytes().entrySet()) {
                 long v = e.getValue() / MB;
                 if (v == 0) continue;
                 String poolLine = String.format("  %-38s  %3d MB", e.getKey(), v);
-                sb.append("│ ").append(padLine(poolLine)).append(" │\n");
+                sb.append("| ").append(padLine(poolLine)).append(" |\n");
             }
         }
 
-        // ── GC collectors ─────────────────────────────────────────────────────
+        // -- GC collectors ----------------------------------------------------
         if (!snap.getGcCollectionCounts().isEmpty()) {
-            sb.append("├─ GC ").append(repeat("─", W - 5)).append("─┤\n");
+            sb.append("+-- GC ").append(repeat("-", W - 4)).append("+\n");
             for (Map.Entry<String, Long> e : snap.getGcCollectionCounts().entrySet()) {
                 long t = snap.getGcCollectionTimesMs().getOrDefault(e.getKey(), 0L);
-                String gcLine = String.format("  %-38s  %d × / %d ms", e.getKey(), e.getValue(), t);
-                sb.append("│ ").append(padLine(gcLine)).append(" │\n");
+                String gcLine = String.format("  %-38s  %d x / %d ms", e.getKey(), e.getValue(), t);
+                sb.append("| ").append(padLine(gcLine)).append(" |\n");
             }
         }
 
-        // ── diagnosis ─────────────────────────────────────────────────────────
-        sb.append("├─ Diagnosis ").append(repeat("─", W - 12)).append("─┤\n");
-        for (String line : wrapDiagnosis(sanitiseMultiLine(snap.getDiagnosisNotes()), W - 2)) {
-            sb.append("│ ").append(padLine("  " + line)).append(" │\n");
+        // -- diagnosis --------------------------------------------------------
+        sb.append("+-- Diagnosis ").append(repeat("-", W - 11)).append("+\n");
+        String cleanNotes = sanitiseMultiLine(snap.getDiagnosisNotes())
+                .replace('\u2013', '-').replace('\u2014', '-');   // en/em-dash -> hyphen
+        for (String line : wrapDiagnosis(cleanNotes, W - 2)) {
+            sb.append("| ").append(padLine("  " + line)).append(" |\n");
         }
 
-        // ── dump path (if present) ────────────────────────────────────────────
+        // -- dump path (if present) -------------------------------------------
         if (snap.getHeapDumpPath() != null) {
-            sb.append("├─ Dump ").append(repeat("─", W - 7)).append("─┤\n");
-            sb.append("│ ").append(padLine("  " + sanitiseMultiLine(snap.getHeapDumpPath()))).append(" │\n");
+            sb.append("+-- Dump ").append(repeat("-", W - 6)).append("+\n");
+            sb.append("| ").append(padLine("  " + sanitiseMultiLine(snap.getHeapDumpPath()))).append(" |\n");
         }
 
-        sb.append("└").append(repeat("─", W + 2)).append("┘\n");
+        sb.append("+").append(repeat("-", W + 2)).append("+\n");
         return sb.toString();
     }
 
-    /** Severity icon prefix for the box header. */
+    /** Severity icon prefix for the box header — ASCII only for exact alignment. */
     private static String severityIcon(String risk) {
         switch (risk) {
-            case "WARNING":    return "⚠";
-            case "CRITICAL":   return "✖";
-            case "OOM_FIRING": return "☠";
-            default:           return "✔";
+            case "WARNING":    return "!";
+            case "CRITICAL":   return "!!";
+            case "OOM_FIRING": return "!!!";
+            default:           return "OK";
         }
     }
 
-    /** A simple 10-char heap usage bar. */
+    /** A simple 10-char heap usage bar using ASCII only. */
     private static String heapBar(int pct) {
         int filled = Math.min(10, (int) Math.round(pct / 10.0));
-        return "[" + repeat("█", filled) + repeat("░", 10 - filled) + "]";
+        return "[" + repeat("#", filled) + repeat(".", 10 - filled) + "]";
     }
 
     /** Formats JVM uptime ms into h/m/s string. */
@@ -228,7 +229,7 @@ final class AlertFormatter {
      */
     private static String padLine(String s) {
         if (s.length() == W) return s;
-        if (s.length() > W) return s.substring(0, W - 1) + "…";
+        if (s.length() > W) return s.substring(0, W - 1) + ">";
         return s + " ".repeat(W - s.length());
     }
 
@@ -249,7 +250,7 @@ final class AlertFormatter {
     private static java.util.List<String> wrapDiagnosis(String notes, int maxWidth) {
         java.util.List<String> lines = new java.util.ArrayList<>();
         if (notes == null || notes.trim().isEmpty()) {
-            lines.add("—");
+            lines.add("-");
             return lines;
         }
         // Split on known section tags
