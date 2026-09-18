@@ -606,7 +606,10 @@ function ingress(d) {
 function renderAll() {
   ensureTabs();
   var names = Object.keys(targets);
-  if (!activeTab || !targets[activeTab]) activeTab = names[0];
+  if (!activeTab || !targets[activeTab]) {
+    activeTab = names[0];
+    switchTab(activeTab);   // auto-select first tab on first successful data
+  }
   names.forEach(function(name) { renderPane(name); });
 
   var worst = 'OK';
