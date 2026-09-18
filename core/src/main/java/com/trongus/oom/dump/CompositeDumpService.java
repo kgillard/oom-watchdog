@@ -58,7 +58,7 @@ import java.util.logging.Logger;
  * rest of the chain for that dump type.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.5
+ * @version 1.7.6
  * @since 1.0.0
  * @see HeapDumpService
  * @see DumpStrategy
@@ -232,14 +232,28 @@ public final class CompositeDumpService implements HeapDumpService {
      * @return suggested absolute file path (the receiving strategy may override it)
      */
     private String buildPath(JvmSnapshot snapshot, DumpType type) {
-        // Format timestamp with millisecond precision to avoid name collisions on rapid retriggers
-        String ts   = new SimpleDateFormat("yyyyMMdd_HHmmss_SSS")
+        // Format timestamp with millisecond precision to avoid name collisions on rapid retriggers.
+        // Locale.ROOT prevents locale-sensitive month/day abbreviations in the file name.
+        String ts   = new SimpleDateFormat("yyyyMMdd_HHmmss_SSS", java.util.Locale.ROOT)
                           .format(new Date(snapshot.getTimestampMs()));
-        // Sanitise process name for filesystem compatibility
-        String proc = snapshot.getProcessName().replaceAll("[^A-Za-z0-9._-]", "_");
+        // Sanitise process name: allow only safe filesystem characters, cap at 64 chars
+        // to prevent excessively long paths on systems with PATH_MAX constraints.
+        String rawProc = snapshot.getProcessName() != null ? snapshot.getProcessName() : "unknown";
+        String proc = rawProc.replaceAll("[^A-Za-z0-9._-]", "_");
+        if (proc.length() > 64) proc = proc.substring(0, 64);
         String ext  = extensionFor(type);
-        return config.getHeapDumpDirectory() + File.separator
-                + "oom_" + type.name().toLowerCase() + "_" + proc + "_" + ts + ext;
+        // Canonicalise the dump directory to prevent path-traversal if the configured
+        // directory path contains '..' segments (e.g. from a malicious targets.properties file).
+        String baseDir;
+        try {
+            baseDir = new File(config.getHeapDumpDirectory()).getCanonicalPath();
+        } catch (java.io.IOException e) {
+            WatchdogLogger.warning(LOG, e, "Cannot canonicalise dump directory [{0}]: {1}",
+                    config.getHeapDumpDirectory(), e.getMessage());
+            baseDir = config.getHeapDumpDirectory();
+        }
+        return baseDir + File.separator
+                + "oom_" + type.name().toLowerCase(java.util.Locale.ROOT) + "_" + proc + "_" + ts + ext;
     }
 
     /**

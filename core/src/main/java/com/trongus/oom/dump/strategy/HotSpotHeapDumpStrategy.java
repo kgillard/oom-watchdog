@@ -1,12 +1,14 @@
 package com.trongus.oom.dump.strategy;
 
 import com.trongus.oom.dump.DumpType;
+import com.trongus.oom.logging.WatchdogLogger;
 import com.trongus.oom.model.JvmSnapshot;
 
 import javax.management.MBeanServer;
 import java.io.File;
 import java.lang.management.ManagementFactory;
 import java.lang.reflect.Method;
+import java.util.logging.Logger;
 
 /**
  * Heap dump via HotSpot {@code HotSpotDiagnosticMXBean#dumpHeap}.
@@ -16,11 +18,12 @@ import java.lang.reflect.Method;
  * Reflection is used so the code compiles without a {@code com.sun.management}
  * import, keeping it compatible with all JDK versions including 26+.
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.5
+ * @version 1.7.6
  * @since 1.7.0
  */
 public final class HotSpotHeapDumpStrategy implements DumpStrategy {
 
+    private static final Logger LOG = WatchdogLogger.forClass(HotSpotHeapDumpStrategy.class);
     private static final String MXBEAN_NAME = "com.sun.management:type=HotSpotDiagnostic";
 
     @Override public DumpType type() { return DumpType.HEAP; }
@@ -38,7 +41,7 @@ public final class HotSpotHeapDumpStrategy implements DumpStrategy {
         } catch (ClassNotFoundException | UnsupportedOperationException e) {
             return null; // not available on this JVM
         } catch (Exception e) {
-            System.err.println("[OomWatchdog][Dump] HotSpotHeap error: " + e.getMessage());
+            WatchdogLogger.warning(LOG, e, "HotSpot heap dump failed: {0}", e.getMessage());
             return null;
         }
     }

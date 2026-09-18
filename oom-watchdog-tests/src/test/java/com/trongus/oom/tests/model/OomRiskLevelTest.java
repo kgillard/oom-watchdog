@@ -12,7 +12,7 @@ import static org.junit.Assert.*;
  * ordinal-based comparisons relied upon by the watchdog pipeline.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.5
+ * @version 1.7.6
  * @since 1.0.0
  * @see OomRiskLevel
  */

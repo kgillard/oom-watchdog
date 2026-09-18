@@ -1,6 +1,7 @@
 package com.trongus.oom.dump.strategy;
 
 import com.trongus.oom.dump.DumpType;
+import com.trongus.oom.logging.WatchdogLogger;
 import com.trongus.oom.model.JvmSnapshot;
 import com.trongus.oom.platform.JvmPlatform;
 
@@ -16,6 +17,7 @@ import java.lang.management.MemoryUsage;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.Map;
+import java.util.logging.Logger;
 
 /**
  * Class histogram via multiple strategies, in priority order:
@@ -31,10 +33,12 @@ import java.util.Map;
  *       {@link ManagementFactory#getMemoryPoolMXBeans()} – works on every JVM.</li>
  * </ol>
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.5
+ * @version 1.7.6
  * @since 1.7.0
  */
 public final class ClassHistogramStrategy implements DumpStrategy {
+
+    private static final Logger LOG = WatchdogLogger.forClass(ClassHistogramStrategy.class);
 
     @Override public DumpType type() { return DumpType.CLASS_HISTOGRAM; }
     @Override public String  name() { return "Composite-ClassHistogram"; }
@@ -94,12 +98,12 @@ public final class ClassHistogramStrategy implements DumpStrategy {
             Class.forName("com.ibm.jvm.Dump")
                  .getMethod("JavaDump")
                  .invoke(null);
-            System.out.println("[OomWatchdog][Dump] CLASS_HISTOGRAM (J9 JavaDump) triggered; expected ~ " + path);
+            WatchdogLogger.info(LOG, "CLASS_HISTOGRAM (J9 JavaDump) triggered; expected ~ {0}", path);
             return path + "_j9javacore";
         } catch (ClassNotFoundException e) {
             return null;
         } catch (Exception e) {
-            System.err.println("[OomWatchdog][Dump] J9 JavaDump error: " + e.getMessage());
+            WatchdogLogger.warning(LOG, e, "J9 JavaDump failed: {0}", e.getMessage());
             return null;
         }
     }
@@ -135,7 +139,7 @@ public final class ClassHistogramStrategy implements DumpStrategy {
                 pw.printf("  %-40s  %,12d bytes%n", e.getKey(), e.getValue());
             }
         } catch (IOException e) {
-            System.err.println("[OomWatchdog][Dump] PoolTable write error: " + e.getMessage());
+            WatchdogLogger.warning(LOG, e, "Pool table write error [{0}]: {1}", fallbackPath, e.getMessage());
             return null;
         }
         return new File(fallbackPath).getAbsolutePath();

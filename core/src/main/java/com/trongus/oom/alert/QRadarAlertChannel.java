@@ -77,7 +77,7 @@ import java.util.logging.Logger;
  * (guaranteed delivery) via the constructor.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.5
+ * @version 1.7.6
  * @since 1.0.0
  * @see AlertChannel
  * @see com.trongus.oom.model.JvmSnapshot
@@ -298,8 +298,10 @@ public final class QRadarAlertChannel implements AlertChannel {
      * @return formatted RFC 3164 timestamp string
      */
     private static String rfc3164Timestamp(long epochMs) {
+        // Locale.US mandated by RFC 3164 — month abbreviations must be English.
+        // TimeZone.getDefault() is intentional: syslog timestamps are local time per the RFC.
         SimpleDateFormat sdf = new SimpleDateFormat("MMM dd HH:mm:ss", Locale.US);
-        sdf.setTimeZone(TimeZone.getDefault());
+        sdf.setTimeZone(java.util.TimeZone.getDefault());
         return sdf.format(new Date(epochMs));
     }
 

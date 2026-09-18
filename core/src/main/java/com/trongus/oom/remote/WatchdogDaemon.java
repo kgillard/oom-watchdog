@@ -44,7 +44,7 @@ import java.util.logging.Logger;
  * <p>All lifecycle operations ({@link #start()} and {@link #stop()}) are thread-safe and guarded.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.5
+ * @version 1.7.6
  * @since 1.7.0
  * @see TargetDescriptor
  * @see TargetRegistry
@@ -108,6 +108,13 @@ public final class WatchdogDaemon implements Closeable {
 
         for (TargetDescriptor target : targets) {
             try {
+                // Sanitise target name for logging to prevent log-injection (CWE-117).
+                // Target name and JMX URL originate from user-controlled properties files.
+                String logSafeName = target.getName()
+                        .replaceAll("[\r\n\t]", " ").trim();
+                String logSafeUrl = target.getJmxUrl()
+                        .replaceAll("[\r\n\t]", " ").trim();
+
                 // Per-target config derived from base config + target overrides
                 WatchdogConfig.Builder targetCfgBuilder = baseConfig.toBuilder()
                         .warningHeapThreshold(target.getWarnThreshold())
@@ -144,11 +151,14 @@ public final class WatchdogDaemon implements Closeable {
 
                 watchdog.start();
                 WatchdogLogger.info(LOG, "Started watchdog for target [{0}] (JMX: {1})",
-                        target.getName(), target.getJmxUrl());
+                        logSafeName, logSafeUrl);
 
             } catch (Exception e) {
+                // Sanitise again in the catch block since logSafeName may not be in scope
+                // if the exception was thrown before it was assigned.
+                String safeName = target.getName().replaceAll("[\r\n\t]", " ").trim();
                 WatchdogLogger.severe(LOG, e, "Failed to initialize watchdog for target [{0}]: {1}",
-                        target.getName(), e.getMessage());
+                        safeName, e.getMessage());
             }
         }
 

@@ -26,7 +26,7 @@ import java.util.List;
  * </ol>
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.5
+ * @version 1.7.6
  * @since 1.0.0
  * @see com.trongus.oom.harness.DynamicOomClassGenerator
  * @see com.trongus.oom.harness.TestHarnessMain

@@ -1,10 +1,12 @@
 package com.trongus.oom.dump.strategy;
 
 import com.trongus.oom.dump.DumpType;
+import com.trongus.oom.logging.WatchdogLogger;
 import com.trongus.oom.model.JvmSnapshot;
 
 import java.io.File;
 import java.lang.reflect.Method;
+import java.util.logging.Logger;
 
 /**
  * Heap dump via IBM J9 / Eclipse OpenJ9 {@code com.ibm.jvm.Dump#HeapDump}.
@@ -12,10 +14,12 @@ import java.lang.reflect.Method;
  * <p>Produces a Portable Heap Dump (PHD) file.  Works on: IBM J9 JDK 8+,
  * Eclipse OpenJ9 JDK 8+.  Silently returns {@code null} on any other JVM.
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.5
+ * @version 1.7.6
  * @since 1.7.0
  */
 public final class J9HeapDumpStrategy implements DumpStrategy {
+
+    private static final Logger LOG = WatchdogLogger.forClass(J9HeapDumpStrategy.class);
 
     @Override public DumpType type() { return DumpType.HEAP; }
     @Override public String  name() { return "J9-com.ibm.jvm.Dump#HeapDump"; }
@@ -31,7 +35,7 @@ public final class J9HeapDumpStrategy implements DumpStrategy {
         } catch (ClassNotFoundException e) {
             return null; // not J9
         } catch (Exception e) {
-            System.err.println("[OomWatchdog][Dump] J9Heap error: " + e.getMessage());
+            WatchdogLogger.warning(LOG, e, "J9 heap dump failed: {0}", e.getMessage());
             return null;
         }
     }

@@ -32,7 +32,7 @@ import static org.junit.Assert.*;
  * temp permissions).
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.5
+ * @version 1.7.6
  * @since 1.0.0
  * @see CompositeDumpService
  */
@@ -183,13 +183,17 @@ public class CompositeDumpServiceTest {
      * Dump files must be created inside the configured dump directory.
      */
     @Test
-    public void testFilesCreatedInConfiguredDirectory() {
+    public void testFilesCreatedInConfiguredDirectory() throws IOException {
         List<String> result = service.dump(buildSnapshot(),
                 Collections.singletonList(DumpType.THREAD));
         assertFalse("result must not be empty", result.isEmpty());
         String path = result.get(0);
+        // Use the canonical path for comparison: on macOS /var is a symlink to /private/var,
+        // and CompositeDumpService.buildPath() canonicalises the dump directory to prevent
+        // path-traversal attacks, so we must compare against the same canonical form.
+        String canonicalDumpDir = tempDumpDir.toFile().getCanonicalPath();
         assertTrue("dump file should be inside temp dump dir",
-                path.startsWith(tempDumpDir.toAbsolutePath().toString()));
+                path.startsWith(canonicalDumpDir));
     }
 
     /**

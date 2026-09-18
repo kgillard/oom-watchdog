@@ -1,10 +1,12 @@
 package com.trongus.oom.dump.strategy;
 
 import com.trongus.oom.dump.DumpType;
+import com.trongus.oom.logging.WatchdogLogger;
 import com.trongus.oom.model.JvmSnapshot;
 import com.trongus.oom.platform.JvmPlatform;
 
 import java.io.File;
+import java.util.logging.Logger;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
@@ -28,10 +30,12 @@ import java.util.Date;
  * or {@code getThreadId()} on older versions), state, stack trace, held monitors,
  * and held synchronizers.
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.5
+ * @version 1.7.6
  * @since 1.7.0
  */
 public final class ThreadDumpStrategy implements DumpStrategy {
+
+    private static final Logger LOG = WatchdogLogger.forClass(ThreadDumpStrategy.class);
 
     @Override public DumpType type() { return DumpType.THREAD; }
     @Override public String  name() { return "Universal-ThreadMXBean"; }
@@ -71,7 +75,7 @@ public final class ThreadDumpStrategy implements DumpStrategy {
             }
 
         } catch (IOException e) {
-            System.err.println("[OomWatchdog][Dump] ThreadDump write error: " + e.getMessage());
+            WatchdogLogger.warning(LOG, e, "Thread dump write error [{0}]: {1}", outputPath, e.getMessage());
             return null;
         }
         return new File(outputPath).getAbsolutePath();
@@ -128,7 +132,7 @@ public final class ThreadDumpStrategy implements DumpStrategy {
      * (non-deprecated) and falling back to {@code getThreadId()} via reflection
      * for JDK 8–18 where {@code threadId()} doesn't exist.
      * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.5
+ * @version 1.7.6
  * @since 1.7.0
  */
     @SuppressWarnings("deprecation")

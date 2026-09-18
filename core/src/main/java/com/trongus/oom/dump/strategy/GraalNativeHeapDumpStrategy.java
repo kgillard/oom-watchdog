@@ -1,6 +1,7 @@
 package com.trongus.oom.dump.strategy;
 
 import com.trongus.oom.dump.DumpType;
+import com.trongus.oom.logging.WatchdogLogger;
 import com.trongus.oom.model.JvmSnapshot;
 import com.trongus.oom.platform.JvmPlatform;
 
@@ -18,6 +19,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
+import java.util.logging.Logger;
 
 /**
  * Heap dump for GraalVM Native Image and any JVM where HotSpot/J9 are absent.
@@ -34,10 +36,12 @@ import java.util.List;
  * <p>This strategy is always the last in the chain so it is the guaranteed
  * fallback for every JVM and JDK version including JDK 26+.
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.5
+ * @version 1.7.6
  * @since 1.7.0
  */
 public final class GraalNativeHeapDumpStrategy implements DumpStrategy {
+
+    private static final Logger LOG = WatchdogLogger.forClass(GraalNativeHeapDumpStrategy.class);
 
     @Override public DumpType type() { return DumpType.HEAP; }
     @Override public String  name() { return "GraalNative/Fallback-MemoryPoolSummary"; }
@@ -64,12 +68,12 @@ public final class GraalNativeHeapDumpStrategy implements DumpStrategy {
             // dumpHeap(String path, boolean gcBefore)
             vmRuntime.getMethod("dumpHeap", String.class, boolean.class)
                      .invoke(null, path, true);
-            System.out.println("[OomWatchdog][Dump] HEAP (GraalVM VMRuntime.dumpHeap): " + path);
+            WatchdogLogger.info(LOG, "HEAP written via GraalVM VMRuntime.dumpHeap: {0}", path);
             return new File(path).getAbsolutePath();
         } catch (ClassNotFoundException e) {
             return null; // SDK not on classpath / older GraalVM
         } catch (Exception e) {
-            System.err.println("[OomWatchdog][Dump] GraalVM dumpHeap error: " + e.getMessage());
+            WatchdogLogger.warning(LOG, e, "GraalVM dumpHeap failed: {0}", e.getMessage());
             return null;
         }
     }
@@ -125,10 +129,10 @@ public final class GraalNativeHeapDumpStrategy implements DumpStrategy {
             pw.println("Diagnosis   : " + snapshot.getDiagnosisNotes());
 
         } catch (IOException e) {
-            System.err.println("[OomWatchdog][Dump] MemoryPoolSummary write error: " + e.getMessage());
+            WatchdogLogger.warning(LOG, e, "Memory pool summary write error [{0}]: {1}", summaryPath, e.getMessage());
             return null;
         }
-        System.out.println("[OomWatchdog][Dump] HEAP (memory pool summary): " + summaryPath);
+        WatchdogLogger.info(LOG, "HEAP written as memory pool summary: {0}", summaryPath);
         return new File(summaryPath).getAbsolutePath();
     }
 

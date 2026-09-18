@@ -1,12 +1,14 @@
 package com.trongus.oom.dump.strategy;
 
 import com.trongus.oom.dump.DumpType;
+import com.trongus.oom.logging.WatchdogLogger;
 import com.trongus.oom.model.JvmSnapshot;
 import com.trongus.oom.platform.JvmPlatform;
 
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStreamReader;
+import java.util.logging.Logger;
 
 /**
  * Core / system dump strategy.
@@ -20,10 +22,12 @@ import java.io.InputStreamReader;
  *
  * <p>Returns {@code null} on Windows or when neither mechanism is available.
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.5
+ * @version 1.7.6
  * @since 1.7.0
  */
 public final class CoreDumpStrategy implements DumpStrategy {
+
+    private static final Logger LOG = WatchdogLogger.forClass(CoreDumpStrategy.class);
 
     @Override public DumpType type() { return DumpType.CORE; }
     @Override public String  name() { return "CoreDump-J9orGcore"; }
@@ -51,12 +55,12 @@ public final class CoreDumpStrategy implements DumpStrategy {
             Class.forName("com.ibm.jvm.Dump")
                  .getMethod("SystemDump")
                  .invoke(null);
-            System.out.println("[OomWatchdog][Dump] CORE (J9 SystemDump) triggered; expected ~ " + path);
+            WatchdogLogger.info(LOG, "CORE (J9 SystemDump) triggered; expected ~ {0}", path);
             return path + "_j9.dmp";
         } catch (ClassNotFoundException e) {
             return null;
         } catch (Exception e) {
-            System.err.println("[OomWatchdog][Dump] J9 SystemDump error: " + e.getMessage());
+            WatchdogLogger.warning(LOG, e, "J9 SystemDump failed: {0}", e.getMessage());
             return null;
         }
     }
@@ -64,7 +68,7 @@ public final class CoreDumpStrategy implements DumpStrategy {
     private static String tryGcore(String outputPath) {
         long pid = JvmPlatform.PID;
         if (pid < 0) {
-            System.err.println("[OomWatchdog][Dump] CORE: cannot determine PID, skipping gcore.");
+            WatchdogLogger.warning(LOG, "CORE dump skipped: cannot determine PID.");
             return null;
         }
 
@@ -74,7 +78,7 @@ public final class CoreDumpStrategy implements DumpStrategy {
         try {
             safePath = new File(outputPath).getCanonicalPath();
         } catch (java.io.IOException e) {
-            System.err.println("[OomWatchdog][Dump] CORE: invalid output path: " + e.getMessage());
+            WatchdogLogger.warning(LOG, e, "CORE: invalid output path: {0}", e.getMessage());
             return null;
         }
 
@@ -98,15 +102,15 @@ public final class CoreDumpStrategy implements DumpStrategy {
             boolean finished = proc.waitFor(60, java.util.concurrent.TimeUnit.SECONDS);
             if (!finished) {
                 proc.destroyForcibly();
-                System.err.println("[OomWatchdog][Dump] gcore timed out after 60 s.");
+                WatchdogLogger.warning(LOG, "gcore timed out after 60 s for path: {0}", safePath);
                 return null;
             }
             int exit = proc.exitValue();
             if (exit == 0) {
-                System.out.println("[OomWatchdog][Dump] CORE (gcore): " + safePath);
+                WatchdogLogger.info(LOG, "CORE dump written via gcore: {0}", safePath);
                 return new File(safePath).getAbsolutePath();
             }
-            System.err.println("[OomWatchdog][Dump] gcore exit " + exit + ": " + out);
+            WatchdogLogger.warning(LOG, "gcore exited {0} for path [{1}]: {2}", exit, safePath, out);
             return null;
         } catch (java.io.IOException e) {
             // gcore not on PATH – expected on many systems

@@ -99,7 +99,7 @@ import java.util.logging.Logger;
  * </table>
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.5
+ * @version 1.7.6
  * @since 1.7.3
  * @see TlsConfig
  * @see OomWatchdog#getLastSnapshot()
@@ -775,10 +775,31 @@ public final class MetricsHttpServer {
     }
 
     private static String escapeJson(String s) {
-        return s.replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-                .replace("\r", "\\r")
-                .replace("\t", "\\t");
+        // Escape all JSON-unsafe characters:
+        // - backslash and double-quote (structural)
+        // - standard whitespace control chars
+        // - remaining C0 control characters U+0000–U+001F (CWE-116 / malformed JSON)
+        // - U+2028 LINE SEPARATOR and U+2029 PARAGRAPH SEPARATOR (JS string terminators)
+        StringBuilder sb = new StringBuilder(s.length() + 8);
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            switch (c) {
+                case '\\': sb.append("\\\\"); break;
+                case '"':  sb.append("\\\""); break;
+                case '\n': sb.append("\\n");  break;
+                case '\r': sb.append("\\r");  break;
+                case '\t': sb.append("\\t");  break;
+                case '\b': sb.append("\\b");  break;
+                case '\f': sb.append("\\f");  break;
+                default:
+                    if (c < 0x20 || c == '\u2028' || c == '\u2029') {
+                        // Encode as \\uXXXX to keep JSON valid
+                        sb.append(String.format("\\u%04x", (int) c));
+                    } else {
+                        sb.append(c);
+                    }
+            }
+        }
+        return sb.toString();
     }
 }
