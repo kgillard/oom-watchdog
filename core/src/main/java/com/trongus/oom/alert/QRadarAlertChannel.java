@@ -133,9 +133,14 @@ public final class QRadarAlertChannel implements AlertChannel {
 
         StringBuilder attrs = new StringBuilder();
         attrs.append("sev=").append(sev).append('\t');
-        attrs.append("cat=JVM_OOM_Risk").append('\t');
+        // Use per-target leef-category override when present, otherwise fall back to default
+        String cat = (snap.getLeefCategory() != null) ? snap.getLeefCategory() : "JVM_OOM_Risk";
+        attrs.append("cat=").append(sanitise(cat)).append('\t');
         if (snap.getTargetName() != null) {
             attrs.append("targetJvm=").append(sanitise(snap.getTargetName())).append('\t');
+        }
+        if (snap.getLeefTags() != null) {
+            attrs.append("tags=").append(sanitise(snap.getLeefTags())).append('\t');
         }
         attrs.append("process=").append(sanitise(snap.getProcessName())).append('\t');
         attrs.append("heapUsedMB=").append(snap.getHeapUsedBytes() / mb).append('\t');

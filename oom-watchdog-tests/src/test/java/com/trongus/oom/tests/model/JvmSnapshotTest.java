@@ -280,6 +280,26 @@ public class JvmSnapshotTest {
         assertEquals(snapshot.getPoolUsedBytes().size(), copy.getPoolUsedBytes().size());
     }
 
+    /** leefCategory and leefTags round-trip through toBuilder must be preserved. */
+    @Test
+    public void testToBuilderPreservesLeefFields() {
+        JvmSnapshot s = new JvmSnapshot.Builder()
+                .leefCategory("JVM_OOM_hostcontext")
+                .leefTags("env=prod,team=platform")
+                .build();
+        JvmSnapshot copy = s.toBuilder().build();
+        assertEquals("JVM_OOM_hostcontext", copy.getLeefCategory());
+        assertEquals("env=prod,team=platform", copy.getLeefTags());
+    }
+
+    /** leefCategory and leefTags are null by default. */
+    @Test
+    public void testLeefFieldsNullByDefault() {
+        JvmSnapshot s = new JvmSnapshot.Builder().build();
+        assertNull(s.getLeefCategory());
+        assertNull(s.getLeefTags());
+    }
+
     /** Using toBuilder to override a single field must leave all others unchanged. */
     @Test
     public void testToBuilderPartialOverride() {

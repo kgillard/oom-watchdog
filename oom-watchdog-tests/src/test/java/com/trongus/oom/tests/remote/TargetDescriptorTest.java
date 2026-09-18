@@ -71,6 +71,35 @@ public class TargetDescriptorTest {
         assertFalse(str.contains("superSecretPass"));
     }
 
+    @Test
+    public void testLeefCustomisation() {
+        TargetDescriptor td = TargetDescriptor.builder("hostcontext", "service:jmx:rmi:///jndi/rmi://localhost:7777/jmxrmi")
+                .leefCategory("JVM_OOM_QRadar_hostcontext")
+                .leefTags("env=prod,team=platform")
+                .build();
+
+        assertEquals("JVM_OOM_QRadar_hostcontext", td.getLeefCategory());
+        assertEquals("env=prod,team=platform", td.getLeefTags());
+    }
+
+    @Test
+    public void testLeefFieldsNullByDefault() {
+        TargetDescriptor td = TargetDescriptor.builder("hostcontext", "service:jmx:rmi:///jndi/rmi://localhost:7777/jmxrmi")
+                .build();
+
+        assertNull(td.getLeefCategory());
+        assertNull(td.getLeefTags());
+    }
+
+    @Test
+    public void testBlankLeefCategoryTreatedAsNull() {
+        TargetDescriptor td = TargetDescriptor.builder("hostcontext", "service:jmx:rmi:///jndi/rmi://localhost:7777/jmxrmi")
+                .leefCategory("   ")
+                .build();
+
+        assertNull(td.getLeefCategory());
+    }
+
     @Test(expected = IllegalArgumentException.class)
     public void testBlankNameThrows() {
         TargetDescriptor.builder("   ", "service:jmx:rmi:///jndi/rmi://localhost:7777/jmxrmi");

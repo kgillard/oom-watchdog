@@ -54,6 +54,20 @@ public final class TargetDescriptor {
     private final Set<DumpType> dumpTypes;
     private final String        dumpDirectory;
 
+    /**
+     * Optional LEEF {@code cat} override sent in the QRadar syslog event for this target.
+     * When {@code null} the channel uses its built-in default ({@code "JVM_OOM_Risk"}).
+     */
+    private final String        leefCategory;
+
+    /**
+     * Optional free-text tags included as the {@code tags} attribute in the LEEF event.
+     * Intended for environment labels, team identifiers, or topology context
+     * (e.g. {@code "env=prod,team=platform,region=us-east-1"}).
+     * {@code null} when not configured.
+     */
+    private final String        leefTags;
+
     private TargetDescriptor(Builder b) {
         this.name           = b.name;
         this.jmxUrl         = b.jmxUrl;
@@ -65,6 +79,8 @@ public final class TargetDescriptor {
         this.pollIntervalMs = b.pollIntervalMs;
         this.dumpTypes      = Collections.unmodifiableSet(EnumSet.copyOf(b.dumpTypes));
         this.dumpDirectory  = b.dumpDirectory != null ? b.dumpDirectory : "./dumps/" + b.name;
+        this.leefCategory   = b.leefCategory;
+        this.leefTags       = b.leefTags;
     }
 
     /**
@@ -168,6 +184,27 @@ public final class TargetDescriptor {
         return dumpDirectory;
     }
 
+    /**
+     * Returns the optional LEEF {@code cat} attribute override for QRadar events from
+     * this target, or {@code null} if the channel default ({@code "JVM_OOM_Risk"}) should
+     * be used.
+     *
+     * @return leef-category string or {@code null}
+     */
+    public String getLeefCategory() {
+        return leefCategory;
+    }
+
+    /**
+     * Returns the optional LEEF {@code tags} attribute for QRadar events from this target,
+     * or {@code null} if no tags are configured.
+     *
+     * @return leef-tags string or {@code null}
+     */
+    public String getLeefTags() {
+        return leefTags;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
@@ -182,13 +219,16 @@ public final class TargetDescriptor {
                Objects.equals(username, that.username) &&
                Objects.equals(password, that.password) &&
                Objects.equals(dumpTypes, that.dumpTypes) &&
-               Objects.equals(dumpDirectory, that.dumpDirectory);
+               Objects.equals(dumpDirectory, that.dumpDirectory) &&
+               Objects.equals(leefCategory, that.leefCategory) &&
+               Objects.equals(leefTags, that.leefTags);
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(name, jmxUrl, username, password, warnThreshold,
-                            critThreshold, gcThreshold, pollIntervalMs, dumpTypes, dumpDirectory);
+                            critThreshold, gcThreshold, pollIntervalMs, dumpTypes,
+                            dumpDirectory, leefCategory, leefTags);
     }
 
     @Override
@@ -204,6 +244,8 @@ public final class TargetDescriptor {
                 ", pollIntervalMs=" + pollIntervalMs +
                 ", dumpTypes=" + dumpTypes +
                 ", dumpDirectory='" + dumpDirectory + '\'' +
+                ", leefCategory=" + (leefCategory != null ? "'" + leefCategory + "'" : "null") +
+                ", leefTags=" + (leefTags != null ? "'" + leefTags + "'" : "null") +
                 '}';
     }
 
@@ -222,6 +264,8 @@ public final class TargetDescriptor {
         private long          pollIntervalMs = DEFAULT_POLL_INTERVAL_MS;
         private Set<DumpType> dumpTypes      = EnumSet.noneOf(DumpType.class);
         private String        dumpDirectory;
+        private String        leefCategory;
+        private String        leefTags;
 
         /**
          * Initialises builder with mandatory target name and JMX service URL.
@@ -337,6 +381,35 @@ public final class TargetDescriptor {
          */
         public Builder dumpDirectory(String dir) {
             this.dumpDirectory = (dir != null && !dir.trim().isEmpty()) ? dir.trim() : null;
+            return this;
+        }
+
+        /**
+         * Sets the LEEF {@code cat} attribute override emitted in QRadar syslog events
+         * for this target.  When omitted (or set to {@code null}/blank) the channel
+         * uses its built-in default value ({@code "JVM_OOM_Risk"}).
+         *
+         * <p>Example: {@code leefCategory("JVM_OOM_QRadar_hostcontext")}
+         *
+         * @param category free-text category string; {@code null} or blank = use default
+         * @return {@code this}
+         */
+        public Builder leefCategory(String category) {
+            this.leefCategory = (category != null && !category.trim().isEmpty()) ? category.trim() : null;
+            return this;
+        }
+
+        /**
+         * Sets the LEEF {@code tags} attribute emitted in QRadar syslog events for this
+         * target.  Intended for environment labels, team names, or topology context.
+         *
+         * <p>Example: {@code leefTags("env=prod,team=platform,region=us-east-1")}
+         *
+         * @param tags free-text tags string; {@code null} or blank = attribute omitted
+         * @return {@code this}
+         */
+        public Builder leefTags(String tags) {
+            this.leefTags = (tags != null && !tags.trim().isEmpty()) ? tags.trim() : null;
             return this;
         }
 

@@ -312,6 +312,8 @@ A complete example file is provided at
 | `target.<name>.dump-dir` | No | `./dumps/<name>` | Filesystem directory where dump files are written |
 | `target.<name>.username` | No | _(none)_ | JMX authentication username |
 | `target.<name>.password` | No | _(none)_ | JMX authentication password |
+| `target.<name>.leef-category` | No | `JVM_OOM_Risk` | Overrides the LEEF `cat` attribute in every QRadar syslog event sent for this target. Use to distinguish components in QRadar **Log Activity** searches and custom rules |
+| `target.<name>.leef-tags` | No | _(omitted)_ | Adds a `tags` attribute to the LEEF event. Recommended format: `key=value,key=value` (e.g. `env=prod,team=platform,region=us-east-1`) |
 
 > **Constraint:** `warn` must be strictly less than `crit`. Providing equal values or
 > `warn >= crit` causes a startup validation error for that target.
@@ -658,8 +660,10 @@ new QRadarAlertChannel("siem.corp.com", 6514, Transport.TCP)  // TLS proxy
 **LEEF 2.0 event format** (single line on the wire; `<TAB>` = literal tab delimiter):
 
 ```
-<13>Sep 17 08:00:00 prod-host LEEF:2.0|IBM|OomWatchdog|1.1|OOM_CRITICAL|sev=9<TAB>cat=JVM_OOM_Risk<TAB>process=98765@prod-host<TAB>heapUsedMB=921<TAB>heapMaxMB=1024<TAB>heapPct=90.0<TAB>nonHeapUsedMB=128<TAB>gcOverheadPct=23.8<TAB>totalGcTimeMs=14300<TAB>postGcGrowth=42.30 MB/h<TAB>riskLevel=CRITICAL<TAB>msg=...
+<13>Sep 17 08:00:00 prod-host LEEF:2.0|IBM|OomWatchdog|1.1|OOM_CRITICAL|sev=9<TAB>cat=JVM_OOM_Risk<TAB>targetJvm=hostcontext<TAB>tags=env=prod,component=hostcontext<TAB>process=98765@prod-host<TAB>heapUsedMB=921<TAB>heapMaxMB=1024<TAB>heapPct=90.0<TAB>nonHeapUsedMB=128<TAB>gcOverheadPct=23.8<TAB>totalGcTimeMs=14300<TAB>postGcGrowth=42.30 MB/h<TAB>riskLevel=CRITICAL<TAB>msg=...
 ```
+
+`cat` and `tags` are per-target overrides controlled by `leef-category` and `leef-tags` in `targets.properties`. When not set, `cat` defaults to `JVM_OOM_Risk` and `tags` is omitted entirely.
 
 | `sev` value | Risk level |
 |------------|------------|

@@ -175,6 +175,18 @@ public final class JvmSnapshot {
      */
     private final String heapDumpPath;
 
+    /**
+     * Optional LEEF {@code cat} override sourced from the target's
+     * {@code leef-category} property, or {@code null} to use the channel default.
+     */
+    private final String leefCategory;
+
+    /**
+     * Optional LEEF {@code tags} attribute sourced from the target's
+     * {@code leef-tags} property, or {@code null} when not configured.
+     */
+    private final String leefTags;
+
     // ── constructor ───────────────────────────────────────────────────────────
 
     /**
@@ -203,6 +215,8 @@ public final class JvmSnapshot {
         this.riskLevel                 = b.riskLevel;
         this.diagnosisNotes            = b.diagnosisNotes;
         this.heapDumpPath              = b.heapDumpPath;
+        this.leefCategory              = b.leefCategory;
+        this.leefTags                  = b.leefTags;
     }
 
     // ── accessors ─────────────────────────────────────────────────────────────
@@ -273,6 +287,18 @@ public final class JvmSnapshot {
      */
     public String     getHeapDumpPath()              { return heapDumpPath; }
 
+    /**
+     * @return LEEF {@code cat} override from the target's {@code leef-category} property,
+     *         or {@code null} to use the channel default ({@code "JVM_OOM_Risk"})
+     */
+    public String     getLeefCategory()              { return leefCategory; }
+
+    /**
+     * @return LEEF {@code tags} value from the target's {@code leef-tags} property,
+     *         or {@code null} if not configured
+     */
+    public String     getLeefTags()                  { return leefTags; }
+
     // ── wither ────────────────────────────────────────────────────────────────
 
     /**
@@ -319,6 +345,8 @@ public final class JvmSnapshot {
         b.riskLevel                 = this.riskLevel;
         b.diagnosisNotes            = this.diagnosisNotes;
         b.heapDumpPath              = this.heapDumpPath;
+        b.leefCategory              = this.leefCategory;
+        b.leefTags                  = this.leefTags;
         return b;
     }
 
@@ -357,6 +385,8 @@ public final class JvmSnapshot {
         private OomRiskLevel riskLevel            = OomRiskLevel.OK;
         private String  diagnosisNotes            = "";
         private String  heapDumpPath;
+        private String  leefCategory;
+        private String  leefTags;
 
         /** @param v target name (e.g. "hostcontext"); @return {@code this} */
         public Builder targetName(String v)                { this.targetName = v; return this; }
@@ -407,6 +437,10 @@ public final class JvmSnapshot {
         public Builder diagnosisNotes(String v)            { this.diagnosisNotes = v; return this; }
         /** @param v semicolon-separated dump paths; @return {@code this} */
         public Builder heapDumpPath(String v)              { this.heapDumpPath = v; return this; }
+        /** @param v LEEF cat override (null = use channel default); @return {@code this} */
+        public Builder leefCategory(String v)              { this.leefCategory = v; return this; }
+        /** @param v LEEF tags string (null = omit attribute); @return {@code this} */
+        public Builder leefTags(String v)                  { this.leefTags = v; return this; }
 
         /**
          * Constructs and returns an immutable {@link JvmSnapshot} from this builder.

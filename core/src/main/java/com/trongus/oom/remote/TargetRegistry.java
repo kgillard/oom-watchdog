@@ -246,6 +246,16 @@ public final class TargetRegistry {
             if (dumpDir != null && !dumpDir.isEmpty()) {
                 b.dumpDirectory(dumpDir);
             }
+            // Optional LEEF customisation
+            String leefCategory = p.get("leef-category");
+            if (leefCategory != null && !leefCategory.isEmpty()) {
+                b.leefCategory(leefCategory);
+            }
+
+            String leefTags = p.get("leef-tags");
+            if (leefTags != null && !leefTags.isEmpty()) {
+                b.leefTags(leefTags);
+            }
 
             descriptors.add(b.build());
         }

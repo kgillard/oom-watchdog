@@ -68,6 +68,32 @@ public class TargetRegistryTest {
         assertEquals("secret", was.getPassword());
     }
 
+    @Test
+    public void testLeefFieldsParsedFromProperties() throws IOException {
+        String content =
+                "target.hostcontext.jmx-url       = service:jmx:rmi:///jndi/rmi://localhost:7777/jmxrmi\n" +
+                "target.hostcontext.leef-category = JVM_OOM_QRadar_hostcontext\n" +
+                "target.hostcontext.leef-tags     = env=prod,team=platform,region=us-east-1\n";
+
+        List<TargetDescriptor> targets = TargetRegistry.loadFromString(content);
+        assertEquals(1, targets.size());
+
+        TargetDescriptor td = targets.get(0);
+        assertEquals("JVM_OOM_QRadar_hostcontext", td.getLeefCategory());
+        assertEquals("env=prod,team=platform,region=us-east-1", td.getLeefTags());
+    }
+
+    @Test
+    public void testLeefFieldsAbsentWhenNotInProperties() throws IOException {
+        String content = "target.hostcontext.jmx-url = service:jmx:rmi:///jndi/rmi://localhost:7777/jmxrmi\n";
+
+        List<TargetDescriptor> targets = TargetRegistry.loadFromString(content);
+        TargetDescriptor td = targets.get(0);
+
+        assertNull(td.getLeefCategory());
+        assertNull(td.getLeefTags());
+    }
+
     @Test(expected = IllegalArgumentException.class)
     public void testMissingJmxUrlThrows() throws IOException {
         String invalid = "target.hostcontext.warn = 0.75\n";

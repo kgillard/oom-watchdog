@@ -204,6 +204,8 @@ public final class JmxDiagnosticsCollector implements JvmDiagnosticsCollector, C
                     .postGcHeapGrowthRatePerMs(growthRate)
                     .riskLevel(OomRiskLevel.OK)
                     .diagnosisNotes(notes)
+                    .leefCategory(descriptor.getLeefCategory())
+                    .leefTags(descriptor.getLeefTags())
                     .build();
 
         } catch (Exception e) {
@@ -292,6 +294,8 @@ public final class JmxDiagnosticsCollector implements JvmDiagnosticsCollector, C
                 .riskLevel(OomRiskLevel.OOM_FIRING)
                 .diagnosisNotes("[UNREACHABLE] Target JVM '" + descriptor.getName()
                         + "' could not be reached via JMX: " + safeReason)
+                .leefCategory(descriptor.getLeefCategory())
+                .leefTags(descriptor.getLeefTags())
                 .build();
     }
 
