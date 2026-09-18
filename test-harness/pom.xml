@@ -29,6 +29,32 @@
         <version>3.13.0</version>
       </plugin>
 
+      <!-- Javadoc JAR: test-harness-javadoc.jar -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-javadoc-plugin</artifactId>
+        <version>3.12.0</version>
+        <executions>
+          <execution>
+            <id>attach-javadoc</id>
+            <phase>package</phase>
+            <goals><goal>jar</goal></goals>
+            <configuration>
+              <finalName>test-harness</finalName>
+              <quiet>true</quiet>
+              <doclint>all,-missing</doclint>
+              <windowtitle>OOM Watchdog Test Harness ${project.version} API</windowtitle>
+              <doctitle>OOM Watchdog Test Harness ${project.version} API</doctitle>
+              <header><![CDATA[<b>OOM Watchdog Test Harness ${project.version}</b>]]></header>
+              <bottom><![CDATA[Copyright &copy; 2025 Kristen Gillard. All rights reserved.]]></bottom>
+              <links>
+                <link>https://docs.oracle.com/en/java/javase/11/docs/api/</link>
+              </links>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
       <!-- Fat-jar: test-harness.jar -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>

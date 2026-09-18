@@ -14,6 +14,7 @@ import com.trongus.oom.logging.WatchdogLogger;
 import com.trongus.oom.monitor.OomWatchdog;
 import com.trongus.oom.monitor.RiskAssessor;
 import com.trongus.oom.monitor.ThresholdRiskAssessor;
+import com.trongus.oom.monitor.MetricsHttpServer;
 import com.trongus.oom.remote.TargetDescriptor;
 import com.trongus.oom.remote.TargetRegistry;
 import com.trongus.oom.remote.WatchdogDaemon;
@@ -312,6 +313,21 @@ public final class WatchdogMain {
 
         // Launch watchdog monitoring loop
         watchdog.start();
+
+        // ── Metrics HTTP server (optional dashboard support) ──────────────────
+        if (cli.metricsPort > 0) {
+            try {
+                MetricsHttpServer metricsServer = new MetricsHttpServer(watchdog, cli.metricsPort, false);
+                metricsServer.start();
+                Runtime.getRuntime().addShutdownHook(
+                        new Thread(metricsServer::stop, "oom-metrics-shutdown"));
+            } catch (Exception e) {
+                WatchdogLogger.warning(LOG, e,
+                        "Failed to start metrics HTTP server on port {0}: {1}",
+                        cli.metricsPort, e.getMessage());
+            }
+        }
+
         printStartupSummary(config, cli);
 
         // ── Test mode ─────────────────────────────────────────────────────────
@@ -402,6 +418,10 @@ public final class WatchdogMain {
         System.out.printf( "║  Log file                : %s%n",      cli.logFile);
         System.out.printf( "║  Log level               : %s%n",      config.getLogLevel().getName());
         System.out.printf( "║  Test mode               : %s%n",      cli.testMode ? "YES" : "no");
+        if (cli.metricsPort > 0) {
+            System.out.printf("║  Metrics endpoint        : http://localhost:%d/metrics%n", cli.metricsPort);
+            System.out.printf("║  Dashboard               : open dashboard.html in browser%n");
+        }
         System.out.println("╚══════════════════════════════════════════════════════════╝");
         System.out.println();
         System.out.println("Press Ctrl-C to stop.");
@@ -449,6 +469,8 @@ public final class WatchdogMain {
           + "  --qradar-host    <host>       QRadar syslog host (disables QRadar if omitted)\n"
           + "  --qradar-port    <port>       QRadar syslog port (default: 514)\n"
           + "  --qradar-tcp                  Use TCP instead of UDP for QRadar syslog\n"
+          + "  --metrics-port   <port>       Expose JSON metrics on http://localhost:<port>/metrics\n"
+          + "                                for use with dashboard.html (disabled if omitted)\n"
           + "  --test-mode                   Run OOM simulator to exercise all alert levels\n"
           + "  --test-leak-secs <s>          Slow-leak phase seconds in test mode (default: 20)\n"
           + "  --help                        Print this help and exit\n"
@@ -461,6 +483,10 @@ public final class WatchdogMain {
           + "       --crit-threshold 0.70 \\\n"
           + "       --poll-ms 1000 \\\n"
           + "       --test-leak-secs 10\n"
+          + "\n"
+          + "Dashboard (real-time browser UI):\n"
+          + "  java -Xmx256m -jar oom-watchdog.jar --metrics-port 9090 --poll-ms 2000\n"
+          + "  Then open dashboard.html in a browser and set server URL to http://localhost:9090\n"
         );
     }
 
@@ -531,6 +557,9 @@ public final class WatchdogMain {
         /** Duration of the simulator slow-leak phase in seconds. */
         long testLeakSecs = 20L;
 
+        /** TCP port for the metrics HTTP server; 0 = disabled. */
+        int metricsPort = 0;
+
         /** Whether the help flag was requested. */
         boolean help = false;
 
@@ -561,6 +590,7 @@ public final class WatchdogMain {
                     case "--poll-ms":       c.pollMs         = nextLong(list, i++, arg);     break;
                     case "--test-leak-secs":c.testLeakSecs   = nextLong(list, i++, arg);     break;
                     case "--qradar-port":   c.qradarPort     = nextInt(list, i++, arg);      break;
+                    case "--metrics-port":  c.metricsPort    = nextInt(list, i++, arg);      break;
                     case "--dump-dir":      c.dumpDir        = nextStr(list, i++, arg);      break;
                     case "--log-file":      c.logFile        = nextStr(list, i++, arg);      break;
                     case "--log-level":     c.logLevel       = parseLogLevel(nextStr(list, i++, arg)); break;

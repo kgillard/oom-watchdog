@@ -120,6 +120,7 @@ chmod +x oom-watchdog-installer.sh
 | `--qradar-host <host>` | _(disabled)_ | QRadar / syslog target hostname |
 | `--qradar-port <port>` | `514` | QRadar / syslog target port (1–65535) |
 | `--qradar-tcp` | _(off)_ | Use TCP instead of UDP for QRadar |
+| `--metrics-port <port>` | _(disabled)_ | Start JSON metrics HTTP server for `dashboard.html` |
 | `--test-mode` | _(off)_ | Run OomSimulator and exit |
 | `--daemon` | _(off)_ | Run in multi-target daemon mode monitoring external JVMs via JMX |
 | `--targets-file <path>` | `./targets.properties` | Path to targets configuration file in daemon mode |
@@ -741,13 +742,31 @@ In the **Add a Log Source** wizard, fill in the fields as follows:
 
 ##### Step 4 — Configure the Syslog protocol parameters
 
-After selecting the `Syslog` protocol, a second panel appears:
+After selecting the `Syslog` protocol, a second panel appears with a single required field:
 
 | Field | Value | Notes |
 |---|---|---|
-| **Log Source Identifier** | IP address or hostname of the watchdog host | Must match the source IP that QRadar sees on the arriving UDP/TCP packets |
-| **Listen Port** | `514` (or your `--qradar-port` value) | Must match the port OOM Watchdog is sending to |
-| **Protocol** | `UDP` or `TCP` | Match `--qradar-tcp` flag: omitted = UDP, present = TCP |
+| **Log Source Identifier** | IP address or hostname of the watchdog host | Must match the source IP QRadar sees on the arriving UDP/TCP packets |
+
+> **Why there is no port or transport field here:**
+> The `Syslog` protocol in QRadar is **passive** — QRadar's own syslog listener (ECS) is
+> already accepting UDP and TCP on port 514 (and TCP on port 514) at the system level.
+> The log source does **not** open its own socket; it simply claims events that arrive
+> from the identified source IP.  Port and transport are therefore configured at the
+> system/firewall level, not per log source.
+
+> **If you need a non-standard port or an isolated listener**, use
+> **Protocol Configuration: `Syslog Redirect`** instead of `Syslog`.
+> That protocol creates a dedicated listener and exposes two additional fields:
+>
+> | Field | Value | Notes |
+> |---|---|---|
+> | **Listen Port** | `5514` (or your `--qradar-port` value) | The port this listener binds to |
+> | **Protocol** | `UDP` or `TCP` | Match `--qradar-tcp`: omitted = UDP, present = TCP |
+>
+> Choosing `Syslog Redirect` requires `--qradar-port` in OOM Watchdog to match the port
+> you enter here, and the port must be open on the QRadar Event Processor's firewall (see
+> Step 1).
 
 > **Log Source Identifier** is the key field for de-duplication. If multiple hosts run OOM
 > Watchdog, create one log source per host, each with a distinct identifier.
@@ -1130,6 +1149,125 @@ chmod +x make-installer.sh
 
 ---
 
+## Real-time Dashboard
+
+OOM Watchdog includes a self-contained browser dashboard (`dashboard.html`) that displays
+live JVM health metrics by polling the built-in metrics HTTP endpoint.
+
+### Enabling the metrics endpoint
+
+Pass `--metrics-port <port>` when starting OOM Watchdog:
+
+```bash
+java -Xmx256m -jar oom-watchdog.jar \
+    --metrics-port 9090 \
+    --poll-ms 2000 \
+    --warn-threshold 0.80 \
+    --crit-threshold 0.90
+```
+
+This starts a lightweight HTTP server on `http://localhost:9090` alongside the normal
+watchdog. The server exposes two endpoints:
+
+| Endpoint | Method | Response |
+|---|---|---|
+| `/metrics` | GET | JSON object with the current JVM snapshot (see below) |
+| `/` | GET | 302 redirect to `/metrics` |
+
+The server binds to **loopback only** (`127.0.0.1`) by default. It is not exposed on the
+network.
+
+### Opening the dashboard
+
+`dashboard.html` is a fully self-contained static HTML file — no web server, no build step,
+no dependencies. Open it directly from your filesystem:
+
+```bash
+# macOS
+open dashboard.html
+
+# Linux
+xdg-open dashboard.html
+
+# Windows
+start dashboard.html
+```
+
+Or serve it via any static file server if you want to access it remotely:
+
+```bash
+python3 -m http.server 8080
+# then open http://<your-host>:8080/dashboard.html
+```
+
+### Using the dashboard
+
+1. In the **Server URL** field at the top, enter `http://localhost:9090` (or the host/port you used).
+2. Click **Connect**.
+3. The dashboard polls `/metrics` every 2 seconds and displays:
+
+| Panel | What it shows |
+|---|---|
+| **Heap Usage** | Used MB / Max MB + percentage gauge |
+| **GC Overhead** | CPU fraction spent in GC + colour-coded gauge |
+| **Young Gen / Nursery** | Young-gen pool usage gauge (G1, Shenandoah, ZGC) |
+| **Non-Heap (Metaspace)** | Metaspace + code cache MB |
+| **JVM Process** | Process name, uptime, critical threshold, last poll time |
+| **Risk Level** | Current `OK` / `WARNING` / `CRITICAL` / `OOM_FIRING` with colour |
+| **Diagnosis** | Full assessment text from `ThresholdRiskAssessor` |
+| **Memory Pools** | All JVM memory pool usages in MB |
+| **GC Collections** | Per-collector invocation counts |
+| **Alert History** | Rolling log of the last 50 WARNING/CRITICAL/OOM_FIRING events |
+
+### CORS — accessing a remote JVM
+
+The metrics server includes `Access-Control-Allow-Origin: *` on every response, so
+`dashboard.html` can poll a watchdog running on a different host — just enter
+`http://<remote-host>:<port>` in the Server URL field.
+
+> **Security:** The metrics endpoint has no authentication. Only bind to loopback when
+> the watchdog host is publicly reachable. If you need network access, place it behind
+> a reverse proxy with authentication (e.g. nginx `auth_basic`).
+
+### JSON metrics schema
+
+The `/metrics` endpoint returns:
+
+```json
+{
+  "timestampMs":      1234567890123,
+  "processName":      "12345@myhost",
+  "targetName":       null,
+  "riskLevel":        "WARNING",
+  "heapUsedMB":       512.30,
+  "heapMaxMB":        1024.00,
+  "heapUsedPct":      50.03,
+  "nonHeapUsedMB":    64.10,
+  "gcOverheadPct":    3.40,
+  "totalGcTimeMs":    1230,
+  "jvmUptimeMs":      3600000,
+  "nurseryUsedMB":    128.00,
+  "nurseryUsedPct":   12.50,
+  "critThresholdPct": 90.00,
+  "diagnosisNotes":   "[Assessment] WARNING – …",
+  "heapDumpPath":     null,
+  "gcCounts":         { "G1 Young Generation": 42 },
+  "poolUsedMB":       { "G1 Eden Space": 64.00 }
+}
+```
+
+All numeric fields are rounded to 2 decimal places. `heapDumpPath` is `null` unless a
+dump was taken in the current episode. `nurseryUsedMB` / `nurseryUsedPct` are `0` when
+no young-gen pool is detected (e.g. ZGC or Epsilon GC).
+
+### Daemon mode + dashboard
+
+In `--daemon` mode the watchdog monitors multiple remote JVMs. The metrics endpoint
+reflects the **most recently assessed** snapshot across all targets. For per-target
+dashboards, start separate watchdog processes each with their own `--metrics-port`.
+
+---
+
 ## Project layout
 
 ```
@@ -1137,18 +1275,19 @@ oom-watchdog/
 ├── pom.xml                          Parent POM (modules: core, test-harness, oom-watchdog-tests)
 ├── ARCHITECTURE.md                  Architecture with Mermaid diagrams
 ├── README.md                        This file
-├── make-installer.sh                Generates oom-watchdog-installer.sh
+├── dashboard.html                   Self-contained real-time JVM dashboard (open in browser)
+├── make-installer.sh                Generates oom-watchdog-installer.sh from built JARs
 ├── core/                            → oom-watchdog.jar (fat jar)
 │   └── src/main/java/com/trongus/oom/
-│       ├── WatchdogMain.java        CLI entry point
+│       ├── WatchdogMain.java        CLI entry point + --metrics-port wiring
 │       ├── alert/                   AlertChannel + 6 impls + AlertFormatter (i18n)
 │       ├── collector/               MxBeanDiagnosticsCollector
 │       ├── config/                  WatchdogConfig (immutable builder, locale)
-│       ├── diagnosis/               OomCause + OomCauseCategory + OomCauseAnalyser (NEW)
+│       ├── diagnosis/               OomCause + OomCauseCategory + OomCauseAnalyser
 │       ├── dump/                    CompositeDumpService + 6 strategies
-│       ├── i18n/                    Messages (UTF-8 ResourceBundle wrapper) (NEW)
+│       ├── i18n/                    Messages (UTF-8 ResourceBundle wrapper)
 │       ├── model/                   JvmSnapshot + OomRiskLevel
-│       ├── monitor/                 OomWatchdog + ThresholdRiskAssessor
+│       ├── monitor/                 OomWatchdog + ThresholdRiskAssessor + MetricsHttpServer
 │       ├── platform/                JvmPlatform (static detection)
 │       └── test/                    OomSimulator
 │   └── src/main/resources/com/trongus/oom/i18n/

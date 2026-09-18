@@ -30,7 +30,7 @@ import java.util.logging.Logger;
  * in priority order, falling back gracefully across every JVM vendor and
  * JDK version (8 through 26+).
  *
- * <h3>Design rationale (Open/Closed &amp; Strategy pattern)</h3>
+ * <h2>Design rationale (Open/Closed &amp; Strategy pattern)</h2>
  * <p>Rather than encoding vendor-specific branches inside a single monolithic
  * method, this class delegates all dump mechanics to interchangeable
  * {@link DumpStrategy} implementations.  Adding support for a new JVM vendor
@@ -38,8 +38,9 @@ import java.util.logging.Logger;
  * line addition to the chain built by {@link #buildChains()} — no existing code
  * needs to change.</p>
  *
- * <h3>Strategy chains per dump type</h3>
- * <table border="1" summary="Strategy priority order per DumpType">
+ * <h2>Strategy chains per dump type</h2>
+ * <table border="1">
+ *   <caption>Strategy priority order per DumpType</caption>
  *   <tr><th>Type</th><th>Priority order</th></tr>
  *   <tr><td>HEAP</td>
  *       <td>HotSpot MXBean → IBM J9 → GraalVM VMRuntime → memory-pool summary</td></tr>

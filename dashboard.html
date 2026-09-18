@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OOM Watchdog Dashboard</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0f1117;
+      --surface:   #1a1d27;
+      --border:    #2a2d3a;
+      --text:      #e4e6f0;
+      --muted:     #7a7e96;
+      --ok:        #22c55e;
+      --warn:      #f59e0b;
+      --crit:      #ef4444;
+      --oom:       #a855f7;
+      --accent:    #3b82f6;
+      --radius:    10px;
+    }
+
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+           font-size: 14px; line-height: 1.6; min-height: 100vh; }
+
+    header { background: var(--surface); border-bottom: 1px solid var(--border);
+             padding: 14px 24px; display: flex; align-items: center; gap: 16px; }
+    header h1 { font-size: 18px; font-weight: 700; letter-spacing: 0.3px; }
+    header .subtitle { color: var(--muted); font-size: 12px; }
+
+    .risk-badge { padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700;
+                  letter-spacing: 0.5px; text-transform: uppercase; }
+    .risk-OK       { background: #14532d; color: var(--ok); }
+    .risk-WARNING  { background: #78350f; color: var(--warn); }
+    .risk-CRITICAL { background: #7f1d1d; color: var(--crit); }
+    .risk-OOM_FIRING { background: #581c87; color: var(--oom); }
+    .risk-UNKNOWN  { background: #1e293b; color: var(--muted); }
+
+    .toolbar { padding: 12px 24px; display: flex; align-items: center; gap: 12px;
+               border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+    .toolbar label { color: var(--muted); font-size: 12px; }
+    .toolbar input[type=text] { background: var(--surface); border: 1px solid var(--border);
+                                 color: var(--text); border-radius: 6px; padding: 6px 10px;
+                                 font-size: 13px; width: 240px; }
+    .toolbar input[type=text]:focus { outline: none; border-color: var(--accent); }
+    .btn { background: var(--accent); color: #fff; border: none; border-radius: 6px;
+           padding: 7px 16px; font-size: 13px; cursor: pointer; font-weight: 600; }
+    .btn:hover { opacity: 0.85; }
+    .btn.stop { background: var(--crit); }
+    #status-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+    #status-dot.alive  { background: var(--ok); }
+    #status-dot.error  { background: var(--crit); }
+    #status-text { font-size: 12px; color: var(--muted); }
+
+    main { padding: 20px 24px; max-width: 1200px; margin: 0 auto; }
+
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-bottom: 20px; }
+
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; }
+    .card-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); margin-bottom: 8px; }
+    .card-value { font-size: 28px; font-weight: 700; line-height: 1.2; }
+    .card-sub   { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+    .gauge-wrap { margin-top: 10px; }
+    .gauge-bg   { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
+    .gauge-fill { height: 100%; border-radius: 4px; transition: width 0.4s ease, background 0.4s ease; width: 0%; background: var(--ok); }
+
+    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+    .info-row { font-size: 12px; color: var(--muted); }
+    .info-val { color: var(--text); font-weight: 600; }
+
+    .section-title { font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase;
+                     letter-spacing: 0.6px; margin-bottom: 10px; }
+
+    .diagnosis-box { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+                     padding: 14px 16px; font-size: 12px; color: var(--muted); line-height: 1.7;
+                     word-break: break-word; min-height: 52px; margin-bottom: 20px; }
+    .diagnosis-box span { color: var(--text); }
+
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th { text-align: left; color: var(--muted); font-weight: 600; padding: 6px 10px; border-bottom: 1px solid var(--border); }
+    td { padding: 6px 10px; border-bottom: 1px solid rgba(255,255,255,0.04); }
+    tr:last-child td { border-bottom: none; }
+    .table-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+                  overflow: hidden; margin-bottom: 20px; }
+    .table-card-header { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+
+    #alert-log { list-style: none; }
+    #alert-log li { padding: 7px 10px; border-radius: 6px; margin-bottom: 6px; font-size: 12px;
+                    display: flex; gap: 10px; align-items: flex-start; }
+    #alert-log .ts  { color: var(--muted); white-space: nowrap; flex-shrink: 0; }
+    #alert-log .msg { word-break: break-word; }
+    #alert-log li.lvl-WARNING  { background: #1c1507; border-left: 3px solid var(--warn); }
+    #alert-log li.lvl-CRITICAL { background: #1c0505; border-left: 3px solid var(--crit); }
+    #alert-log li.lvl-OOM_FIRING { background: #160b21; border-left: 3px solid var(--oom); }
+    #alert-log li.lvl-OK        { background: #051409; border-left: 3px solid var(--ok); }
+
+    footer { text-align: center; padding: 16px; color: var(--muted); font-size: 11px;
+             border-top: 1px solid var(--border); margin-top: 8px; }
+    footer a { color: var(--accent); text-decoration: none; }
+
+    .dump-path { background: #0c1929; border: 1px solid var(--border); border-radius: 6px;
+                 padding: 8px 12px; font-size: 12px; font-family: monospace; color: #93c5fd;
+                 margin-top: 8px; word-break: break-all; display: none; }
+    .dump-path.visible { display: block; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>⚡ OOM Watchdog Dashboard</h1>
+    <div class="subtitle">Real-time JVM health monitor</div>
+  </div>
+  <div id="risk-badge" class="risk-badge risk-UNKNOWN">—</div>
+</header>
+
+<div class="toolbar">
+  <label>Server URL</label>
+  <input type="text" id="server-url" value="http://localhost:9090" placeholder="http://localhost:9090">
+  <button class="btn" id="btn-start" onclick="startPolling()">Connect</button>
+  <button class="btn stop" id="btn-stop" onclick="stopPolling()" disabled>Disconnect</button>
+  <div id="status-dot"></div>
+  <div id="status-text">Not connected</div>
+</div>
+
+<main>
+  <div class="grid">
+    <!-- Heap Usage -->
+    <div class="card">
+      <div class="card-title">Heap Usage</div>
+      <div class="card-value" id="heap-pct">—</div>
+      <div class="card-sub" id="heap-mb">— MB / — MB</div>
+      <div class="gauge-wrap">
+        <div class="gauge-bg"><div class="gauge-fill" id="heap-gauge"></div></div>
+      </div>
+    </div>
+
+    <!-- GC Overhead -->
+    <div class="card">
+      <div class="card-title">GC Overhead</div>
+      <div class="card-value" id="gc-pct">—</div>
+      <div class="card-sub" id="gc-sub">Total GC time: — ms</div>
+      <div class="gauge-wrap">
+        <div class="gauge-bg"><div class="gauge-fill" id="gc-gauge"></div></div>
+      </div>
+    </div>
+
+    <!-- Nursery / Young Gen -->
+    <div class="card">
+      <div class="card-title">Young Gen / Nursery</div>
+      <div class="card-value" id="nursery-pct">—</div>
+      <div class="card-sub" id="nursery-mb">— MB used</div>
+      <div class="gauge-wrap">
+        <div class="gauge-bg"><div class="gauge-fill" id="nursery-gauge"></div></div>
+      </div>
+    </div>
+
+    <!-- Non-heap / Metaspace -->
+    <div class="card">
+      <div class="card-title">Non-Heap (Metaspace)</div>
+      <div class="card-value" id="nonheap-mb">—</div>
+      <div class="card-sub">MB used</div>
+    </div>
+
+    <!-- Process info -->
+    <div class="card">
+      <div class="card-title">JVM Process</div>
+      <div class="card-value" style="font-size:16px" id="process-name">—</div>
+      <div class="info-grid" style="margin-top:10px">
+        <div class="info-row">Uptime</div><div class="info-row info-val" id="uptime">—</div>
+        <div class="info-row">Crit threshold</div><div class="info-row info-val" id="crit-threshold">—</div>
+        <div class="info-row">Last poll</div><div class="info-row info-val" id="last-poll">—</div>
+      </div>
+    </div>
+
+    <!-- Risk level detail -->
+    <div class="card">
+      <div class="card-title">Risk Level</div>
+      <div id="risk-detail" class="card-value" style="font-size:22px">—</div>
+      <div class="card-sub" id="risk-sub">Waiting for data…</div>
+      <div id="dump-path-box" class="dump-path"></div>
+    </div>
+  </div>
+
+  <!-- Diagnosis notes -->
+  <div class="section-title">Diagnosis</div>
+  <div class="diagnosis-box"><span id="diagnosis-text">Waiting for first poll…</span></div>
+
+  <!-- Memory pools table -->
+  <div class="table-card">
+    <div class="table-card-header"><span class="section-title" style="margin:0">Memory Pools</span></div>
+    <table>
+      <thead><tr><th>Pool</th><th>Used (MB)</th></tr></thead>
+      <tbody id="pools-body"><tr><td colspan="2" style="color:var(--muted)">No data yet</td></tr></tbody>
+    </table>
+  </div>
+
+  <!-- GC collection counts table -->
+  <div class="table-card">
+    <div class="table-card-header"><span class="section-title" style="margin:0">GC Collections</span></div>
+    <table>
+      <thead><tr><th>Collector</th><th>Count</th></tr></thead>
+      <tbody id="gc-body"><tr><td colspan="2" style="color:var(--muted)">No data yet</td></tr></tbody>
+    </table>
+  </div>
+
+  <!-- Alert history -->
+  <div class="section-title">Alert History (last 50)</div>
+  <ul id="alert-log"><li style="color:var(--muted);font-size:12px;padding:6px 0">No alerts yet.</li></ul>
+</main>
+
+<footer>
+  OOM Watchdog Dashboard &nbsp;·&nbsp;
+  <a href="https://github.com/kgillard/oom-watchdog" target="_blank">kgillard/oom-watchdog</a>
+  &nbsp;·&nbsp; Data served by <code>--metrics-port</code> HTTP endpoint
+</footer>
+
+<script>
+  var pollTimer   = null;
+  var alertLog    = [];
+  var lastRisk    = null;
+  var POLL_MS     = 2000;
+
+  function startPolling() {
+    var url = document.getElementById('server-url').value.trim().replace(/\/$/, '');
+    if (!url) { setStatus('error', 'Enter a server URL'); return; }
+    document.getElementById('btn-start').disabled = true;
+    document.getElementById('btn-stop').disabled  = false;
+    setStatus('alive', 'Connecting…');
+    pollOnce(url);
+    pollTimer = setInterval(function() { pollOnce(url); }, POLL_MS);
+  }
+
+  function stopPolling() {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    document.getElementById('btn-start').disabled = false;
+    document.getElementById('btn-stop').disabled  = true;
+    setStatus('', 'Disconnected');
+  }
+
+  function pollOnce(baseUrl) {
+    fetch(baseUrl + '/metrics', { mode: 'cors' })
+      .then(function(r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function(d) {
+        setStatus('alive', 'Live · ' + new Date().toLocaleTimeString());
+        render(d);
+      })
+      .catch(function(e) {
+        setStatus('error', 'Error: ' + e.message);
+      });
+  }
+
+  function setStatus(cls, msg) {
+    var dot  = document.getElementById('status-dot');
+    var text = document.getElementById('status-text');
+    dot.className = cls;
+    text.textContent = msg;
+  }
+
+  function gaugeColor(pct, warnPct, critPct) {
+    if (pct >= critPct) return 'var(--crit)';
+    if (pct >= warnPct) return 'var(--warn)';
+    return 'var(--ok)';
+  }
+
+  function riskColor(level) {
+    if (level === 'OK')        return 'var(--ok)';
+    if (level === 'WARNING')   return 'var(--warn)';
+    if (level === 'CRITICAL')  return 'var(--crit)';
+    if (level === 'OOM_FIRING') return 'var(--oom)';
+    return 'var(--muted)';
+  }
+
+  function fmtUptime(ms) {
+    var s = Math.floor(ms / 1000);
+    var m = Math.floor(s / 60); s %= 60;
+    var h = Math.floor(m / 60); m %= 60;
+    return h + 'h ' + m + 'm ' + s + 's';
+  }
+
+  function render(d) {
+    if (d.status === 'no data yet') {
+      document.getElementById('status-text').textContent = 'Connected — waiting for first poll…';
+      return;
+    }
+
+    var heapPct   = parseFloat(d.heapUsedPct)   || 0;
+    var gcPct     = parseFloat(d.gcOverheadPct) || 0;
+    var nurseryPct= parseFloat(d.nurseryUsedPct)|| 0;
+    var critPct   = parseFloat(d.critThresholdPct) > 0 ? parseFloat(d.critThresholdPct) : 90;
+    var warnPct   = critPct * 0.88; // approximate if not exposed
+
+    // Risk badge
+    var risk = d.riskLevel || 'UNKNOWN';
+    document.getElementById('risk-badge').textContent = risk;
+    document.getElementById('risk-badge').className   = 'risk-badge risk-' + risk;
+    document.getElementById('risk-detail').textContent = risk;
+    document.getElementById('risk-detail').style.color = riskColor(risk);
+    document.getElementById('risk-sub').textContent =
+        'Critical threshold: ' + critPct.toFixed(1) + '%';
+
+    // Heap
+    setText('heap-pct',  heapPct.toFixed(1) + '%');
+    setText('heap-mb',   d.heapUsedMB.toFixed(1) + ' MB / ' + d.heapMaxMB.toFixed(1) + ' MB');
+    setGauge('heap-gauge', heapPct, gaugeColor(heapPct, warnPct, critPct));
+
+    // GC
+    setText('gc-pct',    gcPct.toFixed(2) + '%');
+    setText('gc-sub',    'Total GC time: ' + d.totalGcTimeMs + ' ms');
+    setGauge('gc-gauge', Math.min(gcPct * 2, 100), gaugeColor(gcPct, 25, 50));
+
+    // Nursery
+    setText('nursery-pct', nurseryPct.toFixed(1) + '%');
+    setText('nursery-mb',  d.nurseryUsedMB.toFixed(1) + ' MB used');
+    setGauge('nursery-gauge', nurseryPct, gaugeColor(nurseryPct, 70, 90));
+
+    // Non-heap
+    setText('nonheap-mb', d.nonHeapUsedMB.toFixed(1));
+
+    // Process
+    setText('process-name', d.processName || '—');
+    setText('uptime',       fmtUptime(d.jvmUptimeMs || 0));
+    setText('crit-threshold', critPct.toFixed(1) + '%');
+    setText('last-poll', new Date(d.timestampMs).toLocaleTimeString());
+
+    // Diagnosis
+    setText('diagnosis-text', d.diagnosisNotes || '—');
+
+    // Dump path
+    var dumpBox = document.getElementById('dump-path-box');
+    if (d.heapDumpPath) {
+      dumpBox.textContent = '📁 ' + d.heapDumpPath;
+      dumpBox.classList.add('visible');
+    } else {
+      dumpBox.classList.remove('visible');
+    }
+
+    // Memory pools
+    var poolsBody = document.getElementById('pools-body');
+    if (d.poolUsedMB && Object.keys(d.poolUsedMB).length > 0) {
+      poolsBody.innerHTML = Object.entries(d.poolUsedMB)
+        .sort(function(a,b){ return b[1]-a[1]; })
+        .map(function(e) {
+          return '<tr><td>' + escHtml(e[0]) + '</td><td>' + parseFloat(e[1]).toFixed(2) + '</td></tr>';
+        }).join('');
+    }
+
+    // GC counts
+    var gcBody = document.getElementById('gc-body');
+    if (d.gcCounts && Object.keys(d.gcCounts).length > 0) {
+      gcBody.innerHTML = Object.entries(d.gcCounts)
+        .map(function(e) {
+          return '<tr><td>' + escHtml(e[0]) + '</td><td>' + e[1] + '</td></tr>';
+        }).join('');
+    }
+
+    // Alert history — only record when risk is WARNING or above
+    if (risk !== lastRisk && risk !== 'OK') {
+      addAlert(risk, d.diagnosisNotes, d.timestampMs);
+    }
+    lastRisk = risk;
+  }
+
+  function addAlert(level, msg, ts) {
+    var li = document.createElement('li');
+    li.className = 'lvl-' + level;
+    var time = new Date(ts || Date.now()).toLocaleTimeString();
+    li.innerHTML =
+      '<span class="ts">' + time + '</span>' +
+      '<span class="msg">[' + escHtml(level) + '] ' + escHtml((msg || '').slice(0, 200)) + '</span>';
+    var log = document.getElementById('alert-log');
+    // Remove placeholder
+    if (log.children.length === 1 && log.children[0].style.color) log.innerHTML = '';
+    log.insertBefore(li, log.firstChild);
+    alertLog.unshift({level:level, msg:msg, ts:ts});
+    if (alertLog.length > 50) {
+      alertLog.pop();
+      if (log.children.length > 50) log.removeChild(log.lastChild);
+    }
+  }
+
+  function setText(id, val) {
+    var el = document.getElementById(id);
+    if (el) el.textContent = val;
+  }
+
+  function setGauge(id, pct, color) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.style.width = Math.min(Math.max(pct, 0), 100) + '%';
+    el.style.background = color;
+  }
+
+  function escHtml(s) {
+    return String(s || '')
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  }
+</script>
+</body>
+</html>

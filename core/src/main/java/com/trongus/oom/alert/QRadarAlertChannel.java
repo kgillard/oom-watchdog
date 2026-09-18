@@ -21,7 +21,7 @@ import java.util.logging.Logger;
 /**
  * Forwards OOM alerts to IBM QRadar as LEEF 2.0 syslog events over UDP or TCP.
  *
- * <h3>LEEF format used</h3>
+ * <h2>LEEF format used</h2>
  * <pre>
  * &lt;priority&gt;timestamp hostname LEEF:2.0|IBM|OomWatchdog|1.0|&lt;EventID&gt;|\t
  * key=value\tkey=value\t...
@@ -37,7 +37,7 @@ import java.util.logging.Logger;
  * <p>The {@code sev} attribute uses QRadar's 1–10 scale:
  * {@code WARNING=5}, {@code CRITICAL=9}, {@code OOM_FIRING=10}.
  *
- * <h3>LEEF attributes emitted</h3>
+ * <h2>LEEF attributes emitted</h2>
  * <table border="1">
  *   <caption>LEEF event attributes</caption>
  *   <tr><th>Attribute</th><th>Description</th></tr>

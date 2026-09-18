@@ -33,7 +33,7 @@ import java.util.logging.Logger;
  *   <li>{@link HeapDumpService}         – captures a heap dump when appropriate</li>
  * </ul>
  *
- * <h3>Alert logic</h3>
+ * <h2>Alert logic</h2>
  * <ul>
  *   <li>All registered channels are notified for {@code WARNING} and above.</li>
  *   <li>A heap dump is triggered on the first {@code CRITICAL} or
@@ -46,7 +46,7 @@ import java.util.logging.Logger;
  *       one dump fires per elevated episode regardless of which trigger fires first.</li>
  * </ul>
  *
- * <h3>Thread safety</h3>
+ * <h2>Thread safety</h2>
  * <p>{@code start()} and {@code stop()} are {@code synchronized} on the instance
  * to serialise lifecycle transitions.  The poll cycle runs on a single-threaded
  * {@link ScheduledExecutorService}, but the episode-dump guard uses an
@@ -89,6 +89,13 @@ public final class OomWatchdog {
      */
     private final AtomicReference<OomRiskLevel> lastLevel =
             new AtomicReference<>(OomRiskLevel.OK);
+
+    /**
+     * The most recent fully-assessed {@link JvmSnapshot}, updated atomically
+     * after every poll cycle.  {@code null} until the first poll completes.
+     */
+    private final AtomicReference<JvmSnapshot> lastSnapshot =
+            new AtomicReference<>(null);
 
     /**
      * Constructs a fully wired {@code OomWatchdog} instance.
@@ -195,6 +202,7 @@ public final class OomWatchdog {
             checkDumpThresholds(assessed);
 
             lastLevel.set(level);
+            lastSnapshot.set(assessed);
 
         } catch (Exception e) {
             // The watchdog must not crash the host process.
@@ -258,5 +266,15 @@ public final class OomWatchdog {
      */
     public OomRiskLevel getLastRiskLevel() {
         return lastLevel.get();
+    }
+
+    /**
+     * Returns the most recent fully-assessed {@link JvmSnapshot}, or {@code null}
+     * if no poll cycle has completed yet.
+     *
+     * @return latest snapshot, or {@code null}
+     */
+    public JvmSnapshot getLastSnapshot() {
+        return lastSnapshot.get();
     }
 }

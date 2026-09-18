@@ -6,7 +6,7 @@ import com.trongus.oom.model.JvmSnapshot;
 /**
  * Strategy contract for producing a single type of JVM diagnostic dump.
  *
- * <h3>Design rationale (SRP / ISP / Strategy pattern)</h3>
+ * <h2>Design rationale (SRP / ISP / Strategy pattern)</h2>
  * <p>Each implementation encapsulates exactly one dump mechanism on one JVM
  * vendor (or a closely related family of vendors).  This strict one-to-one
  * mapping makes it trivial to add new JVM targets, to unit-test each strategy
@@ -14,7 +14,7 @@ import com.trongus.oom.model.JvmSnapshot;
  * {@link com.trongus.oom.dump.CompositeDumpService} without those chains
  * knowing anything about how any individual dump works.</p>
  *
- * <h3>Contract</h3>
+ * <h2>Contract</h2>
  * <ul>
  *   <li>Implementations <em>must never throw</em>; any exception must be
  *       caught internally and result in a {@code null} return value.</li>

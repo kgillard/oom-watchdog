@@ -8,14 +8,14 @@ import java.util.List;
  * Service-level abstraction for triggering diagnostic dumps against the current
  * JVM process and returning the file paths that were written.
  *
- * <h3>Design rationale (ISP / SRP)</h3>
+ * <h2>Design rationale (ISP / SRP)</h2>
  * <p>This interface deliberately exposes a single method so that callers need
  * only depend on the capability they use — producing dumps — without being
  * coupled to any particular JVM vendor, dump format, or fallback strategy.
  * Implementations are free to select the most appropriate mechanism for each
  * {@link DumpType} and the current JVM vendor at runtime.</p>
  *
- * <h3>Interface Segregation Principle</h3>
+ * <h2>Interface Segregation Principle</h2>
  * <p>The interface is kept intentionally narrow: one method, one concern.
  * Higher-level orchestration (scheduling, alerting, retry) belongs to separate
  * interfaces rather than being mixed into this contract.</p>

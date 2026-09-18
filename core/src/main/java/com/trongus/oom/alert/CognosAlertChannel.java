@@ -76,6 +76,7 @@ import java.util.logging.Logger;
  *
  * <h2>Recommended heap JVM arguments for Cognos components</h2>
  * <table border="1">
+ *   <caption>Recommended heap JVM arguments for Cognos components</caption>
  *   <tr><th>Component</th><th>-Xms</th><th>-Xmx</th><th>-XX:MaxMetaspaceSize</th></tr>
  *   <tr><td>ATC</td>        <td>2g</td><td>8g</td><td>512m</td></tr>
  *   <tr><td>Content Mgr</td><td>1g</td><td>4g</td><td>256m</td></tr>

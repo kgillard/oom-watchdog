@@ -46,17 +46,17 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * <pre>
  * &lt;13&gt;Sep 17 08:00:00 prod-host LEEF:2.0|IBM|OomWatchdog|1.1|OOM_CRITICAL|
- * sev=9&#9;cat=JVM_OOM_Risk&#9;process=98765@prod-host
- * heapUsedMB=921&#9;heapMaxMB=1024&#9;heapPct=90.0
- * nonHeapUsedMB=128&#9;gcOverheadPct=23.8&#9;totalGcTimeMs=14300
- * gc_G1_Young_Generation_count=1420&#9;gc_G1_Young_Generation_timeMs=6200
- * gc_G1_Old_Generation_count=3&#9;gc_G1_Old_Generation_timeMs=8100
- * postGcGrowth=42.30 MB/h&#9;riskLevel=CRITICAL
+ * sev=9	cat=JVM_OOM_Risk	process=98765@prod-host
+ * heapUsedMB=921	heapMaxMB=1024	heapPct=90.0
+ * nonHeapUsedMB=128	gcOverheadPct=23.8	totalGcTimeMs=14300
+ * gc_G1_Young_Generation_count=1420	gc_G1_Young_Generation_timeMs=6200
+ * gc_G1_Old_Generation_count=3	gc_G1_Old_Generation_timeMs=8100
+ * postGcGrowth=42.30 MB/h	riskLevel=CRITICAL
  * heapDump=/var/dumps/oom_heap_98765_20251017_080000_001.hprof
  * msg=[Assessment] CRITICAL – OOM imminent. Heap at 90.0% ...
  * </pre>
  *
- * <p>(Tab characters shown as &#9; above — LEEF 2.0 uses {@code \t} as the attribute separator.)
+ * <p>(LEEF 2.0 uses {@code \t} as the attribute separator — tab characters are shown literally above.)
  *
  * <h2>QRadar log source configuration</h2>
  *

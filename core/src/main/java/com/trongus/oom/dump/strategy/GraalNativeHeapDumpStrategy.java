@@ -22,7 +22,7 @@ import java.util.List;
 /**
  * Heap dump for GraalVM Native Image and any JVM where HotSpot/J9 are absent.
  *
- * <h3>Strategy</h3>
+ * <h2>Strategy</h2>
  * <ol>
  *   <li>If running as a GraalVM Native Image and {@code VMRuntime.dumpHeap()} is
  *       available (GraalVM 23.1+), call it via reflection.</li>

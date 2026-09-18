@@ -11,7 +11,8 @@ package com.trongus.oom.dump;
  * e.g. {@code class-histogram} is equivalent to {@code CLASS_HISTOGRAM}.
  *
  * <h2>Dump type summary</h2>
- * <table border="1" summary="dump type overview">
+ * <table border="1">
+ *   <caption>Dump type overview</caption>
  *   <tr><th>Value</th><th>Output file</th><th>What it captures</th><th>JVM support</th></tr>
  *   <tr>
  *     <td>{@link #HEAP}</td>
