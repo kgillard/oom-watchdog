@@ -74,8 +74,11 @@ import java.util.logging.Logger;
  * </ul>
  *
  * <p>CORS is enabled for all origins ({@code Access-Control-Allow-Origin: *}) so that
- * {@code dashboard.html} can be opened from the local filesystem. Restrict this header
- * if you bind to a non-loopback interface.
+ * {@code dashboard.html} can be opened from the local filesystem ({@code file://}).
+ * {@code OPTIONS} preflight requests are answered with {@code 204 No Content} and the
+ * required {@code Access-Control-Allow-Methods} / {@code Access-Control-Allow-Headers}
+ * headers so that browsers do not block the preflight before the actual GET is sent.
+ * Restrict the origin header if you bind to a non-loopback interface.
  *
  * <h2>Data sources</h2>
  * <ul>
@@ -280,13 +283,15 @@ public final class MetricsHttpServer {
     // ── request handlers ──────────────────────────────────────────────────────
 
     private void handleMetrics(HttpExchange ex) throws IOException {
-        if (!isGet(ex)) { send(ex, 405, "text/plain", "Method Not Allowed"); return; }
+        if (isOptions(ex)) { sendPreflight(ex); return; }
+        if (!isGet(ex))    { send(ex, 405, "text/plain", "Method Not Allowed"); return; }
         JvmSnapshot snap = selfWatchdog != null ? selfWatchdog.getLastSnapshot() : null;
         send(ex, 200, "application/json; charset=UTF-8", buildLiveJson(snap, "self"));
     }
 
     private void handleMetricsAll(HttpExchange ex) throws IOException {
-        if (!isGet(ex)) { send(ex, 405, "text/plain", "Method Not Allowed"); return; }
+        if (isOptions(ex)) { sendPreflight(ex); return; }
+        if (!isGet(ex))    { send(ex, 405, "text/plain", "Method Not Allowed"); return; }
 
         StringBuilder sb = new StringBuilder(1024);
         sb.append("[\n");
@@ -318,8 +323,11 @@ public final class MetricsHttpServer {
             throws IOException {
         byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
         ex.getResponseHeaders().set("Content-Type", contentType);
-        // Security headers — applied to every response
-        ex.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
+        // CORS + security headers — applied to every response so dashboard.html
+        // can be opened from a file:// URL and still fetch the metrics endpoint.
+        ex.getResponseHeaders().add("Access-Control-Allow-Origin",  "*");
+        ex.getResponseHeaders().add("Access-Control-Allow-Methods", "GET, OPTIONS");
+        ex.getResponseHeaders().add("Access-Control-Allow-Headers", "Content-Type");
         ex.getResponseHeaders().add("X-Content-Type-Options", "nosniff");
         ex.getResponseHeaders().add("Cache-Control", "no-store");
         ex.getResponseHeaders().add("X-Frame-Options", "DENY");
@@ -329,8 +337,26 @@ public final class MetricsHttpServer {
         }
     }
 
+    /**
+     * Responds to a CORS preflight OPTIONS request with a 204 No Content and all
+     * required preflight headers.  This allows {@code dashboard.html} opened from
+     * a {@code file://} URL to successfully fetch the metrics endpoint.
+     */
+    private static void sendPreflight(HttpExchange ex) throws IOException {
+        ex.getResponseHeaders().add("Access-Control-Allow-Origin",  "*");
+        ex.getResponseHeaders().add("Access-Control-Allow-Methods", "GET, OPTIONS");
+        ex.getResponseHeaders().add("Access-Control-Allow-Headers", "Content-Type");
+        ex.getResponseHeaders().add("Access-Control-Max-Age",       "86400");
+        ex.sendResponseHeaders(204, -1);
+        ex.getResponseBody().close();
+    }
+
     private static boolean isGet(HttpExchange ex) {
         return "GET".equalsIgnoreCase(ex.getRequestMethod());
+    }
+
+    private static boolean isOptions(HttpExchange ex) {
+        return "OPTIONS".equalsIgnoreCase(ex.getRequestMethod());
     }
 
     // ── SSL context construction ──────────────────────────────────────────────
