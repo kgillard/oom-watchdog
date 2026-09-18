@@ -55,6 +55,12 @@ public final class ThresholdRiskAssessor implements RiskAssessor {
 
     @Override
     public JvmSnapshot assess(JvmSnapshot snap) {
+        // Snapshots marked OOM_FIRING by the collector (e.g. unreachable JMX target)
+        // must not be recalculated — the collector already determined the worst-case level.
+        if (snap.getRiskLevel() == OomRiskLevel.OOM_FIRING) {
+            return snap;
+        }
+
         double heapRatio  = snap.getHeapUsedRatio();
         double gcOverhead = snap.getGcOverheadRatio();
         double growthRate = snap.getPostGcHeapGrowthRatePerMs();
