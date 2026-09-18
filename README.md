@@ -7,18 +7,18 @@
 [![Security Audit](https://img.shields.io/badge/security%20audit-4%20passes%20clean-brightgreen)]()
 [![JDK](https://img.shields.io/badge/JDK-8%20%E2%80%93%2026%2B-blue)]()
 [![Vendors](https://img.shields.io/badge/JVM-HotSpot%20%7C%20OpenJ9%20%7C%20GraalVM-blue)]()
-[![Release](https://img.shields.io/badge/release-v1.7.8-blue)](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.8)
+[![Release](https://img.shields.io/badge/release-v1.7.9-blue)](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.9)
 
 ---
 
 ## Download
 
-Pre-built JARs are available in the [v1.7.8 release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.8):
+Pre-built JARs are available in the [v1.7.9 release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.9):
 
 | Artefact | Description | Size |
 |----------|-------------|------|
-| [`oom-watchdog.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.7.8/oom-watchdog.jar) | Fat JAR — monitoring agent + CLI entry point | ~157 KB |
-| [`test-harness.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.7.8/test-harness.jar) | Fat JAR — interactive OOM test harness | ~171 KB |
+| [`oom-watchdog.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.7.9/oom-watchdog.jar) | Fat JAR — monitoring agent + CLI entry point | ~157 KB |
+| [`test-harness.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.7.9/test-harness.jar) | Fat JAR — interactive OOM test harness | ~171 KB |
 
 ---
 
@@ -49,7 +49,7 @@ OOM Watchdog provides real-time health monitoring, per-process logging named aft
 ```bash
 # Download the release JAR or self-extracting installer
 curl -L -o oom-watchdog.jar \
-  https://github.com/kgillard/oom-watchdog/releases/download/v1.7.8/oom-watchdog.jar
+  https://github.com/kgillard/oom-watchdog/releases/download/v1.7.9/oom-watchdog.jar
 
 # Run in multi-target daemon mode (monitors external JVMs over JMX)
 java -jar oom-watchdog.jar --daemon --targets-file /etc/oom-watchdog/targets.properties
@@ -1249,9 +1249,22 @@ python3 -m http.server 8080
 | **GC Collections** | Per-collector invocation counts |
 | **On-Demand Diagnostics** | Three buttons per target tab — **Thread Dump**, **Heap Dump**, **Core Dump** |
 | **Alert History** | Per-target rolling log of WARNING/CRITICAL/OOM_FIRING events |
+| **Draggable cards** | Metric cards can be reordered by drag-and-drop; order is remembered per target in `localStorage` |
 
 Each tab header shows a colour dot indicating the target's current risk level.
 In daemon mode (multiple remote JVMs) each target appears as a separate tab.
+
+### Rearranging dashboard cards
+
+The six metric cards (**Heap Usage**, **GC Overhead**, **Young Gen**, **Non-Heap**, **JVM Process**, **Risk Level**) can be dragged into any order:
+
+1. Click and hold any card.
+2. Drag it over another card — a blue outline shows the drop target.
+3. Release to place the card before or after the target.
+
+The chosen order is saved to `localStorage` under the key `oom-card-order:<pane-id>` and is restored automatically on every subsequent page load or reconnect. Each target tab stores its order independently, so the `hostcontext` tab and the `liberty` tab can have different layouts.
+
+To reset a tab's card order to the default, clear the relevant `localStorage` key in the browser's Developer Tools (Application → Local Storage).
 
 ### On-demand dumps from the dashboard
 

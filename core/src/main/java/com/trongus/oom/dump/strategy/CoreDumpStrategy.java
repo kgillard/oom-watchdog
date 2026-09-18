@@ -25,7 +25,7 @@ import java.util.logging.Logger;
  *
  * <p>Returns {@code null} on Windows or when neither mechanism is available.
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.8
+ * @version 1.7.9
  * @since 1.7.0
  */
 public final class CoreDumpStrategy implements DumpStrategy {

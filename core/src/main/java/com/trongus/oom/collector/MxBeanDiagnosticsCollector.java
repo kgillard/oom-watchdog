@@ -42,7 +42,7 @@ import java.util.Map;
  * Both fields default to {@code 0} / {@link Double#NaN} when no matching pools are found.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.8
+ * @version 1.7.9
  * @since 1.0.0
  * @see com.trongus.oom.remote.JmxDiagnosticsCollector
  */
