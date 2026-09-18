@@ -1243,16 +1243,27 @@ python3 -m http.server 8080
 | **JVM Process** | Process name, uptime, critical threshold, last poll time |
 | **JVM Detail** | JVM location (`java.home`), JVM name, Java version, OS, CPU cores, process CPU %, CPU time, thread count, JVM flags, application command |
 | **Risk Level** | Current `OK` / `WARNING` / `CRITICAL` / `OOM_FIRING` with colour badge |
-| **Sparkline Charts** | 60-sample rolling charts for Heap %, GC Overhead %, Young Gen % |
+| **Sparkline Charts** | 60-sample rolling charts for Heap %, GC Overhead %, Young Gen % — hover to inspect values and thresholds |
 | **Diagnosis** | Full assessment text from `ThresholdRiskAssessor` |
 | **Memory Pools** | All JVM memory pool usages in MB |
 | **GC Collections** | Per-collector invocation counts |
 | **On-Demand Diagnostics** | Three buttons per target tab — **Thread Dump**, **Heap Dump**, **Core Dump** |
 | **Alert History** | Per-target rolling log of WARNING/CRITICAL/OOM_FIRING events |
 | **Draggable cards** | Metric cards can be reordered by drag-and-drop; order is remembered per target in `localStorage` |
+| **Server URL history** | Recent server URLs are saved in `localStorage` and shown in a dropdown; click ▾ next to the Server field |
 
 Each tab header shows a colour dot indicating the target's current risk level.
 In daemon mode (multiple remote JVMs) each target appears as a separate tab.
+
+### Sparkline chart tooltips
+
+Move the mouse over any of the three sparkline charts (**Heap Usage %**, **GC Overhead %**, **Young Gen %**) to inspect historical values:
+
+- **Hovering the chart area** — a vertical crosshair snaps to the nearest recorded data point and a dot appears on the line at that value. A tooltip shows the value at that point (e.g. **`85.3%`**).
+- **Hovering the red dashed threshold line** (within ~4 px) — the crosshair and dot are hidden and the tooltip instead shows the threshold value (e.g. **`Threshold: 85.0%`**).
+- **Mouse leave** — the tooltip, crosshair, and dot all disappear.
+
+The tooltip follows the cursor and automatically repositions to stay within the viewport.
 
 ### Rearranging dashboard cards
 

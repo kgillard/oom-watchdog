@@ -257,6 +257,18 @@
                   background: var(--ok); }
 
     /* ── Sparkline charts grid ───────────────────────────────────────────────── */
+    /*
+     * Each chart card contains an SVG sparkline with:
+     *   - A filled gradient area path (`..-area`)
+     *   - A coloured line path (`..-line`)  — colour tracks risk level
+     *   - A red dashed threshold line (`..-thresh`)
+     *   - An invisible hover rectangle (`..-hover`) that receives mouse events
+     *   - A vertical crosshair line (`..-xhair`) shown on hover
+     *   - A dot (`..-dot`) that snaps to the nearest data point on hover
+     * Hovering over the chart shows a fixed tooltip (#spark-tooltip) with the
+     * data-point value.  Hovering within ±4 SVG-px of the threshold line instead
+     * shows "Threshold: N%".  All state is stored in _sparkState[svgId].
+     */
     .charts-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));

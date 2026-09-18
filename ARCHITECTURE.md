@@ -643,6 +643,9 @@ The following table shows exactly where OOM Watchdog alert output appears for ev
 | JVM process-detail fields stored in `JvmSnapshot` | All `/metrics` responses — including remote targets — carry `javaHome`, `jvmName`, `osName`, `cpuCount`, etc. from the actual monitored JVM |
 | `info-grid` column 1 uses `max-content` | Label column sized to its widest text — no fixed `min-width` needed; value column starts immediately after |
 | Dashboard metric cards use HTML5 DnD + `localStorage` | Card order drag-and-dropped by user is persisted per-tab under `oom-card-order:<pane-id>`; restored on every load |
+| JVM flags rendered one-per-line as `<ul>` in full-width row | `fmtFlags()` splits on `\s+(?=-)` boundaries; each flag gets its own `<li>` with `white-space:nowrap`; flags row spans the full card width below the two-column grid |
+| Sparkline hover crosshair + tooltip via invisible `<rect>` | A transparent `<rect>` over each SVG captures `mousemove`; mouse coords are mapped to SVG coordinate space via `getBoundingClientRect()` to find the nearest data point; threshold proximity (±4 SVG-px) shows threshold value instead |
+| Server URL history persisted to `localStorage` | Recent server URLs stored under `oom-server-history`; shown in a dropdown (▾ button); most-recent URL pre-filled on page load; each entry individually deletable |
 | `AtomicInteger` counters in `HarnessAlertRecorder` | Thread-safe read-modify-write without external synchronisation |
 | `CopyOnWriteArrayList` for `HarnessAlertRecorder.dumpPaths` | Lock-free iteration from the results thread; no unsynchronised read race (SEC-4) |
 | All file writes use explicit `StandardCharsets.UTF_8` | Consistent output across all platforms; no platform-default charset risk |
