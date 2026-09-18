@@ -29,7 +29,7 @@ import java.util.Map;
  * Instances are fully thread-safe because they are immutable.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.2
+ * @version 1.7.3
  * @since 1.0.0
  * @see com.trongus.oom.collector.JvmDiagnosticsCollector
  * @see com.trongus.oom.monitor.RiskAssessor
@@ -204,13 +204,6 @@ public final class JvmSnapshot {
     private final String leefTags;
 
     /**
-     * The warning heap threshold (0.0–1.0) that was in effect when this snapshot
-     * was assessed, stamped by {@link com.trongus.oom.monitor.ThresholdRiskAssessor}.
-     * {@code -1} when not yet assessed.
-     */
-    private final double warnThreshold;
-
-    /**
      * The critical heap threshold (0.0–1.0) that was in effect when this snapshot
      * was assessed, stamped by {@link com.trongus.oom.monitor.ThresholdRiskAssessor}.
      * {@code -1} when not yet assessed.
@@ -249,7 +242,6 @@ public final class JvmSnapshot {
         this.heapDumpPath              = b.heapDumpPath;
         this.leefCategory              = b.leefCategory;
         this.leefTags                  = b.leefTags;
-        this.warnThreshold             = b.warnThreshold;
         this.critThreshold             = b.critThreshold;
     }
 
@@ -342,12 +334,6 @@ public final class JvmSnapshot {
     public String     getLeefTags()                  { return leefTags; }
 
     /**
-     * @return warning heap threshold (0.0–1.0) active when this snapshot was assessed;
-     *         {@code -1} if assessment has not run yet
-     */
-    public double     getWarnThreshold()             { return warnThreshold; }
-
-    /**
      * @return critical heap threshold (0.0–1.0) active when this snapshot was assessed;
      *         {@code -1} if assessment has not run yet
      */
@@ -403,7 +389,6 @@ public final class JvmSnapshot {
         b.heapDumpPath              = this.heapDumpPath;
         b.leefCategory              = this.leefCategory;
         b.leefTags                  = this.leefTags;
-        b.warnThreshold             = this.warnThreshold;
         b.critThreshold             = this.critThreshold;
         return b;
     }
@@ -449,8 +434,6 @@ public final class JvmSnapshot {
         private String  heapDumpPath;
         private String  leefCategory;
         private String  leefTags;
-        /** -1 until stamped by ThresholdRiskAssessor. */
-        private double  warnThreshold             = -1.0;
         /** -1 until stamped by ThresholdRiskAssessor. */
         private double  critThreshold             = -1.0;
 
@@ -511,8 +494,6 @@ public final class JvmSnapshot {
         public Builder leefCategory(String v)              { this.leefCategory = v; return this; }
         /** @param v LEEF tags string (null = omit attribute); @return {@code this} */
         public Builder leefTags(String v)                  { this.leefTags = v; return this; }
-        /** @param v warning heap threshold 0–1 stamped by assessor; @return {@code this} */
-        public Builder warnThreshold(double v)             { this.warnThreshold = v; return this; }
         /** @param v critical heap threshold 0–1 stamped by assessor; @return {@code this} */
         public Builder critThreshold(double v)             { this.critThreshold = v; return this; }
 

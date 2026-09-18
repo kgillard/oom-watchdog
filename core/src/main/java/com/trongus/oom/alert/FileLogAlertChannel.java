@@ -22,7 +22,7 @@ import java.util.logging.Logger;
  * both machine-parsed and human-read.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.2
+ * @version 1.7.3
  * @since 1.0.0
  */
 public final class FileLogAlertChannel implements AlertChannel {

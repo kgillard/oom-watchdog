@@ -287,7 +287,6 @@ classDiagram
         +String heapDumpPath
         +String leefCategory
         +String leefTags
-        +double warnThreshold
         +double critThreshold
         +withHeapDumpPath(String) JvmSnapshot
         +toBuilder() Builder
@@ -478,7 +477,7 @@ flowchart TD
 ## Module Structure
 
 ```
-oom-watchdog/                  Maven multi-module root (v1.7.2)
+oom-watchdog/                  Maven multi-module root (v1.7.3)
 ├── core/                      oom-watchdog.jar  (fat jar via maven-shade-plugin)
 │   └── src/main/java/com/trongus/oom/
 │       ├── WatchdogMain.java  CLI entry point (local + daemon modes)
@@ -639,8 +638,8 @@ Pass 5 identified and fixed 4 issues in the remote JMX monitoring subsystem.
 
 ## Release Artefacts
 
-The v1.7.2 release publishes two executable fat JARs built with `maven-shade-plugin`.
-Both will be attached to the [GitHub release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.2).
+The v1.7.3 release publishes two executable fat JARs built with `maven-shade-plugin`.
+Both will be attached to the [GitHub release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.3).
 
 | Artefact | Main class | Contents | Size (approx) |
 |----------|-----------|----------|---------------|
