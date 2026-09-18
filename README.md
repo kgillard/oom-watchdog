@@ -38,15 +38,7 @@ On the first `CRITICAL` event in an episode, the dump service captures diagnosti
 (heap dump, thread dump, class histogram, core dump) — but only **once per episode** to
 prevent dump storms.
 
-**New in v1.5.0:** Per-release Quick Start guide, Example 11 (OOM cause analysis + i18n),
-and all example `@version` tags updated.  See [`EXAMPLES.md`](EXAMPLES.md) for the
-complete release-by-release changelog.
-
-**v1.4.0:** Security audit pass 4 — `AtomicBoolean.compareAndSet`, `AtomicReference`,
-`CopyOnWriteArrayList` hardening.
-
-**v1.3.0:** `OomCauseAnalyser` root-cause analysis and full i18n across 9 locales
-(`en`, `de`, `es`, `fr`, `ja`, `ko`, `pt_BR`, `zh_CN`, `zh_TW`).
+OOM Watchdog provides real-time health monitoring, per-process logging named after the target JVM, multi-target daemon monitoring via remote JMX, and root-cause analysis.
 
 ---
 
@@ -55,11 +47,14 @@ complete release-by-release changelog.
 ### 1 — Download and run
 
 ```bash
-# Download the release JAR
+# Download the release JAR or self-extracting installer
 curl -L -o oom-watchdog.jar \
-  https://github.com/kgillard/oom-watchdog/releases/download/v1.5.0/oom-watchdog.jar
+  https://github.com/kgillard/oom-watchdog/releases/download/v1.7.1/oom-watchdog.jar
 
-# Run against a target JVM process (monitoring mode)
+# Run in multi-target daemon mode (monitors external JVMs over JMX)
+java -jar oom-watchdog.jar --daemon --targets-file /etc/oom-watchdog/targets.properties
+
+# Or run in single-process monitoring mode
 java -jar oom-watchdog.jar \
     --warn-threshold 0.80          \
     --crit-threshold 0.90          \
@@ -675,6 +670,183 @@ new QRadarAlertChannel("siem.corp.com", 6514, Transport.TCP)  // TLS proxy
 
 ---
 
+#### Creating a QRadar Log Source for Syslog LEEF
+
+Before OOM Watchdog events appear in QRadar offenses or searches, QRadar must have a **Log Source** configured to accept and parse the incoming LEEF syslog stream. Without a log source, QRadar silently discards or misclassifies the events.
+
+The steps below apply to QRadar 7.4 and 7.5 (SIEM and XDR editions). Screenshots differ slightly between versions, but the field names are identical.
+
+##### Step 1 — Confirm the syslog port is reachable
+
+OOM Watchdog sends syslog to the host and port you supply via `--qradar-host` / `--qradar-port`. That host must be a QRadar **All-in-One**, **Event Processor**, or **QRadar Event Collector** (not a Console-only appliance).
+
+Verify connectivity from the watchdog host before creating the log source:
+
+```bash
+# UDP (default)
+echo "test" | nc -u -w1 <QRADAR_EP_HOST> 514
+
+# TCP
+echo "test" | nc -w1 <QRADAR_EP_HOST> 514
+```
+
+QRadar listens on UDP/514 and TCP/514 out of the box. If you use a non-standard port (e.g. `--qradar-port 5514`), open that port on the QRadar host's firewall first:
+
+```bash
+# On the QRadar Event Processor (RHEL/CentOS)
+firewall-cmd --permanent --add-port=5514/udp
+firewall-cmd --permanent --add-port=5514/tcp   # only if using --qradar-tcp
+firewall-cmd --reload
+```
+
+---
+
+##### Step 2 — Open the Log Source Management wizard
+
+1. Log in to the **QRadar Console** as an administrator.
+2. Click the **Admin** tab in the top navigation bar.
+3. Under **Data Sources**, click **Log Sources**.
+4. In the Log Sources window, click **Add** (top-left toolbar button).
+
+> **QRadar 7.5 / New UI:** Navigate to **Admin → Log Source Management App → Log Sources → Add**.
+
+---
+
+##### Step 3 — Set the log source type
+
+In the **Add a Log Source** wizard, fill in the fields as follows:
+
+| Field | Value |
+|---|---|
+| **Log Source Name** | `OOM Watchdog – <hostname>` (e.g. `OOM Watchdog – prod-host`) |
+| **Log Source Description** | `JVM OOM alerts from OOM Watchdog LEEF 2.0 syslog` |
+| **Log Source Type** | `IBM QRadar LEEF` |
+| **Protocol Configuration** | `Syslog` |
+
+> **Log Source Type must be `IBM QRadar LEEF`.**
+> This selects QRadar's built-in LEEF 2.0 parser, which automatically extracts all
+> tab-separated `key=value` attributes (`sev`, `heapPct`, `riskLevel`, `msg`, etc.)
+> into searchable QRadar event properties without any custom DSM or regex work.
+
+---
+
+##### Step 4 — Configure the Syslog protocol parameters
+
+After selecting the `Syslog` protocol, a second panel appears:
+
+| Field | Value | Notes |
+|---|---|---|
+| **Log Source Identifier** | IP address or hostname of the watchdog host | Must match the source IP that QRadar sees on the arriving UDP/TCP packets |
+| **Listen Port** | `514` (or your `--qradar-port` value) | Must match the port OOM Watchdog is sending to |
+| **Protocol** | `UDP` or `TCP` | Match `--qradar-tcp` flag: omitted = UDP, present = TCP |
+
+> **Log Source Identifier** is the key field for de-duplication. If multiple hosts run OOM
+> Watchdog, create one log source per host, each with a distinct identifier.
+
+---
+
+##### Step 5 — Configure event mapping (optional but recommended)
+
+QRadar's LEEF parser maps the `sev` field to its internal event severity automatically.
+You can optionally map the `cat` and `riskLevel` fields to QRadar event categories for
+richer offense generation:
+
+1. In the log source wizard, click **Configure Event Mapping**.
+2. Under **Custom Event Properties**, click **Add** and create the following mappings:
+
+| LEEF Attribute | QRadar Property Name | Property Type |
+|---|---|---|
+| `heapPct` | `JVM Heap Usage (%)` | Numeric |
+| `riskLevel` | `JVM Risk Level` | Text |
+| `process` | `JVM Process` | Text |
+| `gcOverheadPct` | `GC Overhead (%)` | Numeric |
+| `postGcGrowth` | `Post-GC Growth Rate` | Text |
+| `msg` | `OOM Diagnosis` | Text |
+
+These properties become searchable in **Log Activity** and usable in **Custom Rules** and
+**Offense** descriptions.
+
+---
+
+##### Step 6 — Save and deploy
+
+1. Click **Save** in the log source wizard.
+2. Back in the **Admin** tab, click **Deploy Changes** (top-right).
+
+> QRadar requires a **Deploy Changes** after every log source modification.
+> Events arriving before the deploy completes may be held in the input queue and
+> processed once the configuration is live — no events are lost.
+
+---
+
+##### Step 7 — Verify events are arriving
+
+1. Click the **Log Activity** tab.
+2. In the search bar, enter:
+
+   ```
+   LEEF:2.0 AND "OomWatchdog"
+   ```
+
+3. Set the time range to **Last 5 Minutes** and click **Search**.
+
+If OOM Watchdog is running and has raised at least one `WARNING` or higher alert, you will see matching events. Each event's **Event Name** column shows the LEEF Event ID (`OOM_WARNING`, `OOM_CRITICAL`, or `OOM_OOM_FIRING`), and the payload columns show the extracted heap and GC attributes.
+
+If no events appear:
+- Run OOM Watchdog in `--test-mode` to force all risk levels to fire:
+  ```bash
+  java -Xmx64m -jar oom-watchdog.jar \
+      --test-mode \
+      --warn-threshold 0.50 \
+      --crit-threshold 0.70 \
+      --poll-ms 1000 \
+      --qradar-host <QRADAR_EP_HOST> \
+      --qradar-port 514
+  ```
+- Confirm the log source identifier matches the watchdog host's IP exactly.
+- Check QRadar's `/var/log/qradar.log` on the Event Processor for `syslog` receive errors.
+
+---
+
+##### Step 8 — Create an offense rule (optional)
+
+To generate a QRadar **Offense** whenever a `CRITICAL` or `OOM_FIRING` event arrives:
+
+1. Go to **Offenses → Rules → Add**.
+2. Set rule type to **Event**.
+3. Add the condition:
+
+   ```
+   when the event(s) are detected by the Local System
+   and when the Event Name contains "OOM_CRITICAL" or "OOM_OOM_FIRING"
+   ```
+
+4. Under **Actions**, set **Assign Magnitude** to `8` (high) and enable **Notify**.
+5. Name the rule `JVM OOM Critical – OOM Watchdog` and click **Finish**.
+
+After the next **Deploy Changes**, any `CRITICAL` or `OOM_FIRING` event from OOM Watchdog
+opens an offense automatically, ensuring it appears in the **Offenses** dashboard and
+triggers any configured notification (email, ServiceNow, webhook, etc.).
+
+---
+
+##### Log source summary
+
+| Setting | Value |
+|---|---|
+| Log Source Type | `IBM QRadar LEEF` |
+| Protocol | `Syslog` (UDP or TCP) |
+| Default port | `514` (overridable via `--qradar-port`) |
+| LEEF Vendor | `IBM` |
+| LEEF Product | `OomWatchdog` |
+| LEEF Version | `1.1` |
+| Event IDs | `OOM_OK`, `OOM_WARNING`, `OOM_CRITICAL`, `OOM_OOM_FIRING` |
+| Syslog facility | `1` (user-level messages) |
+| Syslog severity | `5` (notice) — encoded in `<13>` RFC 3164 priority header |
+
+---
+
+
 ### WebSphere Application Server (WAS, traditional)
 
 `WasAlertChannel` relies on WAS's built-in interception of `java.util.logging` (JUL). No configuration is required for log routing — WAS handles it automatically at runtime.
@@ -802,7 +974,7 @@ Fields: `timestamp | component | server | riskLevel | heapUsedMB | heapMaxMB | h
 
 ---
 
-## OOM cause analysis (v1.5.0)
+## OOM cause analysis
 
 Every alert now includes a plain-language root cause diagnosis produced by `OomCauseAnalyser`:
 
@@ -818,7 +990,7 @@ The explanation is embedded in the `[Cause]` section of every diagnosis note and
 
 ---
 
-## Internationalisation (v1.5.0)
+## Internationalisation
 
 All alert text, section headings, and diagnosis strings are locale-aware. Set the locale on `WatchdogConfig`:
 
