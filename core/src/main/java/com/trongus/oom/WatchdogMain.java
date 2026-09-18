@@ -233,13 +233,13 @@ public final class WatchdogMain {
 
         // ── Shared QRadar Alert Channel (if configured) ───────────────────────
         List<AlertChannel> sharedChannels = new ArrayList<>();
-        if (!cli.qradarHost.isEmpty()) {
+        if (!config.getQradarHost().isEmpty()) {
             QRadarAlertChannel.Transport transport = cli.qradarTcp
                     ? QRadarAlertChannel.Transport.TCP
                     : QRadarAlertChannel.Transport.UDP;
-            sharedChannels.add(new QRadarAlertChannel(cli.qradarHost, cli.qradarPort, transport));
+            sharedChannels.add(new QRadarAlertChannel(config.getQradarHost(), config.getQradarPort(), transport));
             WatchdogLogger.config(LOG, "QRadar alerts \u2192 {0}:{1}/{2}",
-                    cli.qradarHost, cli.qradarPort, transport);
+                    config.getQradarHost(), config.getQradarPort(), transport);
         } else {
             WatchdogLogger.config(LOG, "QRadar disabled (use --qradar-host to enable).");
         }
@@ -353,9 +353,9 @@ public final class WatchdogMain {
                     t.getName(), t.getWarnThreshold() * 100, t.getCritThreshold() * 100);
         }
         System.out.printf( "║  Log level               : %s%n",      config.getLogLevel().getName());
-        if (!cli.qradarHost.isEmpty()) {
+        if (!config.getQradarHost().isEmpty()) {
             System.out.printf( "║  QRadar destination      : %s:%d/%s%n",
-                    cli.qradarHost, cli.qradarPort, cli.qradarTcp ? "TCP" : "UDP");
+                    config.getQradarHost(), config.getQradarPort(), cli.qradarTcp ? "TCP" : "UDP");
         }
         System.out.println("╚══════════════════════════════════════════════════════════╝");
         System.out.println();

@@ -152,7 +152,7 @@ public final class WatchdogConfig {
         private long            pollIntervalMs          = 5_000L;
         private String          heapDumpDirectory       = "./dumps";
         private Set<DumpType>   dumpTypes               = EnumSet.noneOf(DumpType.class);
-        private String          qradarHost              = "localhost";
+        private String          qradarHost              = "";
         private int             qradarPort              = 514;
         private Locale          locale                  = Locale.getDefault();
         private Level           logLevel                = Level.INFO;
