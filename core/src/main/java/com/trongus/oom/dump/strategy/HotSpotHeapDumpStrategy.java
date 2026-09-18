@@ -36,10 +36,27 @@ public final class HotSpotHeapDumpStrategy implements DumpStrategy {
             Class<?>    cls     = Class.forName("com.sun.management.HotSpotDiagnosticMXBean");
             Object      bean    = ManagementFactory.newPlatformMXBeanProxy(server, MXBEAN_NAME, cls);
             Method      method  = cls.getMethod("dumpHeap", String.class, boolean.class);
+
+            // HotSpotDiagnosticMXBean.dumpHeap() throws IOException("File exists") if the
+            // output file is already present — delete it first so re-triggers always succeed.
+            File out = new File(outputPath);
+            if (out.exists()) {
+                if (!out.delete()) {
+                    WatchdogLogger.warning(LOG,
+                            "HotSpot heap dump: could not delete existing file [{0}]", outputPath);
+                }
+            }
+
             method.invoke(bean, outputPath, true); // true = live objects only
-            return new File(outputPath).getAbsolutePath();
+            return out.getAbsolutePath();
         } catch (ClassNotFoundException | UnsupportedOperationException e) {
             return null; // not available on this JVM
+        } catch (java.lang.reflect.InvocationTargetException e) {
+            // Unwrap the real cause so the warning message is meaningful, not just
+            // "null" or the InvocationTargetException wrapper.
+            Throwable cause = e.getCause() != null ? e.getCause() : e;
+            WatchdogLogger.warning(LOG, e, "HotSpot heap dump failed: {0}", cause.toString());
+            return null;
         } catch (Exception e) {
             WatchdogLogger.warning(LOG, e, "HotSpot heap dump failed: {0}", e.getMessage());
             return null;

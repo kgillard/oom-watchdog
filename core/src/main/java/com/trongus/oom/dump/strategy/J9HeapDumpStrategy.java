@@ -34,6 +34,10 @@ public final class J9HeapDumpStrategy implements DumpStrategy {
             return new File(outputPath + ".phd").getAbsolutePath();
         } catch (ClassNotFoundException e) {
             return null; // not J9
+        } catch (java.lang.reflect.InvocationTargetException e) {
+            Throwable cause = e.getCause() != null ? e.getCause() : e;
+            WatchdogLogger.warning(LOG, e, "J9 heap dump failed: {0}", cause.toString());
+            return null;
         } catch (Exception e) {
             WatchdogLogger.warning(LOG, e, "J9 heap dump failed: {0}", e.getMessage());
             return null;

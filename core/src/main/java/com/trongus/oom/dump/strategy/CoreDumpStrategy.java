@@ -107,13 +107,20 @@ public final class CoreDumpStrategy implements DumpStrategy {
             }
             int exit = proc.exitValue();
             if (exit == 0) {
-                WatchdogLogger.info(LOG, "CORE dump written via gcore: {0}", safePath);
-                return new File(safePath).getAbsolutePath();
+                // gcore appends the PID to the output file name: e.g. if -o is /var/dumps/oom_core_...core
+                // the actual file written is /var/dumps/oom_core_...core.<pid>
+                // Check for the PID-suffixed file first; fall back to the bare path.
+                File withPid  = new File(safePath + "." + pid);
+                File withoutPid = new File(safePath);
+                File actual = withPid.exists() ? withPid : withoutPid;
+                WatchdogLogger.info(LOG, "CORE dump written via gcore: {0}", actual.getAbsolutePath());
+                return actual.getAbsolutePath();
             }
             WatchdogLogger.warning(LOG, "gcore exited {0} for path [{1}]: {2}", exit, safePath, out);
             return null;
         } catch (java.io.IOException e) {
-            // gcore not on PATH – expected on many systems
+            // gcore not on PATH — expected on many systems; not an error
+            WatchdogLogger.warning(LOG, "CORE dump skipped: gcore not found on PATH ({0})", e.getMessage());
             return null;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
