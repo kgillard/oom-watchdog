@@ -21,3 +21,4 @@ test-harness/target/*-1.7.*.jar
 test-harness/target/*-shaded.jar
 oom-watchdog-tests/target/
 
+*.code-workspace
