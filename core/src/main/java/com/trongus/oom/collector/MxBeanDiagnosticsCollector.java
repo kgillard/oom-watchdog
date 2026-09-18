@@ -10,7 +10,9 @@ import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
 import java.lang.management.MemoryPoolMXBean;
 import java.lang.management.MemoryUsage;
+import java.lang.management.OperatingSystemMXBean;
 import java.lang.management.RuntimeMXBean;
+import java.lang.management.ThreadMXBean;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -47,8 +49,10 @@ import java.util.Map;
 public final class MxBeanDiagnosticsCollector implements JvmDiagnosticsCollector {
 
     // MXBeans are thread-safe singletons – cache the references.
-    private static final MemoryMXBean  MEMORY_MX  = ManagementFactory.getMemoryMXBean();
-    private static final RuntimeMXBean RUNTIME_MX = ManagementFactory.getRuntimeMXBean();
+    private static final MemoryMXBean          MEMORY_MX  = ManagementFactory.getMemoryMXBean();
+    private static final RuntimeMXBean         RUNTIME_MX = ManagementFactory.getRuntimeMXBean();
+    private static final OperatingSystemMXBean OS_MX      = ManagementFactory.getOperatingSystemMXBean();
+    private static final ThreadMXBean          THREAD_MX  = ManagementFactory.getThreadMXBean();
 
     private final WatchdogConfig config;
     private final Messages       messages;
@@ -155,6 +159,39 @@ public final class MxBeanDiagnosticsCollector implements JvmDiagnosticsCollector
         // ── process name ─────────────────────────────────────────────────────
         String processName = RUNTIME_MX.getName(); // e.g. "12345@hostname"
 
+        // ── JVM process detail ────────────────────────────────────────────────
+        String javaHome    = System.getProperty("java.home", "");
+        String javaVersion = System.getProperty("java.version", "") + " ("
+                           + System.getProperty("java.vendor",  "") + ")";
+        String jvmName     = System.getProperty("java.vm.name",    "") + " "
+                           + System.getProperty("java.vm.version", "");
+        String osName      = OS_MX.getName() + " " + OS_MX.getVersion()
+                           + " (" + OS_MX.getArch() + ")";
+        int    cpuCount    = OS_MX.getAvailableProcessors();
+        double cpuPct      = -1.0;
+        long   cpuMs       = -1L;
+        try {
+            java.lang.reflect.Method m = OS_MX.getClass().getMethod("getProcessCpuLoad");
+            m.setAccessible(true);
+            Object v = m.invoke(OS_MX);
+            if (v instanceof Double) cpuPct = (Double) v * 100.0;
+        } catch (Exception ignored) { /* not on this JVM */ }
+        try {
+            java.lang.reflect.Method m = OS_MX.getClass().getMethod("getProcessCpuTime");
+            m.setAccessible(true);
+            Object v = m.invoke(OS_MX);
+            if (v instanceof Long) cpuMs = (Long) v / 1_000_000L; // ns → ms
+        } catch (Exception ignored) { /* not on this JVM */ }
+        List<String> inputArgsList = RUNTIME_MX.getInputArguments();
+        StringBuilder inputArgsSb  = new StringBuilder();
+        for (int i = 0; i < inputArgsList.size(); i++) {
+            if (i > 0) inputArgsSb.append(' ');
+            inputArgsSb.append(inputArgsList.get(i));
+        }
+        String javaCommand   = System.getProperty("sun.java.command", "");
+        int    threadCount   = THREAD_MX.getThreadCount();
+        int    peakThreads   = THREAD_MX.getPeakThreadCount();
+
         // ── diagnosis notes ──────────────────────────────────────────────────
         String notes = buildDiagnosisNotes(heapRatio, gcOverhead, growthRate,
                                            totalGcTime, gcCounts.isEmpty());
@@ -181,6 +218,17 @@ public final class MxBeanDiagnosticsCollector implements JvmDiagnosticsCollector
                 .postGcHeapGrowthRatePerMs(growthRate)
                 .riskLevel(OomRiskLevel.OK)   // risk classification is the monitor's job
                 .diagnosisNotes(notes)
+                .javaHome(javaHome)
+                .javaVersion(javaVersion)
+                .jvmName(jvmName)
+                .osName(osName)
+                .cpuCount(cpuCount)
+                .processCpuPct(cpuPct)
+                .processCpuMs(cpuMs)
+                .jvmInputArgs(inputArgsSb.toString())
+                .javaCommand(javaCommand)
+                .threadCount(threadCount)
+                .peakThreadCount(peakThreads)
                 .build();
     }
 

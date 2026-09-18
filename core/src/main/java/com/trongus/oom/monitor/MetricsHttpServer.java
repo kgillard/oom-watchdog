@@ -931,6 +931,18 @@ public final class MetricsHttpServer {
         appendDouble(sb, "critThresholdPct", critPct);
         appendString(sb, "diagnosisNotes",   snap.getDiagnosisNotes());
         appendString(sb, "heapDumpPath",     snap.getHeapDumpPath());
+        // ── process detail ──
+        appendString(sb, "javaHome",         snap.getJavaHome());
+        appendString(sb, "javaVersion",      snap.getJavaVersion());
+        appendString(sb, "jvmName",          snap.getJvmName());
+        appendString(sb, "osName",           snap.getOsName());
+        appendLong  (sb, "cpuCount",         snap.getCpuCount());
+        appendDouble(sb, "processCpuPct",    snap.getProcessCpuPct());
+        appendLong  (sb, "processCpuMs",     snap.getProcessCpuMs());
+        appendString(sb, "jvmInputArgs",     snap.getJvmInputArgs());
+        appendString(sb, "javaCommand",      snap.getJavaCommand());
+        appendLong  (sb, "threadCount",      snap.getThreadCount());
+        appendLong  (sb, "peakThreadCount",  snap.getPeakThreadCount());
         appendGcCounts (sb, snap.getGcCollectionCounts());
         appendPoolsLast(sb, snap.getPoolUsedBytes(), MB);
         sb.append("}");

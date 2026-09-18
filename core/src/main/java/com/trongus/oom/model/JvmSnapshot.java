@@ -210,6 +210,46 @@ public final class JvmSnapshot {
      */
     private final double critThreshold;
 
+    // ── JVM process detail ────────────────────────────────────────────────────
+
+    /** {@code java.home} system property — the directory containing the JRE/JDK. */
+    private final String javaHome;
+
+    /** {@code java.version} + vendor string. */
+    private final String javaVersion;
+
+    /** {@code java.vm.name} + vm.version string. */
+    private final String jvmName;
+
+    /** OS name + version + arch from {@code OperatingSystemMXBean}. */
+    private final String osName;
+
+    /** Number of logical CPUs available to the JVM process. */
+    private final int cpuCount;
+
+    /**
+     * Process CPU load as a percentage (0–100), or {@code -1} when
+     * {@code com.sun.management.OperatingSystemMXBean} is not available.
+     */
+    private final double processCpuPct;
+
+    /**
+     * Cumulative process CPU time in milliseconds, or {@code -1} when unavailable.
+     */
+    private final long processCpuMs;
+
+    /** Space-separated JVM input arguments ({@code -X}, {@code -D}, flags). */
+    private final String jvmInputArgs;
+
+    /** {@code sun.java.command} — main class and application arguments. */
+    private final String javaCommand;
+
+    /** Live thread count at snapshot time. */
+    private final int threadCount;
+
+    /** Peak thread count since JVM start. */
+    private final int peakThreadCount;
+
     // ── constructor ───────────────────────────────────────────────────────────
 
     /**
@@ -243,6 +283,17 @@ public final class JvmSnapshot {
         this.leefCategory              = b.leefCategory;
         this.leefTags                  = b.leefTags;
         this.critThreshold             = b.critThreshold;
+        this.javaHome                  = b.javaHome;
+        this.javaVersion               = b.javaVersion;
+        this.jvmName                   = b.jvmName;
+        this.osName                    = b.osName;
+        this.cpuCount                  = b.cpuCount;
+        this.processCpuPct             = b.processCpuPct;
+        this.processCpuMs              = b.processCpuMs;
+        this.jvmInputArgs              = b.jvmInputArgs;
+        this.javaCommand               = b.javaCommand;
+        this.threadCount               = b.threadCount;
+        this.peakThreadCount           = b.peakThreadCount;
     }
 
     // ── accessors ─────────────────────────────────────────────────────────────
@@ -339,6 +390,39 @@ public final class JvmSnapshot {
      */
     public double     getCritThreshold()             { return critThreshold; }
 
+    /** @return {@code java.home} — directory containing the JRE/JDK, or empty string */
+    public String     getJavaHome()                  { return javaHome != null ? javaHome : ""; }
+
+    /** @return {@code java.version} and vendor string */
+    public String     getJavaVersion()               { return javaVersion != null ? javaVersion : ""; }
+
+    /** @return {@code java.vm.name} and vm version string */
+    public String     getJvmName()                   { return jvmName != null ? jvmName : ""; }
+
+    /** @return OS name, version and architecture */
+    public String     getOsName()                    { return osName != null ? osName : ""; }
+
+    /** @return number of logical CPUs available to the JVM */
+    public int        getCpuCount()                  { return cpuCount; }
+
+    /** @return process CPU load as a percentage (0–100), or {@code -1} if unavailable */
+    public double     getProcessCpuPct()             { return processCpuPct; }
+
+    /** @return cumulative process CPU time in milliseconds, or {@code -1} if unavailable */
+    public long       getProcessCpuMs()              { return processCpuMs; }
+
+    /** @return space-separated JVM input arguments */
+    public String     getJvmInputArgs()              { return jvmInputArgs != null ? jvmInputArgs : ""; }
+
+    /** @return {@code sun.java.command} — main class and application arguments */
+    public String     getJavaCommand()               { return javaCommand != null ? javaCommand : ""; }
+
+    /** @return live thread count at snapshot time */
+    public int        getThreadCount()               { return threadCount; }
+
+    /** @return peak thread count since JVM start */
+    public int        getPeakThreadCount()           { return peakThreadCount; }
+
     // ── wither ────────────────────────────────────────────────────────────────
 
     /**
@@ -390,6 +474,17 @@ public final class JvmSnapshot {
         b.leefCategory              = this.leefCategory;
         b.leefTags                  = this.leefTags;
         b.critThreshold             = this.critThreshold;
+        b.javaHome                  = this.javaHome;
+        b.javaVersion               = this.javaVersion;
+        b.jvmName                   = this.jvmName;
+        b.osName                    = this.osName;
+        b.cpuCount                  = this.cpuCount;
+        b.processCpuPct             = this.processCpuPct;
+        b.processCpuMs              = this.processCpuMs;
+        b.jvmInputArgs              = this.jvmInputArgs;
+        b.javaCommand               = this.javaCommand;
+        b.threadCount               = this.threadCount;
+        b.peakThreadCount           = this.peakThreadCount;
         return b;
     }
 
@@ -436,6 +531,17 @@ public final class JvmSnapshot {
         private String  leefTags;
         /** -1 until stamped by ThresholdRiskAssessor. */
         private double  critThreshold             = -1.0;
+        private String  javaHome                  = "";
+        private String  javaVersion               = "";
+        private String  jvmName                   = "";
+        private String  osName                    = "";
+        private int     cpuCount                  = 0;
+        private double  processCpuPct             = -1.0;
+        private long    processCpuMs              = -1L;
+        private String  jvmInputArgs              = "";
+        private String  javaCommand               = "";
+        private int     threadCount               = 0;
+        private int     peakThreadCount           = 0;
 
         /** @param v target name (e.g. "hostcontext"); @return {@code this} */
         public Builder targetName(String v)                { this.targetName = v; return this; }
@@ -496,6 +602,28 @@ public final class JvmSnapshot {
         public Builder leefTags(String v)                  { this.leefTags = v; return this; }
         /** @param v critical heap threshold 0–1 stamped by assessor; @return {@code this} */
         public Builder critThreshold(double v)             { this.critThreshold = v; return this; }
+        /** @param v java.home path; @return {@code this} */
+        public Builder javaHome(String v)                  { this.javaHome = v != null ? v : ""; return this; }
+        /** @param v java.version + vendor; @return {@code this} */
+        public Builder javaVersion(String v)               { this.javaVersion = v != null ? v : ""; return this; }
+        /** @param v java.vm.name + version; @return {@code this} */
+        public Builder jvmName(String v)                   { this.jvmName = v != null ? v : ""; return this; }
+        /** @param v OS name + version + arch; @return {@code this} */
+        public Builder osName(String v)                    { this.osName = v != null ? v : ""; return this; }
+        /** @param v logical CPU count; @return {@code this} */
+        public Builder cpuCount(int v)                     { this.cpuCount = v; return this; }
+        /** @param v process CPU % (0–100), or -1 if unavailable; @return {@code this} */
+        public Builder processCpuPct(double v)             { this.processCpuPct = v; return this; }
+        /** @param v process CPU time ms, or -1 if unavailable; @return {@code this} */
+        public Builder processCpuMs(long v)                { this.processCpuMs = v; return this; }
+        /** @param v space-separated JVM input args; @return {@code this} */
+        public Builder jvmInputArgs(String v)              { this.jvmInputArgs = v != null ? v : ""; return this; }
+        /** @param v sun.java.command value; @return {@code this} */
+        public Builder javaCommand(String v)               { this.javaCommand = v != null ? v : ""; return this; }
+        /** @param v live thread count; @return {@code this} */
+        public Builder threadCount(int v)                  { this.threadCount = v; return this; }
+        /** @param v peak thread count; @return {@code this} */
+        public Builder peakThreadCount(int v)              { this.peakThreadCount = v; return this; }
 
         /**
          * Constructs and returns an immutable {@link JvmSnapshot} from this builder.
