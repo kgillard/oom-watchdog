@@ -51,13 +51,29 @@ public final class CoreDumpStrategy implements DumpStrategy {
     // -------------------------------------------------------------------------
 
     private static String tryJ9System(String path) {
+        // Replace the .core extension added by CompositeDumpService with .dmp,
+        // which is the native extension for J9/OpenJ9 system dumps.
+        String dmpPath = path.endsWith(".core")
+                ? path.substring(0, path.length() - 5) + ".dmp"
+                : path + ".dmp";
         try {
-            Class.forName("com.ibm.jvm.Dump")
-                 .getMethod("SystemDump")
-                 .invoke(null);
-            WatchdogLogger.info(LOG, "CORE (J9 SystemDump) triggered; expected ~ {0}", path);
-            return path + "_j9.dmp";
+            Class<?> cls = Class.forName("com.ibm.jvm.Dump");
+            // Prefer the SystemDump(String agentOptions) overload so J9 writes to
+            // our chosen path.  The agent option string "file=<path>" is the
+            // documented way to control the output location.
+            try {
+                cls.getMethod("SystemDump", String.class).invoke(null, "file=" + dmpPath);
+            } catch (NoSuchMethodException e) {
+                // Older J9 builds only have the no-arg variant — fall back to it.
+                cls.getMethod("SystemDump").invoke(null);
+            }
+            WatchdogLogger.info(LOG, "CORE (J9 SystemDump) written: {0}", dmpPath);
+            return new File(dmpPath).getAbsolutePath();
         } catch (ClassNotFoundException e) {
+            return null;
+        } catch (java.lang.reflect.InvocationTargetException e) {
+            Throwable cause = e.getCause() != null ? e.getCause() : e;
+            WatchdogLogger.warning(LOG, e, "J9 SystemDump failed: {0}", cause.toString());
             return null;
         } catch (Exception e) {
             WatchdogLogger.warning(LOG, e, "J9 SystemDump failed: {0}", e.getMessage());

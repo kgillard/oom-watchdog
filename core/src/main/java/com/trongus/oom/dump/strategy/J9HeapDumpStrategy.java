@@ -26,12 +26,24 @@ public final class J9HeapDumpStrategy implements DumpStrategy {
 
     @Override
     public String attempt(JvmSnapshot snapshot, String outputPath) {
+        // Replace the .hprof extension added by CompositeDumpService with .phd,
+        // which is the native format produced by J9/OpenJ9 HeapDump.
+        String phdPath = outputPath.endsWith(".hprof")
+                ? outputPath.substring(0, outputPath.length() - 6) + ".phd"
+                : outputPath + ".phd";
         try {
-            Class<?>  cls    = Class.forName("com.ibm.jvm.Dump");
-            Method    method = cls.getMethod("HeapDump");
-            method.invoke(null);
-            // J9 controls the exact output path; we return the expected path as a hint
-            return new File(outputPath + ".phd").getAbsolutePath();
+            Class<?> cls = Class.forName("com.ibm.jvm.Dump");
+            // Prefer the HeapDump(String agentOptions) overload so J9 writes to
+            // our chosen path.  The agent option string "file=<path>" is the
+            // documented way to control the output location.
+            try {
+                Method withOpts = cls.getMethod("HeapDump", String.class);
+                withOpts.invoke(null, "file=" + phdPath);
+            } catch (NoSuchMethodException e) {
+                // Older J9 builds only have the no-arg variant — fall back to it.
+                cls.getMethod("HeapDump").invoke(null);
+            }
+            return new File(phdPath).getAbsolutePath();
         } catch (ClassNotFoundException e) {
             return null; // not J9
         } catch (java.lang.reflect.InvocationTargetException e) {
