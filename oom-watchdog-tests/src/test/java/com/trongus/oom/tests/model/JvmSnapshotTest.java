@@ -22,7 +22,7 @@ import static org.junit.Assert.*;
  * </ul>
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.1
+ * @version 1.7.2
  * @since 1.0.0
  * @see JvmSnapshot
  */
@@ -69,6 +69,8 @@ public class JvmSnapshotTest {
                 .gcOverheadRatio(0.0057)
                 .postGcHeapUsedBytes(55L * MB)
                 .postGcHeapGrowthRatePerMs(0.001)
+                .nurseryUsedRatio(0.15)
+                .critThreshold(0.90)
                 .riskLevel(OomRiskLevel.WARNING)
                 .diagnosisNotes("test-diagnosis")
                 .heapDumpPath(null)
@@ -274,6 +276,9 @@ public class JvmSnapshotTest {
         assertEquals(snapshot.getHeapUsedBytes(),        copy.getHeapUsedBytes());
         assertEquals(snapshot.getHeapMaxBytes(),         copy.getHeapMaxBytes());
         assertEquals(snapshot.getHeapUsedRatio(),        copy.getHeapUsedRatio(), 1e-9);
+        assertEquals(snapshot.getNurseryUsedBytes(),     copy.getNurseryUsedBytes());
+        assertEquals(snapshot.getNurseryUsedRatio(),     copy.getNurseryUsedRatio(), 1e-9);
+        assertEquals(snapshot.getCritThreshold(),        copy.getCritThreshold(), 1e-9);
         assertEquals(snapshot.getTotalGcTimeMs(),        copy.getTotalGcTimeMs());
         assertEquals(snapshot.getRiskLevel(),            copy.getRiskLevel());
         assertEquals(snapshot.getDiagnosisNotes(),       copy.getDiagnosisNotes());
@@ -298,6 +303,61 @@ public class JvmSnapshotTest {
         JvmSnapshot s = new JvmSnapshot.Builder().build();
         assertNull(s.getLeefCategory());
         assertNull(s.getLeefTags());
+    }
+    // ── nursery fields ────────────────────────────────────────────────────────
+
+    /** nurseryUsedBytes defaults to 0 when builder is unset. */
+    @Test
+    public void testNurseryUsedBytesDefaultsToZero() {
+        JvmSnapshot s = new JvmSnapshot.Builder().build();
+        assertEquals(0L, s.getNurseryUsedBytes());
+    }
+
+    /** nurseryUsedRatio defaults to NaN when builder is unset. */
+    @Test
+    public void testNurseryUsedRatioDefaultsToNaN() {
+        JvmSnapshot s = new JvmSnapshot.Builder().build();
+        assertTrue("Default nurseryUsedRatio must be NaN", Double.isNaN(s.getNurseryUsedRatio()));
+    }
+
+    /** Explicit nursery values round-trip through the builder. */
+    @Test
+    public void testNurseryValuesRoundTrip() {
+        JvmSnapshot s = new JvmSnapshot.Builder()
+                .nurseryUsedBytes(5L * MB)
+                .nurseryUsedRatio(0.05)
+                .build();
+        assertEquals(5L * MB, s.getNurseryUsedBytes());
+        assertEquals(0.05, s.getNurseryUsedRatio(), 1e-9);
+    }
+
+    /** Nursery values are preserved through toBuilder(). */
+    @Test
+    public void testNurseryValuesPreservedInToBuilder() {
+        JvmSnapshot s = new JvmSnapshot.Builder()
+                .nurseryUsedBytes(8L * MB)
+                .nurseryUsedRatio(0.08)
+                .build();
+        JvmSnapshot copy = s.toBuilder().build();
+        assertEquals(8L * MB, copy.getNurseryUsedBytes());
+        assertEquals(0.08, copy.getNurseryUsedRatio(), 1e-9);
+    }
+
+    /** Threshold fields default to -1 until stamped by the assessor. */
+    @Test
+    public void testThresholdFieldsDefaultToMinusOne() {
+        JvmSnapshot s = new JvmSnapshot.Builder().build();
+        assertEquals(-1.0, s.getCritThreshold(), 1e-9);
+    }
+
+    /** Threshold fields round-trip through toBuilder. */
+    @Test
+    public void testThresholdFieldsRoundTrip() {
+        JvmSnapshot s = new JvmSnapshot.Builder()
+                .critThreshold(0.90)
+                .build();
+        JvmSnapshot copy = s.toBuilder().build();
+        assertEquals(0.90, copy.getCritThreshold(), 1e-9);
     }
 
     /** Using toBuilder to override a single field must leave all others unchanged. */

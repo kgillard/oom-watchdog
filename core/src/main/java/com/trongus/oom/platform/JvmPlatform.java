@@ -14,7 +14,7 @@ import java.lang.management.ManagementFactory;
  * time to avoid repeated string/reflection overhead in the poll loop.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.1
+ * @version 1.7.2
  * @since 1.0.0
  */
 public final class JvmPlatform {
@@ -118,7 +118,12 @@ public final class JvmPlatform {
         }
     }
 
-    /** Human-readable summary for logs/alerts. */
+    /**
+     * Returns a human-readable summary of the detected JVM platform for use in log output and alerts.
+     *
+     * @return a formatted string containing JDK version, vendor, VM name, PID, GraalVM native flag,
+     *         and J9 flag
+     */
     public static String summary() {
         return String.format(
             "JDK=%d vendor=%s vm=%s pid=%d graalNative=%b j9=%b",

@@ -2,6 +2,7 @@ package com.trongus.oom.tests;
 
 import com.trongus.oom.tests.alert.AlertFormatterTest;
 import com.trongus.oom.tests.alert.FileLogAlertChannelTest;
+import com.trongus.oom.tests.alert.QRadarAlertChannelTest;
 import com.trongus.oom.tests.collector.MxBeanDiagnosticsCollectorTest;
 import com.trongus.oom.tests.config.WatchdogConfigTest;
 import com.trongus.oom.tests.dump.CompositeDumpServiceTest;
@@ -33,7 +34,8 @@ import org.junit.runners.Suite;
  *   <li><strong>model</strong> – {@link OomRiskLevelTest}, {@link JvmSnapshotTest}</li>
  *   <li><strong>config</strong> – {@link WatchdogConfigTest}</li>
  *   <li><strong>dump</strong> – {@link DumpTypeTest}, {@link CompositeDumpServiceTest}</li>
- *   <li><strong>alert</strong> – {@link AlertFormatterTest}, {@link FileLogAlertChannelTest}</li>
+ *   <li><strong>alert</strong> – {@link AlertFormatterTest}, {@link FileLogAlertChannelTest},
+ *       {@link QRadarAlertChannelTest}</li>
  *   <li><strong>collector</strong> – {@link MxBeanDiagnosticsCollectorTest}</li>
  *   <li><strong>monitor</strong> – {@link ThresholdRiskAssessorTest}</li>
  *   <li><strong>platform</strong> – {@link JvmPlatformTest}</li>
@@ -43,7 +45,7 @@ import org.junit.runners.Suite;
  * </ul>
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.1
+ * @version 1.7.2
  * @since 1.0.0
  */
 @RunWith(Suite.class)
@@ -59,6 +61,7 @@ import org.junit.runners.Suite;
     // alert
     AlertFormatterTest.class,
     FileLogAlertChannelTest.class,
+    QRadarAlertChannelTest.class,
     // collector
     MxBeanDiagnosticsCollectorTest.class,
     // monitor

@@ -31,7 +31,7 @@ import java.util.logging.LogRecord;
  * constructing this class directly.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.1
+ * @version 1.7.2
  * @since 1.6.0
  * @see WatchdogLogger
  */

@@ -15,7 +15,7 @@ import com.trongus.oom.model.JvmSnapshot;
  * called concurrently from the watchdog's scheduler thread.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.1
+ * @version 1.7.2
  * @since 1.0.0
  * @see com.trongus.oom.alert.ConsoleAlertChannel
  * @see com.trongus.oom.alert.FileLogAlertChannel

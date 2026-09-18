@@ -20,12 +20,24 @@ import com.trongus.oom.model.OomRiskLevel;
  *   <li>{@code OK} – none of the above</li>
  * </ol>
  *
+ * <h2>OOM_FIRING pass-through</h2>
+ * <p>Snapshots whose {@link com.trongus.oom.model.OomRiskLevel} is already
+ * {@code OOM_FIRING} (stamped by a collector, e.g. an unreachable JMX target) are
+ * returned unchanged.  The assessor does not downgrade or re-evaluate them.
+ *
+ * <h2>Threshold stamping</h2>
+ * <p>Every outgoing snapshot (except {@code OOM_FIRING} pass-throughs) has the active
+ * {@code critThreshold} value stamped on it via
+ * {@link com.trongus.oom.model.JvmSnapshot.Builder#critThreshold(double)}.
+ * This allows downstream consumers such as {@link com.trongus.oom.alert.QRadarAlertChannel}
+ * to include margin-to-threshold information in alert events.
+ *
  * <p>The returned snapshot's {@code diagnosisNotes} are prepended with a
  * localised assessment summary and enriched with an {@link OomCause} explanation
  * so that every alert channel has full context.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.1
+ * @version 1.7.2
  * @since 1.0.0
  * @see RiskAssessor
  * @see OomCauseAnalyser
@@ -53,6 +65,22 @@ public final class ThresholdRiskAssessor implements RiskAssessor {
                 messages);
     }
 
+    /**
+     * Classifies the risk level of the supplied snapshot and returns an enriched copy.
+     *
+     * <p>Snapshots already carrying {@link OomRiskLevel#OOM_FIRING} are returned
+     * unchanged (pass-through).  All other snapshots are evaluated against configured
+     * thresholds and receive:
+     * <ul>
+     *   <li>An updated {@link OomRiskLevel} ({@code OK}, {@code WARNING}, or {@code CRITICAL}).</li>
+     *   <li>Localised assessment and cause-analysis text prepended to {@code diagnosisNotes}.</li>
+     *   <li>The active {@code critThreshold} value stamped on the snapshot.</li>
+     * </ul>
+     *
+     * @param snap the raw {@link JvmSnapshot} produced by the diagnostics collector;
+     *             must not be {@code null}
+     * @return an enriched, immutable {@link JvmSnapshot} with risk level and diagnosis notes set
+     */
     @Override
     public JvmSnapshot assess(JvmSnapshot snap) {
         // Snapshots marked OOM_FIRING by the collector (e.g. unreachable JMX target)
@@ -118,6 +146,7 @@ public final class ThresholdRiskAssessor implements RiskAssessor {
         return snap.toBuilder()
                 .riskLevel(level)
                 .diagnosisNotes(enrichedNotes)
+                .critThreshold(config.getCriticalHeapThreshold())
                 .build();
     }
 }

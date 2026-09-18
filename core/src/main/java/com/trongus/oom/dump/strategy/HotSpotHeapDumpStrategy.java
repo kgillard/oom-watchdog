@@ -15,6 +15,9 @@ import java.lang.reflect.Method;
  * Not available in: GraalVM Native Image, IBM J9/OpenJ9.
  * Reflection is used so the code compiles without a {@code com.sun.management}
  * import, keeping it compatible with all JDK versions including 26+.
+ * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
+ * @version 1.7.2
+ * @since 1.7.0
  */
 public final class HotSpotHeapDumpStrategy implements DumpStrategy {
 

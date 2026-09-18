@@ -1,4 +1,4 @@
-# OOM Watchdog – Architecture (v1.7.1)
+# OOM Watchdog – Architecture
 
 ## Overview
 
@@ -7,21 +7,13 @@ preemptively detects Out-Of-Memory conditions and fires structured alerts before
 crashes.  It supports **all major JVM vendors** (HotSpot, IBM J9/OpenJ9, GraalVM JVM,
 GraalVM Native Image) and **JDK 8 through 26+**.
 
-**v1.7.0 additions:** Multi-target JVM monitoring daemon with remote JMX collector (`com.trongus.oom.remote` package: `TargetDescriptor`, `TargetRegistry`, `JmxDiagnosticsCollector`, `WatchdogDaemon`), target JVM tag propagation in `JvmSnapshot`, `QRadarAlertChannel` LEEF attribute `targetJvm`, and CLI daemon flags (`--daemon`, `--targets-file`).
-
-**v1.6.0 additions:** `WatchdogLogger` structured JUL logging subsystem, `WatchdogConfig.logLevel(Level)`, CLI `--log-level` flag.
-
-**v1.5.0 additions:** Example 11 (`Example11CauseAnalysisAndI18n`) demonstrating
-`OomCauseAnalyser` standalone and locale-aware watchdog wiring; per-release Quick Start
-guide in `EXAMPLES.md`; all example `@version` tags updated; security audit badge updated
-to reflect 4 passes.
-
-**v1.4.0 additions:** Security hardening — `AtomicBoolean.compareAndSet` (SEC-2),
-`AtomicReference<OomRiskLevel>` (SEC-3), `CopyOnWriteArrayList` (SEC-4).
-
-**v1.3.0 additions:** `OomCauseAnalyser` (root-cause analysis), `OomCause`/`OomCauseCategory`
-value objects, `Messages` i18n wrapper, and 9-locale resource bundles.  All alert text,
-section headings, and diagnosis strings are now locale-aware.
+Key architecture features include:
+- In-process and remote JMX multi-target JVM health monitoring.
+- Real-time risk assessment via heap ratios, GC overhead, and OLS regression leak slope analysis.
+- Structured single-line and detailed human-readable logging named after the target JVM.
+- Multiple alert channels (Console, File, QRadar LEEF 2.0, WAS SystemErr, Liberty messages.log, Cognos).
+- Non-blocking, rate-limited dump capture (heap, thread, histogram, core dumps).
+- Built-in root cause analysis and internationalisation across 9 locales.
 
 The design follows the five SOLID principles throughout: every class has one reason to
 change, new behaviour is added by extension rather than modification, subtypes are fully
@@ -108,6 +100,7 @@ classDiagram
         +stop()
         +getLastRiskLevel() OomRiskLevel
         -poll()
+        -checkDumpThresholds(JvmSnapshot)
     }
 
     class JvmDiagnosticsCollector {
@@ -167,6 +160,13 @@ classDiagram
         -String localHostname
         +QRadarAlertChannel(String, int, Transport)
         +alert(JvmSnapshot)
+        +channelName() String
+    }
+
+    class Transport {
+        <<enumeration>>
+        UDP
+        TCP
     }
 
     class WasAlertChannel {
@@ -236,6 +236,11 @@ classDiagram
         +long pollIntervalMs
         +Set~DumpType~ dumpTypes
         +String dumpDirectory
+        +String leefCategory
+        +String leefTags
+        +double gcDumpThreshold
+        +double heapDumpThreshold
+        +double nurseryDumpThreshold
         +builder(String, String) Builder$
     }
 
@@ -253,6 +258,8 @@ classDiagram
         +start()
         +stop()
         +isRunning() boolean
+        +getActiveWatchdogCount() int
+        +close()
     }
 
     class JvmSnapshot {
@@ -263,6 +270,8 @@ classDiagram
         +long heapCommittedBytes
         +long heapMaxBytes
         +double heapUsedRatio
+        +long nurseryUsedBytes
+        +double nurseryUsedRatio
         +long nonHeapUsedBytes
         +long nonHeapMaxBytes
         +Map~String,Long~ poolUsedBytes
@@ -276,6 +285,10 @@ classDiagram
         +OomRiskLevel riskLevel
         +String diagnosisNotes
         +String heapDumpPath
+        +String leefCategory
+        +String leefTags
+        +double warnThreshold
+        +double critThreshold
         +withHeapDumpPath(String) JvmSnapshot
         +toBuilder() Builder
     }
@@ -299,8 +312,16 @@ classDiagram
         +String qradarHost
         +int qradarPort
         +Locale locale
+        +Level logLevel
+        +double gcDumpThreshold
+        +double heapDumpThreshold
+        +double nurseryDumpThreshold
         +defaults() Builder
         +getLocale() Locale
+        +getLogLevel() Level
+        +getGcDumpThreshold() double
+        +getHeapDumpThreshold() double
+        +getNurseryDumpThreshold() double
     }
 
     class JvmPlatform {
@@ -356,6 +377,7 @@ classDiagram
     ConsoleAlertChannel ..|> AlertChannel
     FileLogAlertChannel ..|> AlertChannel
     QRadarAlertChannel ..|> AlertChannel
+    QRadarAlertChannel --> Transport
     WasAlertChannel ..|> AlertChannel
     LibertyAlertChannel ..|> AlertChannel
     CognosAlertChannel ..|> AlertChannel
@@ -399,7 +421,7 @@ sequenceDiagram
     WD->>COL: collect()
     COL-->>WD: JvmSnapshot(riskLevel=OK)
     WD->>ASS: assess(snapshot)
-    ASS-->>WD: JvmSnapshot(riskLevel=CRITICAL, diagnosisNotes=...)
+    ASS-->>WD: JvmSnapshot(riskLevel=CRITICAL, critThreshold stamped)
 
     alt riskLevel == OK
         WD->>WD: dumpTakenThisEpisode.set(false)
@@ -414,6 +436,13 @@ sequenceDiagram
         loop for each AlertChannel
             WD->>CH: alert(toReport)
         end
+    end
+
+    Note over WD: checkDumpThresholds(assessed)
+    WD->>WD: check gcDumpThreshold / heapDumpThreshold / nurseryDumpThreshold
+    opt threshold exceeded AND !dumpTakenThisEpisode
+        WD->>DUMP: dump(snapshot, threshold-triggered types)
+        DUMP-->>WD: dumpPaths
     end
 
     WD->>WD: lastLevel.set(riskLevel)
@@ -449,7 +478,7 @@ flowchart TD
 ## Module Structure
 
 ```
-oom-watchdog/                  Maven multi-module root (v1.7.1)
+oom-watchdog/                  Maven multi-module root (v1.7.2)
 ├── core/                      oom-watchdog.jar  (fat jar via maven-shade-plugin)
 │   └── src/main/java/com/trongus/oom/
 │       ├── WatchdogMain.java  CLI entry point (local + daemon modes)
@@ -459,21 +488,20 @@ oom-watchdog/                  Maven multi-module root (v1.7.1)
 │       ├── collector/         JvmDiagnosticsCollector (interface)
 │       │                      + MxBeanDiagnosticsCollector (in-process MXBeans)
 │       ├── config/            WatchdogConfig (immutable builder, locale)
-│       ├── diagnosis/         OomCause + OomCauseCategory + OomCauseAnalyser  ← v1.3.0
 │       ├── dump/              HeapDumpService (interface) + CompositeDumpService
 │       │                      + DumpType enum
 │       │   └── strategy/      DumpStrategy (interface) + 6 implementations
 │       │                      (HotSpotHeapDump, J9HeapDump, GraalNativeHeapDump,
 │       │                       ThreadDump, ClassHistogram, CoreDump)
 │       ├── examples/          11 runnable example classes (01–11)
-│       ├── i18n/              Messages (UTF-8 ResourceBundle wrapper)           ← v1.3.0
-│       ├── logging/           WatchdogLogger + WatchdogLogFormatter             ← v1.6.0
+│       ├── i18n/              Messages (UTF-8 ResourceBundle wrapper)
+│       ├── logging/           WatchdogLogger + WatchdogLogFormatter
 │       ├── model/             JvmSnapshot (immutable value object, targetName)
 │       │                      + OomRiskLevel enum
 │       ├── monitor/           OomWatchdog + RiskAssessor (interface)
 │       │                      + ThresholdRiskAssessor
 │       ├── platform/          JvmPlatform (static detection, all fields final)
-│       ├── remote/            TargetDescriptor, TargetRegistry,                 ← v1.7.0
+│       ├── remote/            TargetDescriptor, TargetRegistry,
 │       │                      JmxDiagnosticsCollector, WatchdogDaemon
 │       └── test/              OomSimulator (3-phase heap exhaustion)
 │   └── src/main/resources/
@@ -487,7 +515,7 @@ oom-watchdog/                  Maven multi-module root (v1.7.1)
 │       │   ├── Messages_pt_BR.properties Brazilian Portuguese
 │       │   ├── Messages_zh_CN.properties Simplified Chinese (UTF-8)
 │       │   └── Messages_zh_TW.properties Traditional Chinese (UTF-8)
-│       └── targets.properties.example    Daemon-mode reference config           ← v1.7.0
+│       └── targets.properties.example    Daemon-mode reference config
 │
 ├── test-harness/              test-harness.jar
 │   └── src/main/java/com/trongus/oom/harness/
@@ -506,7 +534,7 @@ oom-watchdog/                  Maven multi-module root (v1.7.1)
         ├── collector/         MxBeanDiagnosticsCollectorTest
         ├── monitor/           ThresholdRiskAssessorTest
         ├── platform/          JvmPlatformTest
-        ├── remote/            TargetDescriptorTest, TargetRegistryTest,         ← v1.7.0
+        ├── remote/            TargetDescriptorTest, TargetRegistryTest,
         │                      WatchdogDaemonTest
         └── integration/       OomWatchdogIntegrationTest
 ```
@@ -584,7 +612,7 @@ The following table shows exactly where OOM Watchdog alert output appears for ev
 Five security audit passes have been performed.  Passes 1 and 2 identified and
 fixed 11 issues.  Pass 3 reviewed all remaining source files and confirmed no
 further issues.  Pass 4 identified and fixed 3 concurrency issues (SEC-2, SEC-3, SEC-4).
-Pass 5 (v1.7.0) identified and fixed 4 issues in the new remote JMX monitoring subsystem.
+Pass 5 identified and fixed 4 issues in the remote JMX monitoring subsystem.
 
 | # | Audit | File | Issue | Fix |
 |---|-------|------|-------|-----|
@@ -611,8 +639,8 @@ Pass 5 (v1.7.0) identified and fixed 4 issues in the new remote JMX monitoring s
 
 ## Release Artefacts
 
-The v1.7.1 release publishes two executable fat JARs built with `maven-shade-plugin`.
-Both will be attached to the [GitHub release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.1).
+The v1.7.2 release publishes two executable fat JARs built with `maven-shade-plugin`.
+Both will be attached to the [GitHub release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.2).
 
 | Artefact | Main class | Contents | Size (approx) |
 |----------|-----------|----------|---------------|

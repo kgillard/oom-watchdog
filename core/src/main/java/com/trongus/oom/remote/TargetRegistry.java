@@ -27,24 +27,66 @@ import java.util.logging.Logger;
  * <h2>Configuration Format</h2>
  * <p>Targets are declared using a hierarchical {@code target.<name>.<property>} syntax:
  * <pre>{@code
- * target.hostcontext.jmx-url    = service:jmx:rmi:///jndi/rmi://localhost:7777/jmxrmi
- * target.hostcontext.warn       = 0.75
- * target.hostcontext.crit       = 0.85
- * target.hostcontext.gc         = 0.40
- * target.hostcontext.dump-types = heap,thread
- * target.hostcontext.dump-dir   = /var/log/qradar/dumps/hostcontext
- * target.hostcontext.poll-ms    = 3000
- * target.hostcontext.username   = admin
- * target.hostcontext.password   = secret
+ * target.hostcontext.jmx-url              = service:jmx:rmi:///jndi/rmi://localhost:7777/jmxrmi
+ * target.hostcontext.warn                 = 0.75
+ * target.hostcontext.crit                 = 0.85
+ * target.hostcontext.gc                   = 0.40
+ * target.hostcontext.dump-types           = heap,thread
+ * target.hostcontext.dump-dir             = /var/log/qradar/dumps/hostcontext
+ * target.hostcontext.poll-ms              = 3000
+ * target.hostcontext.username             = admin
+ * target.hostcontext.password             = secret
+ * target.hostcontext.leef-category        = JVM_OOM_hostcontext
+ * target.hostcontext.leef-tags            = env=prod,team=platform
+ * target.hostcontext.gc-dump-threshold    = 0.70
+ * target.hostcontext.heap-dump-threshold  = 0.85
+ * target.hostcontext.nursery-dump-threshold = 0.90
  *
- * target.tomcat.jmx-url         = service:jmx:rmi:///jndi/rmi://localhost:8090/jmxrmi
- * target.tomcat.warn            = 0.80
- * target.tomcat.crit            = 0.90
+ * target.tomcat.jmx-url                   = service:jmx:rmi:///jndi/rmi://localhost:8090/jmxrmi
+ * target.tomcat.warn                      = 0.80
+ * target.tomcat.crit                      = 0.90
  * }</pre>
+ *
+ * <h2>Recognised Property Keys</h2>
+ * <table border="1">
+ *   <caption>Supported per-target property keys</caption>
+ *   <tr><th>Key</th><th>Default</th><th>Description</th></tr>
+ *   <tr><td>{@code jmx-url} (or {@code jmxurl}, {@code url})</td><td><em>required</em></td>
+ *       <td>JMX Service URL for connecting to the target JVM.</td></tr>
+ *   <tr><td>{@code warn} (or {@code warn-threshold})</td><td>{@code 0.80}</td>
+ *       <td>Heap-usage ratio (0–1) that triggers a {@code WARNING} alert.</td></tr>
+ *   <tr><td>{@code crit} (or {@code crit-threshold})</td><td>{@code 0.90}</td>
+ *       <td>Heap-usage ratio (0–1) that triggers a {@code CRITICAL} alert and dumps.</td></tr>
+ *   <tr><td>{@code gc} (or {@code gc-threshold})</td><td>{@code 0.50}</td>
+ *       <td>GC overhead fraction (0–1) that triggers a {@code WARNING} alert.</td></tr>
+ *   <tr><td>{@code gc-dump-threshold}</td><td>{@code -1} (disabled)</td>
+ *       <td>GC overhead ratio (0–1) that independently triggers a dump.</td></tr>
+ *   <tr><td>{@code heap-dump-threshold}</td><td>{@code -1} (disabled)</td>
+ *       <td>Heap-usage ratio (0–1) that independently triggers a dump.</td></tr>
+ *   <tr><td>{@code nursery-dump-threshold}</td><td>{@code -1} (disabled)</td>
+ *       <td>Nursery/young-gen used ratio (0–1) that independently triggers a dump.</td></tr>
+ *   <tr><td>{@code poll-ms} (or {@code poll-interval-ms})</td><td>{@code 5000}</td>
+ *       <td>Polling interval between diagnostics collections, in milliseconds.</td></tr>
+ *   <tr><td>{@code dump-types} (or {@code dumptypes})</td><td>(empty)</td>
+ *       <td>Comma-separated list of dump types at {@code CRITICAL}: {@code HEAP}, {@code CORE},
+ *           {@code THREAD}, {@code CLASS_HISTOGRAM}.</td></tr>
+ *   <tr><td>{@code dump-dir} (or {@code dump-directory})</td><td>{@code ./dumps/<name>}</td>
+ *       <td>Directory where diagnostic dumps for this target are saved.</td></tr>
+ *   <tr><td>{@code username}</td><td>(none)</td>
+ *       <td>Optional JMX authentication username.</td></tr>
+ *   <tr><td>{@code password}</td><td>(none)</td>
+ *       <td>Optional JMX authentication password.</td></tr>
+ *   <tr><td>{@code leef-category}</td><td>{@code "JVM_OOM_Risk"}</td>
+ *       <td>Optional LEEF {@code cat} override sent in QRadar syslog events for this target.</td></tr>
+ *   <tr><td>{@code leef-tags}</td><td>(omitted)</td>
+ *       <td>Optional LEEF {@code tags} attribute for environment labels or topology context
+ *           (e.g. {@code "env=prod,team=platform,region=us-east-1"}).</td></tr>
+ * </table>
  *
  * <h2>Validation Rules</h2>
  * <ul>
- *   <li>Every target must declare a valid, non-blank {@code jmx-url}. If missing, an {@link IllegalArgumentException} is thrown.</li>
+ *   <li>Every target must declare a valid, non-blank {@code jmx-url}; if missing an
+ *       {@link IllegalArgumentException} is thrown.</li>
  *   <li>{@code warn} must be strictly less than {@code crit}.</li>
  *   <li>Property keys that do not match {@code target.<name>.<property>} are ignored with a warning log.</li>
  * </ul>
@@ -53,7 +95,7 @@ import java.util.logging.Logger;
  * <p>This utility class is stateless and thread-safe.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.1
+ * @version 1.7.2
  * @since 1.7.0
  * @see TargetDescriptor
  * @see WatchdogDaemon
@@ -255,6 +297,17 @@ public final class TargetRegistry {
             String leefTags = p.get("leef-tags");
             if (leefTags != null && !leefTags.isEmpty()) {
                 b.leefTags(leefTags);
+            }
+
+            // Optional dump thresholds
+            if (p.containsKey("gc-dump-threshold")) {
+                b.gcDumpThreshold(parseDouble(p.get("gc-dump-threshold"), "gc-dump-threshold", targetName));
+            }
+            if (p.containsKey("heap-dump-threshold")) {
+                b.heapDumpThreshold(parseDouble(p.get("heap-dump-threshold"), "heap-dump-threshold", targetName));
+            }
+            if (p.containsKey("nursery-dump-threshold")) {
+                b.nurseryDumpThreshold(parseDouble(p.get("nursery-dump-threshold"), "nursery-dump-threshold", targetName));
             }
 
             descriptors.add(b.build());

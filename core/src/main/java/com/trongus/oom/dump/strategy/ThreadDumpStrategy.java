@@ -27,6 +27,9 @@ import java.util.Date;
  * <p>Each thread entry includes: name, ID (using {@code threadId()} on JDK 19+
  * or {@code getThreadId()} on older versions), state, stack trace, held monitors,
  * and held synchronizers.
+ * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
+ * @version 1.7.2
+ * @since 1.7.0
  */
 public final class ThreadDumpStrategy implements DumpStrategy {
 
@@ -124,7 +127,10 @@ public final class ThreadDumpStrategy implements DumpStrategy {
      * Returns the thread ID, preferring the JDK 19+ {@code threadId()} method
      * (non-deprecated) and falling back to {@code getThreadId()} via reflection
      * for JDK 8–18 where {@code threadId()} doesn't exist.
-     */
+     * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
+ * @version 1.7.2
+ * @since 1.7.0
+ */
     @SuppressWarnings("deprecation")
     private static long getThreadId(ThreadInfo ti) {
         if (JvmPlatform.JDK_VERSION >= 19) {

@@ -19,6 +19,9 @@ import java.io.InputStreamReader;
  * </ol>
  *
  * <p>Returns {@code null} on Windows or when neither mechanism is available.
+ * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
+ * @version 1.7.2
+ * @since 1.7.0
  */
 public final class CoreDumpStrategy implements DumpStrategy {
 

@@ -3,22 +3,22 @@
 > **Preemptively detect and alert on JVM Out-of-Memory conditions — before the process crashes.**
 
 [![Build](https://img.shields.io/badge/build-passing-brightgreen)]()
-[![Tests](https://img.shields.io/badge/tests-200%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-239%20passing-brightgreen)]()
 [![Security Audit](https://img.shields.io/badge/security%20audit-4%20passes%20clean-brightgreen)]()
 [![JDK](https://img.shields.io/badge/JDK-8%20%E2%80%93%2026%2B-blue)]()
 [![Vendors](https://img.shields.io/badge/JVM-HotSpot%20%7C%20OpenJ9%20%7C%20GraalVM-blue)]()
-[![Release](https://img.shields.io/badge/release-v1.7.1-blue)](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.1)
+[![Release](https://img.shields.io/badge/release-v1.7.2-blue)](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.2)
 
 ---
 
 ## Download
 
-Pre-built JARs are available in the [v1.7.1 release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.1):
+Pre-built JARs are available in the [v1.7.2 release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.2):
 
 | Artefact | Description | Size |
 |----------|-------------|------|
-| [`oom-watchdog.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.7.1/oom-watchdog.jar) | Fat JAR — monitoring agent + CLI entry point | ~157 KB |
-| [`test-harness.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.7.1/test-harness.jar) | Fat JAR — interactive OOM test harness | ~171 KB |
+| [`oom-watchdog.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.7.2/oom-watchdog.jar) | Fat JAR — monitoring agent + CLI entry point | ~157 KB |
+| [`test-harness.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.7.2/test-harness.jar) | Fat JAR — interactive OOM test harness | ~171 KB |
 
 ---
 
@@ -49,7 +49,7 @@ OOM Watchdog provides real-time health monitoring, per-process logging named aft
 ```bash
 # Download the release JAR or self-extracting installer
 curl -L -o oom-watchdog.jar \
-  https://github.com/kgillard/oom-watchdog/releases/download/v1.7.1/oom-watchdog.jar
+  https://github.com/kgillard/oom-watchdog/releases/download/v1.7.2/oom-watchdog.jar
 
 # Run in multi-target daemon mode (monitors external JVMs over JMX)
 java -jar oom-watchdog.jar --daemon --targets-file /etc/oom-watchdog/targets.properties
@@ -111,6 +111,8 @@ chmod +x oom-watchdog-installer.sh
 | `--warn-threshold <0.0–1.0>` | `0.80` | Heap usage fraction that triggers WARNING |
 | `--crit-threshold <0.0–1.0>` | `0.90` | Heap usage fraction that triggers CRITICAL |
 | `--gc-threshold <0.0–1.0>` | `0.50` | GC CPU fraction that triggers WARNING |
+| `--gc-dump-threshold <0.0–1.0>` | _(disabled)_ | GC overhead ratio that triggers an immediate dump regardless of risk level |
+| `--heap-dump-threshold <0.0–1.0>` | _(disabled)_ | Heap usage ratio that triggers an immediate dump (supplements the CRITICAL-level dump) |
 | `--poll-ms <ms>` | `5000` | Poll interval in milliseconds (minimum: 100) |
 | `--dump-dir <path>` | `./dumps` | Output directory for dump artefacts |
 | `--dump-types <list>` | _(none)_ | Comma-separated: `HEAP,THREAD,CLASS_HISTOGRAM,CORE` |
@@ -312,6 +314,9 @@ A complete example file is provided at
 | `target.<name>.dump-dir` | No | `./dumps/<name>` | Filesystem directory where dump files are written |
 | `target.<name>.username` | No | _(none)_ | JMX authentication username |
 | `target.<name>.password` | No | _(none)_ | JMX authentication password |
+| `target.<name>.gc-dump-threshold` | No | _(disabled)_ | GC overhead ratio (0.0–1.0) that triggers an immediate dump |
+| `target.<name>.heap-dump-threshold` | No | _(disabled)_ | Heap ratio (0.0–1.0) that triggers an immediate dump at WARNING level |
+| `target.<name>.nursery-dump-threshold` | No | _(disabled)_ | Young-gen/nursery memory ratio (0.0–1.0) that triggers an immediate dump |
 | `target.<name>.leef-category` | No | `JVM_OOM_Risk` | Overrides the LEEF `cat` attribute in every QRadar syslog event sent for this target. Use to distinguish components in QRadar **Log Activity** searches and custom rules |
 | `target.<name>.leef-tags` | No | _(omitted)_ | Adds a `tags` attribute to the LEEF event. Recommended format: `key=value,key=value` (e.g. `env=prod,team=platform,region=us-east-1`) |
 
@@ -660,7 +665,7 @@ new QRadarAlertChannel("siem.corp.com", 6514, Transport.TCP)  // TLS proxy
 **LEEF 2.0 event format** (single line on the wire; `<TAB>` = literal tab delimiter):
 
 ```
-<13>Sep 17 08:00:00 prod-host LEEF:2.0|IBM|OomWatchdog|1.1|OOM_CRITICAL|sev=9<TAB>cat=JVM_OOM_Risk<TAB>targetJvm=hostcontext<TAB>tags=env=prod,component=hostcontext<TAB>process=98765@prod-host<TAB>heapUsedMB=921<TAB>heapMaxMB=1024<TAB>heapPct=90.0<TAB>nonHeapUsedMB=128<TAB>gcOverheadPct=23.8<TAB>totalGcTimeMs=14300<TAB>postGcGrowth=42.30 MB/h<TAB>riskLevel=CRITICAL<TAB>msg=...
+<13>Sep 17 08:00:00 prod-host LEEF:2.0|IBM|OomWatchdog|1.1|OOM_CRITICAL|sev=9<TAB>cat=JVM_OOM_Risk<TAB>targetJvm=hostcontext<TAB>tags=env=prod,component=hostcontext<TAB>process=98765@prod-host<TAB>heapUsedMB=921<TAB>heapMaxMB=1024<TAB>heapPct=90.0<TAB>critThresholdPct=90.0<TAB>heapMarginPct=0.0<TAB>dumpTaken=true<TAB>nonHeapUsedMB=128<TAB>gcOverheadPct=23.8<TAB>totalGcTimeMs=14300<TAB>postGcGrowth=42.30 MB/h<TAB>nurseryPct=45.0<TAB>riskLevel=CRITICAL<TAB>msg=...
 ```
 
 `cat` and `tags` are per-target overrides controlled by `leef-category` and `leef-tags` in `targets.properties`. When not set, `cat` defaults to `JVM_OOM_Risk` and `tags` is omitted entirely.
@@ -761,6 +766,10 @@ richer offense generation:
 | LEEF Attribute | QRadar Property Name | Property Type |
 |---|---|---|
 | `heapPct` | `JVM Heap Usage (%)` | Numeric |
+| `critThresholdPct` | `Critical Heap Threshold (%)` | Numeric |
+| `heapMarginPct` | `Headroom to Critical (%)` | Numeric |
+| `dumpTaken` | `Dump Captured Flag` | Text |
+| `nurseryPct` | `Nursery Utilisation (%)` | Numeric |
 | `riskLevel` | `JVM Risk Level` | Text |
 | `process` | `JVM Process` | Text |
 | `gcOverheadPct` | `GC Overhead (%)` | Numeric |

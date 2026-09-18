@@ -29,7 +29,7 @@ import java.util.Map;
  * Instances are fully thread-safe because they are immutable.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.1
+ * @version 1.7.2
  * @since 1.0.0
  * @see com.trongus.oom.collector.JvmDiagnosticsCollector
  * @see com.trongus.oom.monitor.RiskAssessor
@@ -67,6 +67,22 @@ public final class JvmSnapshot {
      * Range: {@code 0.0} to {@code 1.0}.
      */
     private final double heapUsedRatio;
+
+    // ── nursery / young-gen (J9/OpenJ9 and generic via pool names) ────────────
+
+    /**
+     * Sum of bytes currently used across all MemoryPoolMXBean entries whose name
+     * contains "Eden", "Nursery", or "Young" (case-insensitive).
+     * {@code 0} when no matching pools are found.
+     */
+    private final long nurseryUsedBytes;
+
+    /**
+     * Nursery used bytes expressed as a fraction of {@link #heapMaxBytes}:
+     * {@code nurseryUsedBytes / heapMaxBytes}.
+     * {@link Double#NaN} when no matching pools are found or {@code heapMaxBytes <= 0}.
+     */
+    private final double nurseryUsedRatio;
 
     // ── non-heap (Metaspace, Code Cache, Compressed Class Space) ─────────────
 
@@ -187,6 +203,20 @@ public final class JvmSnapshot {
      */
     private final String leefTags;
 
+    /**
+     * The warning heap threshold (0.0–1.0) that was in effect when this snapshot
+     * was assessed, stamped by {@link com.trongus.oom.monitor.ThresholdRiskAssessor}.
+     * {@code -1} when not yet assessed.
+     */
+    private final double warnThreshold;
+
+    /**
+     * The critical heap threshold (0.0–1.0) that was in effect when this snapshot
+     * was assessed, stamped by {@link com.trongus.oom.monitor.ThresholdRiskAssessor}.
+     * {@code -1} when not yet assessed.
+     */
+    private final double critThreshold;
+
     // ── constructor ───────────────────────────────────────────────────────────
 
     /**
@@ -202,6 +232,8 @@ public final class JvmSnapshot {
         this.heapCommittedBytes        = b.heapCommittedBytes;
         this.heapMaxBytes              = b.heapMaxBytes;
         this.heapUsedRatio             = b.heapUsedRatio;
+        this.nurseryUsedBytes          = b.nurseryUsedBytes;
+        this.nurseryUsedRatio          = b.nurseryUsedRatio;
         this.nonHeapUsedBytes          = b.nonHeapUsedBytes;
         this.nonHeapMaxBytes           = b.nonHeapMaxBytes;
         this.poolUsedBytes             = Collections.unmodifiableMap(new LinkedHashMap<>(b.poolUsedBytes));
@@ -217,6 +249,8 @@ public final class JvmSnapshot {
         this.heapDumpPath              = b.heapDumpPath;
         this.leefCategory              = b.leefCategory;
         this.leefTags                  = b.leefTags;
+        this.warnThreshold             = b.warnThreshold;
+        this.critThreshold             = b.critThreshold;
     }
 
     // ── accessors ─────────────────────────────────────────────────────────────
@@ -241,6 +275,14 @@ public final class JvmSnapshot {
 
     /** @return heap utilisation fraction in range {@code 0.0–1.0} */
     public double     getHeapUsedRatio()             { return heapUsedRatio; }
+
+    /** @return bytes used across nursery/young-gen pools (Eden+Nursery+Young); {@code 0} if none found */
+    public long       getNurseryUsedBytes()          { return nurseryUsedBytes; }
+
+    /**
+     * @return nursery used as fraction of heap max; {@link Double#NaN} when no nursery pools found
+     */
+    public double     getNurseryUsedRatio()          { return nurseryUsedRatio; }
 
     /** @return non-heap (Metaspace + Code Cache) memory in use, in bytes */
     public long       getNonHeapUsedBytes()          { return nonHeapUsedBytes; }
@@ -299,6 +341,18 @@ public final class JvmSnapshot {
      */
     public String     getLeefTags()                  { return leefTags; }
 
+    /**
+     * @return warning heap threshold (0.0–1.0) active when this snapshot was assessed;
+     *         {@code -1} if assessment has not run yet
+     */
+    public double     getWarnThreshold()             { return warnThreshold; }
+
+    /**
+     * @return critical heap threshold (0.0–1.0) active when this snapshot was assessed;
+     *         {@code -1} if assessment has not run yet
+     */
+    public double     getCritThreshold()             { return critThreshold; }
+
     // ── wither ────────────────────────────────────────────────────────────────
 
     /**
@@ -332,6 +386,8 @@ public final class JvmSnapshot {
         b.heapCommittedBytes        = this.heapCommittedBytes;
         b.heapMaxBytes              = this.heapMaxBytes;
         b.heapUsedRatio             = this.heapUsedRatio;
+        b.nurseryUsedBytes          = this.nurseryUsedBytes;
+        b.nurseryUsedRatio          = this.nurseryUsedRatio;
         b.nonHeapUsedBytes          = this.nonHeapUsedBytes;
         b.nonHeapMaxBytes           = this.nonHeapMaxBytes;
         b.poolUsedBytes             = new LinkedHashMap<>(this.poolUsedBytes);
@@ -347,6 +403,8 @@ public final class JvmSnapshot {
         b.heapDumpPath              = this.heapDumpPath;
         b.leefCategory              = this.leefCategory;
         b.leefTags                  = this.leefTags;
+        b.warnThreshold             = this.warnThreshold;
+        b.critThreshold             = this.critThreshold;
         return b;
     }
 
@@ -370,6 +428,10 @@ public final class JvmSnapshot {
         private long    heapCommittedBytes;
         private long    heapMaxBytes;
         private double  heapUsedRatio;
+        /** 0 when no nursery/young-gen pools are found. */
+        private long    nurseryUsedBytes   = 0L;
+        /** NaN when no nursery/young-gen pools are found or heapMax <= 0. */
+        private double  nurseryUsedRatio   = Double.NaN;
         private long    nonHeapUsedBytes;
         private long    nonHeapMaxBytes;
         private Map<String, Long> poolUsedBytes       = new LinkedHashMap<>();
@@ -387,6 +449,10 @@ public final class JvmSnapshot {
         private String  heapDumpPath;
         private String  leefCategory;
         private String  leefTags;
+        /** -1 until stamped by ThresholdRiskAssessor. */
+        private double  warnThreshold             = -1.0;
+        /** -1 until stamped by ThresholdRiskAssessor. */
+        private double  critThreshold             = -1.0;
 
         /** @param v target name (e.g. "hostcontext"); @return {@code this} */
         public Builder targetName(String v)                { this.targetName = v; return this; }
@@ -402,6 +468,10 @@ public final class JvmSnapshot {
         public Builder heapMaxBytes(long v)                { this.heapMaxBytes = v; return this; }
         /** @param v heap used ratio 0–1; @return {@code this} */
         public Builder heapUsedRatio(double v)             { this.heapUsedRatio = v; return this; }
+        /** @param v nursery/young-gen used bytes; @return {@code this} */
+        public Builder nurseryUsedBytes(long v)            { this.nurseryUsedBytes = v; return this; }
+        /** @param v nursery used ratio (nurseryUsedBytes/heapMax); NaN if unavailable; @return {@code this} */
+        public Builder nurseryUsedRatio(double v)          { this.nurseryUsedRatio = v; return this; }
         /** @param v non-heap used bytes; @return {@code this} */
         public Builder nonHeapUsedBytes(long v)            { this.nonHeapUsedBytes = v; return this; }
         /** @param v non-heap max bytes (−1 if unlimited); @return {@code this} */
@@ -441,6 +511,10 @@ public final class JvmSnapshot {
         public Builder leefCategory(String v)              { this.leefCategory = v; return this; }
         /** @param v LEEF tags string (null = omit attribute); @return {@code this} */
         public Builder leefTags(String v)                  { this.leefTags = v; return this; }
+        /** @param v warning heap threshold 0–1 stamped by assessor; @return {@code this} */
+        public Builder warnThreshold(double v)             { this.warnThreshold = v; return this; }
+        /** @param v critical heap threshold 0–1 stamped by assessor; @return {@code this} */
+        public Builder critThreshold(double v)             { this.critThreshold = v; return this; }
 
         /**
          * Constructs and returns an immutable {@link JvmSnapshot} from this builder.

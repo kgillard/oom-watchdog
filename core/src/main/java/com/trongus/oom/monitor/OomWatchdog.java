@@ -37,8 +37,13 @@ import java.util.logging.Logger;
  * <ul>
  *   <li>All registered channels are notified for {@code WARNING} and above.</li>
  *   <li>A heap dump is triggered on the first {@code CRITICAL} or
- *       {@code OOM_FIRING} event and not repeated until risk returns to
- *       {@code OK} (prevents dump storms).</li>
+ *       {@code OOM_FIRING} event within a sustained episode and not repeated
+ *       until risk returns to {@code OK} (prevents dump storms).</li>
+ *   <li>A dump may also be triggered independently on any poll cycle when any of
+ *       the per-metric thresholds in {@link WatchdogConfig} ({@code gcDumpThreshold},
+ *       {@code heapDumpThreshold}, {@code nurseryDumpThreshold}) is exceeded.
+ *       The same episode guard ({@code dumpTakenThisEpisode}) is used, so at most
+ *       one dump fires per elevated episode regardless of which trigger fires first.</li>
  * </ul>
  *
  * <h3>Thread safety</h3>
@@ -50,7 +55,7 @@ import java.util.logging.Logger;
  * {@link #lastLevel} is an {@link AtomicReference} for consistent memory visibility.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.1
+ * @version 1.7.2
  * @since 1.0.0
  * @see JvmDiagnosticsCollector
  * @see RiskAssessor
@@ -86,11 +91,15 @@ public final class OomWatchdog {
             new AtomicReference<>(OomRiskLevel.OK);
 
     /**
-     * @param config        tuning parameters
-     * @param collector     collects raw JVM metrics
-     * @param assessor      classifies risk level from a snapshot
-     * @param alertChannels zero or more channels to notify (defensive copy made)
-     * @param dumpService   service to capture a heap dump
+     * Constructs a fully wired {@code OomWatchdog} instance.
+     *
+     * @param config        tuning parameters controlling thresholds, dump behaviour, and polling rate
+     * @param collector     collects raw JVM metrics each poll cycle
+     * @param assessor      classifies the risk level from a raw snapshot
+     * @param alertChannels zero or more channels to notify when risk is {@code WARNING} or above
+     *                      (a defensive copy is made internally)
+     * @param dumpService   service used to capture diagnostic dumps at {@code CRITICAL} level
+     *                      or when a per-metric dump threshold is exceeded
      */
     public OomWatchdog(WatchdogConfig config,
                        JvmDiagnosticsCollector collector,
@@ -106,7 +115,8 @@ public final class OomWatchdog {
     }
 
     /**
-     * Starts the watchdog polling loop.  Safe to call multiple times (idempotent).
+     * Starts the watchdog polling loop on a single background daemon thread.
+     * Safe to call multiple times — subsequent calls while the loop is running are no-ops.
      */
     public synchronized void start() {
         if (task != null && !task.isDone()) {
@@ -121,8 +131,9 @@ public final class OomWatchdog {
     }
 
     /**
-     * Stops the watchdog.  Does not shut down the executor immediately;
-     * the current poll cycle is allowed to complete.
+     * Stops the watchdog, cancelling the scheduled polling task.
+     * Does not interrupt the executor immediately; the current poll cycle
+     * is allowed to complete before the scheduler shuts down.
      */
     public synchronized void stop() {
         if (task != null) {
@@ -180,11 +191,49 @@ public final class OomWatchdog {
                 }
             }
 
+            // 5b. Check dump thresholds every poll cycle (independent of risk level)
+            checkDumpThresholds(assessed);
+
             lastLevel.set(level);
 
         } catch (Exception e) {
             // The watchdog must not crash the host process.
             WatchdogLogger.warning(LOG, e, "Poll cycle error: {0}", e.getMessage());
+        }
+    }
+
+    /**
+     * Checks whether any per-metric dump threshold is exceeded and, if so, triggers a dump
+     * (using the same episode-guard AtomicBoolean to prevent dump storms).
+     *
+     * <p>A threshold of {@code -1} means disabled; never triggers on {@code -1}.
+     * The comparison uses {@code compareAndSet(false, true)} so only one dump fires per episode.
+     *
+     * @param snap the assessed snapshot to evaluate
+     */
+    private void checkDumpThresholds(JvmSnapshot snap) {
+        if (config.getDumpTypes().isEmpty()) {
+            return;
+        }
+        double gcDump      = config.getGcDumpThreshold();
+        double heapDump    = config.getHeapDumpThreshold();
+        double nurseryDump = config.getNurseryDumpThreshold();
+
+        boolean gcTriggered      = gcDump      > 0 && snap.getGcOverheadRatio()  >= gcDump;
+        boolean heapTriggered    = heapDump    > 0 && snap.getHeapUsedRatio()     >= heapDump;
+        boolean nurseryTriggered = nurseryDump > 0
+                && !Double.isNaN(snap.getNurseryUsedRatio())
+                && snap.getNurseryUsedRatio() >= nurseryDump;
+
+        if ((gcTriggered || heapTriggered || nurseryTriggered)
+                && dumpTakenThisEpisode.compareAndSet(false, true)) {
+            List<DumpType> types = new ArrayList<>(config.getDumpTypes());
+            List<String> dumpPaths = dumpService.dump(snap, types);
+            if (!dumpPaths.isEmpty()) {
+                WatchdogLogger.info(LOG, "Dump-threshold triggered dump for target [{0}]: {1}",
+                        snap.getTargetName() != null ? snap.getTargetName() : "self",
+                        String.join("; ", dumpPaths));
+            }
         }
     }
 

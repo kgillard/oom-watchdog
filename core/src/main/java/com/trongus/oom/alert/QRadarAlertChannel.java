@@ -37,8 +37,50 @@ import java.util.logging.Logger;
  * <p>The {@code sev} attribute uses QRadar's 1–10 scale:
  * {@code WARNING=5}, {@code CRITICAL=9}, {@code OOM_FIRING=10}.
  *
+ * <h3>LEEF attributes emitted</h3>
+ * <table border="1">
+ *   <caption>LEEF event attributes</caption>
+ *   <tr><th>Attribute</th><th>Description</th></tr>
+ *   <tr><td>{@code sev}</td><td>QRadar severity (1–10): WARNING=5, CRITICAL=9, OOM_FIRING=10.</td></tr>
+ *   <tr><td>{@code cat}</td><td>Event category; defaults to {@code "JVM_OOM_Risk"}, overridden
+ *       per-target via {@link com.trongus.oom.remote.TargetDescriptor#getLeefCategory()}.</td></tr>
+ *   <tr><td>{@code targetJvm}</td><td>Name of the monitored remote JVM target; omitted in
+ *       self-monitoring mode.</td></tr>
+ *   <tr><td>{@code tags}</td><td>Free-text tag string from the target's {@code leef-tags}
+ *       property (e.g. {@code "env=prod,team=platform"}); omitted when not configured.</td></tr>
+ *   <tr><td>{@code process}</td><td>JVM process name from {@code RuntimeMXBean.getName()}.</td></tr>
+ *   <tr><td>{@code heapUsedMB}</td><td>Heap memory currently in use, in megabytes.</td></tr>
+ *   <tr><td>{@code heapMaxMB}</td><td>Maximum heap size ({@code -Xmx}), in megabytes.</td></tr>
+ *   <tr><td>{@code heapPct}</td><td>Heap utilisation percentage (0–100).</td></tr>
+ *   <tr><td>{@code critThresholdPct}</td><td>Active critical heap threshold as a percentage;
+ *       present only when threshold metadata is available in the snapshot.</td></tr>
+ *   <tr><td>{@code heapMarginPct}</td><td>Percentage headroom remaining before the critical
+ *       threshold is reached ({@code critThresholdPct − heapPct}).</td></tr>
+ *   <tr><td>{@code dumpTaken}</td><td>{@code true} if a diagnostic dump was captured for
+ *       this alert event; {@code false} otherwise.</td></tr>
+ *   <tr><td>{@code nonHeapUsedMB}</td><td>Non-heap (Metaspace + Code Cache) in use, in megabytes.</td></tr>
+ *   <tr><td>{@code gcOverheadPct}</td><td>Fraction of JVM uptime spent in GC, as a percentage.</td></tr>
+ *   <tr><td>{@code totalGcTimeMs}</td><td>Cumulative GC time since JVM start, in milliseconds.</td></tr>
+ *   <tr><td>{@code postGcGrowth}</td><td>OLS regression slope of post-GC heap samples, in MB/h;
+ *       {@code N/A} when insufficient data.</td></tr>
+ *   <tr><td>{@code nurseryPct}</td><td>Nursery/young-gen utilisation as a percentage of heap max;
+ *       omitted when no nursery pools are found.</td></tr>
+ *   <tr><td>{@code riskLevel}</td><td>Assessed {@link com.trongus.oom.model.OomRiskLevel} name.</td></tr>
+ *   <tr><td>{@code gc_<name>_count}</td><td>Cumulative collection count per GC collector.</td></tr>
+ *   <tr><td>{@code gc_<name>_timeMs}</td><td>Cumulative collection time per GC collector, in ms.</td></tr>
+ *   <tr><td>{@code heapDumpPath}</td><td>Semicolon-separated dump file paths; present only
+ *       when a dump was captured.</td></tr>
+ *   <tr><td>{@code msg}</td><td>Sanitised human-readable assessment and diagnosis notes.</td></tr>
+ * </table>
+ *
  * <p>Callers choose UDP (default, fire-and-forget, lower overhead) or TCP
  * (guaranteed delivery) via the constructor.
+ *
+ * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
+ * @version 1.7.2
+ * @since 1.0.0
+ * @see AlertChannel
+ * @see com.trongus.oom.model.JvmSnapshot
  */
 public final class QRadarAlertChannel implements AlertChannel {
 
@@ -66,6 +108,13 @@ public final class QRadarAlertChannel implements AlertChannel {
     private final Transport transport;
     private final String    localHostname;
 
+    /**
+     * Constructs a channel targeting a specific QRadar syslog receiver.
+     *
+     * @param qradarHost hostname or IP address of the QRadar syslog receiver
+     * @param qradarPort syslog destination port (typically 514)
+     * @param transport  syslog transport protocol ({@link Transport#UDP} or {@link Transport#TCP})
+     */
     public QRadarAlertChannel(String qradarHost, int qradarPort, Transport transport) {
         this.qradarHost = qradarHost;
         this.qradarPort = qradarPort;
@@ -73,11 +122,21 @@ public final class QRadarAlertChannel implements AlertChannel {
         this.localHostname = resolveLocalHostname();
     }
 
-    /** Convenience constructor using UDP transport on port 514. */
+    /**
+     * Convenience constructor using UDP transport on port 514.
+     *
+     * @param qradarHost hostname or IP address of the QRadar syslog receiver
+     */
     public QRadarAlertChannel(String qradarHost) {
         this(qradarHost, 514, Transport.UDP);
     }
 
+    /**
+     * Formats the snapshot as a LEEF 2.0 syslog message and transmits it to the configured
+     * QRadar host using the selected transport.
+     *
+     * @param snapshot the assessed {@link JvmSnapshot} to forward; must not be {@code null}
+     */
     @Override
     public void alert(JvmSnapshot snapshot) {
         String leefMessage = buildLeefMessage(snapshot);
@@ -94,6 +153,11 @@ public final class QRadarAlertChannel implements AlertChannel {
         }
     }
 
+    /**
+     * Returns a human-readable name identifying this channel, including host, port, and transport.
+     *
+     * @return channel name string in the form {@code "QRadar(host:port/transport)"}
+     */
     @Override
     public String channelName() {
         return String.format("QRadar(%s:%d/%s)", qradarHost, qradarPort, transport);
@@ -145,11 +209,23 @@ public final class QRadarAlertChannel implements AlertChannel {
         attrs.append("process=").append(sanitise(snap.getProcessName())).append('\t');
         attrs.append("heapUsedMB=").append(snap.getHeapUsedBytes() / mb).append('\t');
         attrs.append("heapMaxMB=").append(snap.getHeapMaxBytes() / mb).append('\t');
-        attrs.append("heapPct=").append(String.format(Locale.US, "%.1f", snap.getHeapUsedRatio() * 100)).append('\t');
+        double heapPct = snap.getHeapUsedRatio() * 100;
+        attrs.append("heapPct=").append(String.format(Locale.US, "%.1f", heapPct)).append('\t');
+        // Threshold context: how far from critical, and whether a dump was taken
+        if (snap.getCritThreshold() >= 0) {
+            double critPct   = snap.getCritThreshold() * 100;
+            double marginPct = critPct - heapPct;
+            attrs.append("critThresholdPct=").append(String.format(Locale.US, "%.1f", critPct)).append('\t');
+            attrs.append("heapMarginPct=").append(String.format(Locale.US, "%.1f", marginPct)).append('\t');
+        }
+        attrs.append("dumpTaken=").append(snap.getHeapDumpPath() != null ? "true" : "false").append('\t');
         attrs.append("nonHeapUsedMB=").append(snap.getNonHeapUsedBytes() / mb).append('\t');
         attrs.append("gcOverheadPct=").append(String.format(Locale.US, "%.1f", snap.getGcOverheadRatio() * 100)).append('\t');
         attrs.append("totalGcTimeMs=").append(snap.getTotalGcTimeMs()).append('\t');
         attrs.append("postGcGrowth=").append(growth).append('\t');
+        if (!Double.isNaN(snap.getNurseryUsedRatio())) {
+            attrs.append("nurseryPct=").append(String.format(Locale.US, "%.1f", snap.getNurseryUsedRatio() * 100)).append('\t');
+        }
         attrs.append("riskLevel=").append(snap.getRiskLevel()).append('\t');
 
         // Append each GC collector as a separate attribute
@@ -161,7 +237,7 @@ public final class QRadarAlertChannel implements AlertChannel {
         }
 
         if (snap.getHeapDumpPath() != null) {
-            attrs.append("heapDump=").append(sanitise(snap.getHeapDumpPath())).append('\t');
+            attrs.append("heapDumpPath=").append(sanitise(snap.getHeapDumpPath())).append('\t');
         }
 
         attrs.append("msg=").append(notes);
@@ -173,6 +249,12 @@ public final class QRadarAlertChannel implements AlertChannel {
     // Transport helpers
     // -------------------------------------------------------------------------
 
+    /**
+     * Sends a LEEF payload over UDP, truncating to {@link #MAX_UDP_PAYLOAD} bytes if necessary.
+     *
+     * @param payload UTF-8 encoded syslog message bytes
+     * @throws IOException if the datagram socket cannot be created or the packet cannot be sent
+     */
     private void sendUdp(byte[] payload) throws IOException {
         // Truncate oversized payloads to the safe UDP limit to avoid silent fragmentation/drop.
         byte[] safe = payload.length > MAX_UDP_PAYLOAD
@@ -185,6 +267,12 @@ public final class QRadarAlertChannel implements AlertChannel {
         }
     }
 
+    /**
+     * Sends a LEEF payload over TCP using a newline frame delimiter (RFC 6587).
+     *
+     * @param payload UTF-8 encoded syslog message bytes
+     * @throws IOException if connection or write fails
+     */
     private void sendTcp(byte[] payload) throws IOException {
         // Use an explicit connect timeout and SO_TIMEOUT to prevent the watchdog
         // poll thread from blocking indefinitely on a slow or unreachable QRadar host.
@@ -203,13 +291,23 @@ public final class QRadarAlertChannel implements AlertChannel {
     // Utility
     // -------------------------------------------------------------------------
 
-    /** RFC 3164 timestamp: {@code Mmm DD HH:mm:ss} */
+    /**
+     * Formats a timestamp as an RFC 3164 syslog date string ({@code Mmm DD HH:mm:ss}).
+     *
+     * @param epochMs epoch milliseconds to format
+     * @return formatted RFC 3164 timestamp string
+     */
     private static String rfc3164Timestamp(long epochMs) {
         SimpleDateFormat sdf = new SimpleDateFormat("MMM dd HH:mm:ss", Locale.US);
         sdf.setTimeZone(TimeZone.getDefault());
         return sdf.format(new Date(epochMs));
     }
 
+    /**
+     * Resolves the local hostname for use in the syslog header, falling back to {@code "localhost"}.
+     *
+     * @return local hostname string; never {@code null}
+     */
     private static String resolveLocalHostname() {
         try {
             return InetAddress.getLocalHost().getHostName();
@@ -218,7 +316,13 @@ public final class QRadarAlertChannel implements AlertChannel {
         }
     }
 
-    /** Replace tab, newline and pipe characters to keep LEEF format valid. */
+    /**
+     * Sanitises a string for inclusion in a LEEF attribute value by replacing tab,
+     * newline, carriage-return, and pipe characters with safe alternatives.
+     *
+     * @param input the raw string value; may be {@code null}
+     * @return sanitised string safe for LEEF encoding; empty string when {@code input} is {@code null}
+     */
     private static String sanitise(String input) {
         if (input == null) return "";
         return input.replace('\t', ' ').replace('\n', ' ').replace('\r', ' ').replace('|', '/');

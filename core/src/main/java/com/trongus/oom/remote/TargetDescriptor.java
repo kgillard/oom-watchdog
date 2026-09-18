@@ -23,7 +23,7 @@ import java.util.Set;
  * to prevent accidental exposure in log files or console transcripts.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.1
+ * @version 1.7.2
  * @since 1.7.0
  * @see TargetRegistry
  * @see JmxDiagnosticsCollector
@@ -42,6 +42,9 @@ public final class TargetDescriptor {
 
     /** Default background polling interval in milliseconds (5,000 ms). */
     public static final long DEFAULT_POLL_INTERVAL_MS = 5_000L;
+
+    /** Sentinel value meaning "dump threshold disabled". */
+    public static final double DUMP_THRESHOLD_DISABLED = -1.0;
 
     private final String        name;
     private final String        jmxUrl;
@@ -68,19 +71,40 @@ public final class TargetDescriptor {
      */
     private final String        leefTags;
 
+    /**
+     * GC overhead ratio (0.0–1.0) that triggers an immediate dump, or
+     * {@link #DUMP_THRESHOLD_DISABLED} ({@code -1}) when disabled.
+     */
+    private final double        gcDumpThreshold;
+
+    /**
+     * Heap used ratio (0.0–1.0) that triggers an immediate dump (independent of
+     * the CRITICAL-level dump), or {@link #DUMP_THRESHOLD_DISABLED} when disabled.
+     */
+    private final double        heapDumpThreshold;
+
+    /**
+     * Nursery/young-gen used ratio (0.0–1.0) that triggers an immediate dump, or
+     * {@link #DUMP_THRESHOLD_DISABLED} when disabled.
+     */
+    private final double        nurseryDumpThreshold;
+
     private TargetDescriptor(Builder b) {
-        this.name           = b.name;
-        this.jmxUrl         = b.jmxUrl;
-        this.username       = b.username;
-        this.password       = b.password;
-        this.warnThreshold  = b.warnThreshold;
-        this.critThreshold  = b.critThreshold;
-        this.gcThreshold    = b.gcThreshold;
-        this.pollIntervalMs = b.pollIntervalMs;
-        this.dumpTypes      = Collections.unmodifiableSet(EnumSet.copyOf(b.dumpTypes));
-        this.dumpDirectory  = b.dumpDirectory != null ? b.dumpDirectory : "./dumps/" + b.name;
-        this.leefCategory   = b.leefCategory;
-        this.leefTags       = b.leefTags;
+        this.name                 = b.name;
+        this.jmxUrl               = b.jmxUrl;
+        this.username             = b.username;
+        this.password             = b.password;
+        this.warnThreshold        = b.warnThreshold;
+        this.critThreshold        = b.critThreshold;
+        this.gcThreshold          = b.gcThreshold;
+        this.pollIntervalMs       = b.pollIntervalMs;
+        this.dumpTypes            = Collections.unmodifiableSet(EnumSet.copyOf(b.dumpTypes));
+        this.dumpDirectory        = b.dumpDirectory != null ? b.dumpDirectory : "./dumps/" + b.name;
+        this.leefCategory         = b.leefCategory;
+        this.leefTags             = b.leefTags;
+        this.gcDumpThreshold      = b.gcDumpThreshold;
+        this.heapDumpThreshold    = b.heapDumpThreshold;
+        this.nurseryDumpThreshold = b.nurseryDumpThreshold;
     }
 
     /**
@@ -205,6 +229,36 @@ public final class TargetDescriptor {
         return leefTags;
     }
 
+    /**
+     * Returns the GC overhead ratio threshold (0.0–1.0) that triggers an immediate dump,
+     * or {@link #DUMP_THRESHOLD_DISABLED} ({@code -1}) when disabled.
+     *
+     * @return gc dump threshold, or {@code -1} if disabled
+     */
+    public double getGcDumpThreshold() {
+        return gcDumpThreshold;
+    }
+
+    /**
+     * Returns the heap used ratio threshold (0.0–1.0) that triggers an immediate dump
+     * (independent of the CRITICAL-level dump), or {@link #DUMP_THRESHOLD_DISABLED} when disabled.
+     *
+     * @return heap dump threshold, or {@code -1} if disabled
+     */
+    public double getHeapDumpThreshold() {
+        return heapDumpThreshold;
+    }
+
+    /**
+     * Returns the nursery/young-gen ratio threshold (0.0–1.0) that triggers an immediate dump,
+     * or {@link #DUMP_THRESHOLD_DISABLED} when disabled.
+     *
+     * @return nursery dump threshold, or {@code -1} if disabled
+     */
+    public double getNurseryDumpThreshold() {
+        return nurseryDumpThreshold;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
@@ -213,6 +267,9 @@ public final class TargetDescriptor {
         return Double.compare(that.warnThreshold, warnThreshold) == 0 &&
                Double.compare(that.critThreshold, critThreshold) == 0 &&
                Double.compare(that.gcThreshold, gcThreshold) == 0 &&
+               Double.compare(that.gcDumpThreshold, gcDumpThreshold) == 0 &&
+               Double.compare(that.heapDumpThreshold, heapDumpThreshold) == 0 &&
+               Double.compare(that.nurseryDumpThreshold, nurseryDumpThreshold) == 0 &&
                pollIntervalMs == that.pollIntervalMs &&
                Objects.equals(name, that.name) &&
                Objects.equals(jmxUrl, that.jmxUrl) &&
@@ -228,7 +285,8 @@ public final class TargetDescriptor {
     public int hashCode() {
         return Objects.hash(name, jmxUrl, username, password, warnThreshold,
                             critThreshold, gcThreshold, pollIntervalMs, dumpTypes,
-                            dumpDirectory, leefCategory, leefTags);
+                            dumpDirectory, leefCategory, leefTags,
+                            gcDumpThreshold, heapDumpThreshold, nurseryDumpThreshold);
     }
 
     @Override
@@ -246,6 +304,9 @@ public final class TargetDescriptor {
                 ", dumpDirectory='" + dumpDirectory + '\'' +
                 ", leefCategory=" + (leefCategory != null ? "'" + leefCategory + "'" : "null") +
                 ", leefTags=" + (leefTags != null ? "'" + leefTags + "'" : "null") +
+                ", gcDumpThreshold=" + gcDumpThreshold +
+                ", heapDumpThreshold=" + heapDumpThreshold +
+                ", nurseryDumpThreshold=" + nurseryDumpThreshold +
                 '}';
     }
 
@@ -258,14 +319,17 @@ public final class TargetDescriptor {
         private final String  jmxUrl;
         private String        username;
         private String        password;
-        private double        warnThreshold  = DEFAULT_WARN_THRESHOLD;
-        private double        critThreshold  = DEFAULT_CRIT_THRESHOLD;
-        private double        gcThreshold    = DEFAULT_GC_THRESHOLD;
-        private long          pollIntervalMs = DEFAULT_POLL_INTERVAL_MS;
-        private Set<DumpType> dumpTypes      = EnumSet.noneOf(DumpType.class);
+        private double        warnThreshold      = DEFAULT_WARN_THRESHOLD;
+        private double        critThreshold      = DEFAULT_CRIT_THRESHOLD;
+        private double        gcThreshold        = DEFAULT_GC_THRESHOLD;
+        private long          pollIntervalMs     = DEFAULT_POLL_INTERVAL_MS;
+        private Set<DumpType> dumpTypes          = EnumSet.noneOf(DumpType.class);
         private String        dumpDirectory;
         private String        leefCategory;
         private String        leefTags;
+        private double        gcDumpThreshold      = DUMP_THRESHOLD_DISABLED;
+        private double        heapDumpThreshold    = DUMP_THRESHOLD_DISABLED;
+        private double        nurseryDumpThreshold = DUMP_THRESHOLD_DISABLED;
 
         /**
          * Initialises builder with mandatory target name and JMX service URL.
@@ -410,6 +474,55 @@ public final class TargetDescriptor {
          */
         public Builder leefTags(String tags) {
             this.leefTags = (tags != null && !tags.trim().isEmpty()) ? tags.trim() : null;
+            return this;
+        }
+
+        /**
+         * Sets the GC overhead ratio threshold (0.0–1.0) that triggers an immediate dump.
+         * Use {@link TargetDescriptor#DUMP_THRESHOLD_DISABLED} ({@code -1}) to disable.
+         *
+         * @param threshold fraction in (0.0, 1.0) or {@code -1} to disable
+         * @return {@code this}
+         * @throws IllegalArgumentException if threshold is not -1.0 and outside (0.0, 1.0)
+         */
+        public Builder gcDumpThreshold(double threshold) {
+            if (Double.compare(threshold, DUMP_THRESHOLD_DISABLED) != 0 && (threshold <= 0.0 || threshold >= 1.0)) {
+                throw new IllegalArgumentException("gcDumpThreshold must be strictly between 0.0 and 1.0, or -1 to disable; got: " + threshold);
+            }
+            this.gcDumpThreshold = threshold;
+            return this;
+        }
+
+        /**
+         * Sets the heap used ratio threshold (0.0–1.0) that triggers an immediate dump,
+         * independent of the existing CRITICAL-level dump trigger.
+         * Use {@link TargetDescriptor#DUMP_THRESHOLD_DISABLED} ({@code -1}) to disable.
+         *
+         * @param threshold fraction in (0.0, 1.0) or {@code -1} to disable
+         * @return {@code this}
+         * @throws IllegalArgumentException if threshold is not -1.0 and outside (0.0, 1.0)
+         */
+        public Builder heapDumpThreshold(double threshold) {
+            if (Double.compare(threshold, DUMP_THRESHOLD_DISABLED) != 0 && (threshold <= 0.0 || threshold >= 1.0)) {
+                throw new IllegalArgumentException("heapDumpThreshold must be strictly between 0.0 and 1.0, or -1 to disable; got: " + threshold);
+            }
+            this.heapDumpThreshold = threshold;
+            return this;
+        }
+
+        /**
+         * Sets the nursery/young-gen ratio threshold (0.0–1.0) that triggers an immediate dump.
+         * Use {@link TargetDescriptor#DUMP_THRESHOLD_DISABLED} ({@code -1}) to disable.
+         *
+         * @param threshold fraction in (0.0, 1.0) or {@code -1} to disable
+         * @return {@code this}
+         * @throws IllegalArgumentException if threshold is not -1.0 and outside (0.0, 1.0)
+         */
+        public Builder nurseryDumpThreshold(double threshold) {
+            if (Double.compare(threshold, DUMP_THRESHOLD_DISABLED) != 0 && (threshold <= 0.0 || threshold >= 1.0)) {
+                throw new IllegalArgumentException("nurseryDumpThreshold must be strictly between 0.0 and 1.0, or -1 to disable; got: " + threshold);
+            }
+            this.nurseryDumpThreshold = threshold;
             return this;
         }
 

@@ -58,7 +58,21 @@ import java.util.logging.Logger;
  *     <td>{@code --crit-threshold}</td>
  *     <td>Double (0.0 &ndash; 1.0)</td>
  *     <td>{@code 0.90} (90%)</td>
- *     <td>Heap usage ratio required to trigger a {@code CRITICAL} alert and trigger diagnostic dumps.</td>
+ *     <td>Heap usage ratio required to trigger a {@code CRITICAL} alert and diagnostic dumps.</td>
+ *   </tr>
+ *   <tr>
+ *     <td>{@code --gc-dump-threshold}</td>
+ *     <td>Double (0.0 &ndash; 1.0)</td>
+ *     <td>{@code -1} (disabled)</td>
+ *     <td>GC overhead ratio that independently triggers a dump, regardless of heap alert level.
+ *         Set to {@code -1} to disable.</td>
+ *   </tr>
+ *   <tr>
+ *     <td>{@code --heap-dump-threshold}</td>
+ *     <td>Double (0.0 &ndash; 1.0)</td>
+ *     <td>{@code -1} (disabled)</td>
+ *     <td>Heap usage ratio that independently triggers a dump, regardless of alert level.
+ *         Set to {@code -1} to disable.</td>
  *   </tr>
  *   <tr>
  *     <td>{@code --gc-threshold}</td>
@@ -166,7 +180,7 @@ import java.util.logging.Logger;
  * }</pre>
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.1
+ * @version 1.7.2
  * @since 1.0.0
  * @see com.trongus.oom.config.WatchdogConfig
  * @see com.trongus.oom.monitor.OomWatchdog
@@ -223,7 +237,9 @@ public final class WatchdogMain {
             .heapDumpDirectory(    cli.dumpDir)
             .qradarHost(           cli.qradarHost)
             .qradarPort(           cli.qradarPort)
-            .logLevel(             cli.logLevel);
+            .logLevel(             cli.logLevel)
+            .gcDumpThreshold(      cli.gcDumpThreshold)
+            .heapDumpThreshold(    cli.heapDumpThreshold);
 
         if (!cli.dumpTypes.isEmpty()) {
             cfgBuilder.dumpTypes(cli.dumpTypes);
@@ -409,6 +425,8 @@ public final class WatchdogMain {
           + "  --warn-threshold <0.0-1.0>   Heap-usage ratio for WARNING  (default: 0.80)\n"
           + "  --crit-threshold <0.0-1.0>   Heap-usage ratio for CRITICAL (default: 0.90)\n"
           + "  --gc-threshold   <0.0-1.0>   GC-overhead ratio for WARNING (default: 0.50)\n"
+          + "  --gc-dump-threshold <0.0-1.0> GC-overhead ratio that triggers an immediate dump (default: disabled)\n"
+          + "  --heap-dump-threshold <0.0-1.0> Heap ratio that triggers an immediate dump (default: disabled)\n"
           + "  --poll-ms        <ms>         Poll interval in milliseconds (default: 5000)\n"
           + "  --dump-dir       <path>       Dump output directory (default: ./dumps)\n"
           + "  --dump-types     <types>      Comma-separated dump types at CRITICAL:\n"
@@ -456,7 +474,7 @@ public final class WatchdogMain {
      * applying defaults and basic range validation.
      *
      * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
-     * @version 1.7.1
+     * @version 1.7.2
      * @since 1.0.0
      * @see WatchdogMain
      */
@@ -470,6 +488,12 @@ public final class WatchdogMain {
 
         /** GC overhead fraction threshold for triggering a {@code WARNING} alert level. */
         double gcThreshold = 0.50;
+
+        /** GC overhead ratio that triggers an immediate dump; -1 = disabled. */
+        double gcDumpThreshold = -1.0;
+
+        /** Heap ratio that triggers an immediate dump (independent of crit); -1 = disabled. */
+        double heapDumpThreshold = -1.0;
 
         /** Monitoring poll interval in milliseconds. */
         long pollMs = 5_000L;
@@ -529,9 +553,11 @@ public final class WatchdogMain {
                     case "--test-mode":     c.testMode = true;                                break;
                     case "--qradar-tcp":    c.qradarTcp = true;                               break;
                     case "--targets-file":  c.targetsFile    = nextStr(list, i++, arg);      break;
-                    case "--warn-threshold":c.warnThreshold  = nextDouble(list, i++, arg);   break;
-                    case "--crit-threshold":c.critThreshold  = nextDouble(list, i++, arg);   break;
-                    case "--gc-threshold":  c.gcThreshold    = nextDouble(list, i++, arg);   break;
+                    case "--warn-threshold":    c.warnThreshold    = nextDouble(list, i++, arg); break;
+                    case "--crit-threshold":    c.critThreshold    = nextDouble(list, i++, arg); break;
+                    case "--gc-threshold":      c.gcThreshold      = nextDouble(list, i++, arg); break;
+                    case "--gc-dump-threshold": c.gcDumpThreshold  = nextDouble(list, i++, arg); break;
+                    case "--heap-dump-threshold": c.heapDumpThreshold = nextDouble(list, i++, arg); break;
                     case "--poll-ms":       c.pollMs         = nextLong(list, i++, arg);     break;
                     case "--test-leak-secs":c.testLeakSecs   = nextLong(list, i++, arg);     break;
                     case "--qradar-port":   c.qradarPort     = nextInt(list, i++, arg);      break;

@@ -22,7 +22,7 @@ import java.util.logging.Logger;
  * both machine-parsed and human-read.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.1
+ * @version 1.7.2
  * @since 1.0.0
  */
 public final class FileLogAlertChannel implements AlertChannel {
@@ -32,8 +32,10 @@ public final class FileLogAlertChannel implements AlertChannel {
     private final Path logPath;
 
     /**
+     * Constructs a file log channel writing to the specified path.
+     *
      * @param logFilePath absolute or relative path to the log file;
-     *                    parent directories are created if they do not exist.
+     *                    parent directories are created if they do not exist
      */
     public FileLogAlertChannel(String logFilePath) {
         this.logPath = Paths.get(logFilePath);
@@ -46,6 +48,12 @@ public final class FileLogAlertChannel implements AlertChannel {
         }
     }
 
+    /**
+     * Appends a timestamped single-line entry and a detailed multi-line entry
+     * to the configured log file.
+     *
+     * @param snapshot the assessed {@link JvmSnapshot} to log; must not be {@code null}
+     */
     @Override
     public void alert(JvmSnapshot snapshot) {
         String timestamp = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ")
@@ -66,6 +74,11 @@ public final class FileLogAlertChannel implements AlertChannel {
         }
     }
 
+    /**
+     * Returns a human-readable name identifying this channel, including the absolute log file path.
+     *
+     * @return channel name string in the form {@code "FileLog(/absolute/path/to/file)"}
+     */
     @Override
     public String channelName() {
         return "FileLog(" + logPath.toAbsolutePath() + ")";

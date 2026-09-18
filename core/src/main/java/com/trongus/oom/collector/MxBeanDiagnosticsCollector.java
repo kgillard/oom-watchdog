@@ -29,9 +29,18 @@ import java.util.Map;
  *
  * <p>Diagnosis note strings are produced in the locale declared on the
  * supplied {@link WatchdogConfig}.
+ * <h2>Nursery Pool Collection</h2>
+ * <p>During each {@link #collect()} invocation, all {@link MemoryPoolMXBean} entries
+ * are iterated.  Pools whose name contains {@code "Eden"}, {@code "Nursery"}, or
+ * {@code "Young"} (case-insensitive) contribute to the aggregate
+ * {@link JvmSnapshot#getNurseryUsedBytes()} and
+ * {@link JvmSnapshot#getNurseryUsedRatio()} fields.  This covers both HotSpot
+ * ({@code Eden Space}, {@code G1 Eden Space}) and OpenJ9/IBM J9
+ * ({@code nursery-allocate}, {@code nursery-survivor}) pool naming conventions.
+ * Both fields default to {@code 0} / {@link Double#NaN} when no matching pools are found.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.1
+ * @version 1.7.2
  * @since 1.0.0
  * @see com.trongus.oom.remote.JmxDiagnosticsCollector
  */
@@ -59,6 +68,21 @@ public final class MxBeanDiagnosticsCollector implements JvmDiagnosticsCollector
         this.postGcWindow = new ArrayDeque<>(config.getLeakDetectionWindowSize() + 1);
     }
 
+    /**
+     * Collects a fresh {@link JvmSnapshot} from the in-process JVM using the standard
+     * {@code java.lang.management} MXBeans.
+     *
+     * <p>The snapshot includes:
+     * <ul>
+     *   <li>Heap and non-heap memory usage.</li>
+     *   <li>Per-pool breakdown including nursery/young-gen aggregates.</li>
+     *   <li>Garbage collection counts and elapsed time per collector.</li>
+     *   <li>Post-GC heap trend slope for memory-leak detection.</li>
+     * </ul>
+     *
+     * @return a fully populated {@link JvmSnapshot} with risk level initialised to
+     *         {@link OomRiskLevel#OK}; never {@code null}
+     */
     @Override
     public JvmSnapshot collect() {
         long now = System.currentTimeMillis();
@@ -77,12 +101,20 @@ public final class MxBeanDiagnosticsCollector implements JvmDiagnosticsCollector
 
         // ── memory pools (Eden, Old Gen, Metaspace, Code Cache, …) ──────────
         Map<String, Long> poolUsed = new LinkedHashMap<>();
+        long nurseryUsed = 0L;
         for (MemoryPoolMXBean pool : ManagementFactory.getMemoryPoolMXBeans()) {
             MemoryUsage u = pool.getUsage();
             if (u != null) {
                 poolUsed.put(pool.getName(), u.getUsed());
+                String poolNameLower = pool.getName().toLowerCase(java.util.Locale.ROOT);
+                if (poolNameLower.contains("eden") || poolNameLower.contains("nursery")
+                        || poolNameLower.contains("young")) {
+                    nurseryUsed += u.getUsed();
+                }
             }
         }
+        double nurseryRatio = (nurseryUsed > 0 && heapMax > 0)
+                ? (double) nurseryUsed / heapMax : Double.NaN;
 
         // ── garbage collection ───────────────────────────────────────────────
         Map<String, Long> gcCounts = new LinkedHashMap<>();
@@ -135,6 +167,8 @@ public final class MxBeanDiagnosticsCollector implements JvmDiagnosticsCollector
                 .heapCommittedBytes(heapCommitted)
                 .heapMaxBytes(heapMax)
                 .heapUsedRatio(heapRatio)
+                .nurseryUsedBytes(nurseryUsed)
+                .nurseryUsedRatio(nurseryRatio)
                 .nonHeapUsedBytes(nonHeapUsed)
                 .nonHeapMaxBytes(nonHeapMax)
                 .poolUsedBytes(poolUsed)

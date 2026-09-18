@@ -12,7 +12,7 @@ import static org.junit.Assert.*;
  * Unit tests for {@link TargetDescriptor}.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.1
+ * @version 1.7.2
  * @since 1.7.0
  */
 public class TargetDescriptorTest {
@@ -115,6 +115,79 @@ public class TargetDescriptorTest {
         TargetDescriptor.builder("hostcontext", "service:jmx:rmi:///jndi/rmi://localhost:7777/jmxrmi")
                 .warnThreshold(0.90)
                 .critThreshold(0.80)
+                .build();
+    }
+
+    // ── dump threshold fields ─────────────────────────────────────────────────
+
+    @Test
+    public void testDumpThresholdsDefaultToDisabled() {
+        TargetDescriptor td = TargetDescriptor.builder("hostcontext",
+                "service:jmx:rmi:///jndi/rmi://localhost:7777/jmxrmi").build();
+
+        assertEquals(TargetDescriptor.DUMP_THRESHOLD_DISABLED, td.getGcDumpThreshold(),    1e-9);
+        assertEquals(TargetDescriptor.DUMP_THRESHOLD_DISABLED, td.getHeapDumpThreshold(),  1e-9);
+        assertEquals(TargetDescriptor.DUMP_THRESHOLD_DISABLED, td.getNurseryDumpThreshold(), 1e-9);
+    }
+
+    @Test
+    public void testDumpThresholdsSetViaBuilder() {
+        TargetDescriptor td = TargetDescriptor.builder("hostcontext",
+                "service:jmx:rmi:///jndi/rmi://localhost:7777/jmxrmi")
+                .gcDumpThreshold(0.40)
+                .heapDumpThreshold(0.80)
+                .nurseryDumpThreshold(0.90)
+                .build();
+
+        assertEquals(0.40, td.getGcDumpThreshold(),       1e-9);
+        assertEquals(0.80, td.getHeapDumpThreshold(),     1e-9);
+        assertEquals(0.90, td.getNurseryDumpThreshold(),  1e-9);
+    }
+
+    @Test
+    public void testDumpThresholdsSentinelConstantIsMinusOne() {
+        assertEquals(-1.0, TargetDescriptor.DUMP_THRESHOLD_DISABLED, 1e-9);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testGcDumpThresholdZeroThrows() {
+        TargetDescriptor.builder("hostcontext", "service:jmx:rmi:///jndi/rmi://localhost:7777/jmxrmi")
+                .gcDumpThreshold(0.0)
+                .build();
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testGcDumpThresholdOneThrows() {
+        TargetDescriptor.builder("hostcontext", "service:jmx:rmi:///jndi/rmi://localhost:7777/jmxrmi")
+                .gcDumpThreshold(1.0)
+                .build();
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testHeapDumpThresholdZeroThrows() {
+        TargetDescriptor.builder("hostcontext", "service:jmx:rmi:///jndi/rmi://localhost:7777/jmxrmi")
+                .heapDumpThreshold(0.0)
+                .build();
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testHeapDumpThresholdOneThrows() {
+        TargetDescriptor.builder("hostcontext", "service:jmx:rmi:///jndi/rmi://localhost:7777/jmxrmi")
+                .heapDumpThreshold(1.0)
+                .build();
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testNurseryDumpThresholdZeroThrows() {
+        TargetDescriptor.builder("hostcontext", "service:jmx:rmi:///jndi/rmi://localhost:7777/jmxrmi")
+                .nurseryDumpThreshold(0.0)
+                .build();
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testNurseryDumpThresholdOneThrows() {
+        TargetDescriptor.builder("hostcontext", "service:jmx:rmi:///jndi/rmi://localhost:7777/jmxrmi")
+                .nurseryDumpThreshold(1.0)
                 .build();
     }
 }

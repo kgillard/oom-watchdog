@@ -22,7 +22,7 @@ import static org.junit.Assert.*;
  * </ul>
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.1
+ * @version 1.7.2
  * @since 1.0.0
  * @see ThresholdRiskAssessor
  */
@@ -244,6 +244,36 @@ public class ThresholdRiskAssessorTest {
         JvmSnapshot snap = snapshotWith(0.85, 0.10, Double.NaN);
         JvmSnapshot result = assessor.assess(snap);
         assertNotSame(snap, result);
+    }
+
+    // ── critThreshold stamping & OOM_FIRING passthrough ───────────────────────
+
+    /**
+     * Assessed snapshots must have the active critical threshold stamped on them.
+     */
+    @Test
+    public void testCritThresholdStampedOnAssessment() {
+        JvmSnapshot snap = snapshotWith(0.50, 0.10, Double.NaN);
+        JvmSnapshot result = assessor.assess(snap);
+        assertEquals(config.getCriticalHeapThreshold(), result.getCritThreshold(), 1e-9);
+    }
+
+    /**
+     * Snapshots already marked OOM_FIRING must pass through unchanged without re-evaluation.
+     */
+    @Test
+    public void testOomFiringPassesThroughUnchanged() {
+        JvmSnapshot firing = new JvmSnapshot.Builder()
+                .processName("unreachable-target")
+                .riskLevel(OomRiskLevel.OOM_FIRING)
+                .diagnosisNotes("JMX connection failed")
+                .critThreshold(-1.0)
+                .build();
+        JvmSnapshot result = assessor.assess(firing);
+        assertSame("OOM_FIRING snapshot must be returned unchanged", firing, result);
+        assertSame(OomRiskLevel.OOM_FIRING, result.getRiskLevel());
+        assertEquals("JMX connection failed", result.getDiagnosisNotes());
+        assertEquals(-1.0, result.getCritThreshold(), 1e-9);
     }
 
     // ── helper ────────────────────────────────────────────────────────────────

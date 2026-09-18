@@ -44,7 +44,7 @@ import java.util.logging.Logger;
  * <p>All lifecycle operations ({@link #start()} and {@link #stop()}) are thread-safe and guarded.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.1
+ * @version 1.7.2
  * @since 1.7.0
  * @see TargetDescriptor
  * @see TargetRegistry
@@ -114,7 +114,10 @@ public final class WatchdogDaemon implements Closeable {
                         .criticalHeapThreshold(target.getCritThreshold())
                         .gcOverheadThreshold(target.getGcThreshold())
                         .pollIntervalMs(target.getPollIntervalMs())
-                        .heapDumpDirectory(target.getDumpDirectory());
+                        .heapDumpDirectory(target.getDumpDirectory())
+                        .gcDumpThreshold(target.getGcDumpThreshold())
+                        .heapDumpThreshold(target.getHeapDumpThreshold())
+                        .nurseryDumpThreshold(target.getNurseryDumpThreshold());
 
                 if (!target.getDumpTypes().isEmpty()) {
                     targetCfgBuilder.dumpTypes(target.getDumpTypes());

@@ -30,6 +30,9 @@ import java.util.Map;
  *   <li><b>Universal fallback</b> – ordered pool-usage table from
  *       {@link ManagementFactory#getMemoryPoolMXBeans()} – works on every JVM.</li>
  * </ol>
+ * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
+ * @version 1.7.2
+ * @since 1.7.0
  */
 public final class ClassHistogramStrategy implements DumpStrategy {
 

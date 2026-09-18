@@ -14,7 +14,7 @@ import static org.junit.Assert.*;
  * Unit tests for {@link TargetRegistry}.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.1
+ * @version 1.7.2
  * @since 1.7.0
  */
 public class TargetRegistryTest {
@@ -104,5 +104,36 @@ public class TargetRegistryTest {
     public void testEmptyPropertiesReturnsEmptyList() throws IOException {
         List<TargetDescriptor> targets = TargetRegistry.loadFromString("# only comments\n");
         assertTrue(targets.isEmpty());
+    }
+
+    // ── dump threshold properties ─────────────────────────────────────────────
+
+    @Test
+    public void testDumpThresholdsParsedFromProperties() throws IOException {
+        String content =
+                "target.hostcontext.jmx-url              = service:jmx:rmi:///jndi/rmi://localhost:7777/jmxrmi\n" +
+                "target.hostcontext.gc-dump-threshold    = 0.40\n" +
+                "target.hostcontext.heap-dump-threshold  = 0.80\n" +
+                "target.hostcontext.nursery-dump-threshold = 0.90\n";
+
+        List<TargetDescriptor> targets = TargetRegistry.loadFromString(content);
+        assertEquals(1, targets.size());
+
+        TargetDescriptor td = targets.get(0);
+        assertEquals(0.40, td.getGcDumpThreshold(),       1e-6);
+        assertEquals(0.80, td.getHeapDumpThreshold(),     1e-6);
+        assertEquals(0.90, td.getNurseryDumpThreshold(),  1e-6);
+    }
+
+    @Test
+    public void testDumpThresholdsDefaultToDisabledWhenAbsent() throws IOException {
+        String content = "target.hostcontext.jmx-url = service:jmx:rmi:///jndi/rmi://localhost:7777/jmxrmi\n";
+
+        List<TargetDescriptor> targets = TargetRegistry.loadFromString(content);
+        TargetDescriptor td = targets.get(0);
+
+        assertEquals(TargetDescriptor.DUMP_THRESHOLD_DISABLED, td.getGcDumpThreshold(),      1e-9);
+        assertEquals(TargetDescriptor.DUMP_THRESHOLD_DISABLED, td.getHeapDumpThreshold(),    1e-9);
+        assertEquals(TargetDescriptor.DUMP_THRESHOLD_DISABLED, td.getNurseryDumpThreshold(), 1e-9);
     }
 }

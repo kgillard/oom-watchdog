@@ -41,22 +41,42 @@ import java.util.logging.Logger;
  *   <li>Establishes connection lazily on the first {@link #collect()} invocation.</li>
  *   <li>Caches remote MXBean proxies across collections while connection remains healthy.</li>
  *   <li>If a connection drops or cannot be established, performs up to 3 automatic retries
- *       with exponential/linear back-off (2s pause between attempts).</li>
+ *       with a 2-second back-off between attempts.</li>
  *   <li>If all retries fail, returns a degraded snapshot with {@link OomRiskLevel#OOM_FIRING}
  *       and {@code targetName} populated, ensuring that unreachable targets generate immediate
  *       operational alerts without crashing the collector or monitoring scheduler.</li>
- *   <li>Sets {@code processName} in the generated {@link JvmSnapshot} to {@code "<targetName> (<remotePid@host>)"}
- *       or {@code targetName} when remote runtime info is unavailable.</li>
+ *   <li>Sets {@code processName} in the generated {@link JvmSnapshot} to
+ *       {@code "<targetName> (<remotePid@host>)"}, or {@code targetName} alone when
+ *       remote runtime info is unavailable.</li>
  * </ul>
+ *
+ * <h2>Nursery Pool Collection</h2>
+ * <p>During each {@link #collect()} invocation, all remote {@link MemoryPoolMXBean} entries
+ * are iterated.  Pools whose name contains {@code "Eden"}, {@code "Nursery"}, or
+ * {@code "Young"} (case-insensitive) contribute to the aggregate
+ * {@link JvmSnapshot#getNurseryUsedBytes()} and
+ * {@link JvmSnapshot#getNurseryUsedRatio()} fields.  This covers both HotSpot
+ * ({@code Eden Space}, {@code G1 Eden Space}) and OpenJ9/IBM J9
+ * ({@code nursery-allocate}, {@code nursery-survivor}) pool naming conventions.
+ *
+ * <h2>LEEF Metadata Stamping</h2>
+ * <p>Each snapshot produced by this collector has the target's
+ * {@link TargetDescriptor#getLeefCategory()} and
+ * {@link TargetDescriptor#getLeefTags()} values stamped onto it so that downstream
+ * {@link com.trongus.oom.alert.QRadarAlertChannel} instances can emit per-target
+ * {@code cat} and {@code tags} LEEF attributes without requiring awareness of the
+ * {@code TargetDescriptor}.
  *
  * <h2>Security</h2>
  * <p>JMX credentials are never logged; connection errors are masked and sanitized.
  *
  * <h2>Thread Safety</h2>
  * <p>Designed to be invoked periodically from a single watchdog scheduler thread.
+ * The {@link #collect()} and {@link #close()} methods are {@code synchronized} to
+ * allow safe use from multiple threads if required.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.1
+ * @version 1.7.2
  * @since 1.7.0
  * @see TargetDescriptor
  * @see JvmDiagnosticsCollector
@@ -102,6 +122,26 @@ public final class JmxDiagnosticsCollector implements JvmDiagnosticsCollector, C
         this(descriptor, WatchdogConfig.defaults().build());
     }
 
+    /**
+     * Collects a fresh {@link JvmSnapshot} from the remote JVM via JMX.
+     *
+     * <p>On the first call, a JMX connection is established using the target's
+     * {@link TargetDescriptor#getJmxUrl()} and optional credentials.  Subsequent
+     * calls reuse the cached connection.  If the connection is lost it is re-established
+     * transparently on the next invocation.
+     *
+     * <p>Nursery/young-gen memory pools (Eden, Nursery, Young) are accumulated separately
+     * and exposed as {@link JvmSnapshot#getNurseryUsedBytes()} and
+     * {@link JvmSnapshot#getNurseryUsedRatio()}.
+     *
+     * <p>The target's {@code leefCategory} and {@code leefTags} are stamped onto the snapshot
+     * so that alert channels can emit them without accessing the descriptor directly.
+     *
+     * <p>If connection fails after retries, a degraded snapshot with
+     * {@link OomRiskLevel#OOM_FIRING} is returned (never {@code null}).
+     *
+     * @return a fully populated (or degraded-unreachable) {@link JvmSnapshot}; never {@code null}
+     */
     @Override
     public synchronized JvmSnapshot collect() {
         long now = System.currentTimeMillis();
@@ -127,6 +167,7 @@ public final class JmxDiagnosticsCollector implements JvmDiagnosticsCollector, C
 
             // ── Remote MemoryPoolMXBeans ─────────────────────────────────────
             Map<String, Long> poolUsed = new LinkedHashMap<>();
+            long nurseryUsed = 0L;
             Set<ObjectName> poolNames = mbsc.queryNames(
                     new ObjectName(ManagementFactory.MEMORY_POOL_MXBEAN_DOMAIN_TYPE + ",*"), null);
             for (ObjectName on : poolNames) {
@@ -135,8 +176,15 @@ public final class JmxDiagnosticsCollector implements JvmDiagnosticsCollector, C
                 MemoryUsage u = pool.getUsage();
                 if (u != null) {
                     poolUsed.put(pool.getName(), u.getUsed());
+                    String poolNameLower = pool.getName().toLowerCase(Locale.ROOT);
+                    if (poolNameLower.contains("eden") || poolNameLower.contains("nursery")
+                            || poolNameLower.contains("young")) {
+                        nurseryUsed += u.getUsed();
+                    }
                 }
             }
+            double nurseryRatio = (nurseryUsed > 0 && heapMax > 0)
+                    ? (double) nurseryUsed / heapMax : Double.NaN;
 
             // ── Remote GarbageCollectorMXBeans ───────────────────────────────
             Map<String, Long> gcCounts = new LinkedHashMap<>();
@@ -192,6 +240,8 @@ public final class JmxDiagnosticsCollector implements JvmDiagnosticsCollector, C
                     .heapCommittedBytes(heapCommitted)
                     .heapMaxBytes(heapMax)
                     .heapUsedRatio(heapRatio)
+                    .nurseryUsedBytes(nurseryUsed)
+                    .nurseryUsedRatio(nurseryRatio)
                     .nonHeapUsedBytes(nonHeapUsed)
                     .nonHeapMaxBytes(nonHeapMax)
                     .poolUsedBytes(poolUsed)
@@ -277,6 +327,10 @@ public final class JmxDiagnosticsCollector implements JvmDiagnosticsCollector, C
         mbsc = null;
     }
 
+    /**
+     * Closes the underlying JMX connection and releases associated resources.
+     * After calling this method, the next {@link #collect()} will re-establish the connection.
+     */
     @Override
     public synchronized void close() {
         disconnect();
