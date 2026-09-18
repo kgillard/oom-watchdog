@@ -35,7 +35,7 @@ final class AlertFormatter {
     private AlertFormatter() {}
 
     private static final long   MB   = 1024L * 1024L;
-    private static final int    W    = 72;   // total width of the alert box interior (between │ │)
+    private static final int    W    = 76;   // box interior width; full line = "│ " + W + " │" = W+4 chars
 
     /** English fallback — used when callers pass {@code null} for {@code messages}. */
     private static final Messages EN = new Messages(Locale.ENGLISH);
@@ -111,15 +111,19 @@ final class AlertFormatter {
         double  slope     = snap.getPostGcHeapGrowthRatePerMs();
         String  uptimeStr = formatUptime(snap.getJvmUptimeMs());
 
-        // ── top border with severity label ────────────────────────────────────
-        String header = String.format("%s  %s ", icon, risk);
-        String ts     = new java.text.SimpleDateFormat("HH:mm:ss").format(
-                            new java.util.Date(snap.getTimestampMs()));
-        String right  = ts + "  " + process + target;
+        // ── top border ────────────────────────────────────────────────────────
+        // Keep the header line fixed-width so it never overflows the terminal
+        // regardless of how long the process name or target label is.
+        String header = String.format(" %s  %s ", icon, risk);
         StringBuilder sb = new StringBuilder();
-        sb.append("┌─ ").append(header)
-          .append(repeat("─", Math.max(1, W - header.length() - right.length() - 1)))
-          .append(" ").append(right).append(" ─┐\n");
+        sb.append("┌─").append(header)
+          .append(repeat("─", Math.max(1, W - header.length()))).append("─┐\n");
+
+        // ── process / target / timestamp on first content line ────────────────
+        String ts = new java.text.SimpleDateFormat("HH:mm:ss").format(
+                        new java.util.Date(snap.getTimestampMs()));
+        String procLine = "  " + ts + "  " + process + target;
+        sb.append("│ ").append(padLine(procLine)).append(" │\n");
 
         // ── heap bar ──────────────────────────────────────────────────────────
         String heapBar = heapBar((int) Math.round(heapPct));
