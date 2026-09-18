@@ -9,6 +9,7 @@ import com.trongus.oom.dump.DumpType;
 import com.trongus.oom.logging.WatchdogLogger;
 import com.trongus.oom.model.JvmSnapshot;
 import com.trongus.oom.model.OomRiskLevel;
+import com.trongus.oom.platform.JvmPlatform;
 
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
@@ -796,22 +797,10 @@ public final class MetricsHttpServer {
         String osName        = OS_MX.getName() + " " + OS_MX.getVersion()
                                + " (" + OS_MX.getArch() + ")";
         int    cpuCount      = OS_MX.getAvailableProcessors();
-        double cpuLoad       = -1.0;  // -1 = unavailable (not on standard API)
-        long   processCpuMs  = -1L;
-
-        // com.sun.management.OperatingSystemMXBean has getProcessCpuLoad / getProcessCpuTime
-        try {
-            java.lang.reflect.Method pcl = OS_MX.getClass().getMethod("getProcessCpuLoad");
-            pcl.setAccessible(true);
-            Object v = pcl.invoke(OS_MX);
-            if (v instanceof Double) cpuLoad = (Double) v * 100.0;
-        } catch (Exception ignored) { /* not available on this JVM */ }
-        try {
-            java.lang.reflect.Method pct = OS_MX.getClass().getMethod("getProcessCpuTime");
-            pct.setAccessible(true);
-            Object v = pct.invoke(OS_MX);
-            if (v instanceof Long) processCpuMs = (Long) v / 1_000_000L; // ns → ms
-        } catch (Exception ignored) { /* not available on this JVM */ }
+        // Read process CPU via the public com.sun.management.OperatingSystemMXBean interface
+        // (through JvmPlatform helpers) — no reflection on internal classes, no illegal-access warnings.
+        double cpuLoad      = JvmPlatform.processCpuPct();
+        long   processCpuMs = JvmPlatform.processCpuMs();
 
         // JVM input args (flags, -X, -D passed to the JVM itself)
         List<String> inputArgs = RUNTIME_MX.getInputArguments();

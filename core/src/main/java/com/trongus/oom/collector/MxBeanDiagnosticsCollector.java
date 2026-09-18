@@ -4,6 +4,7 @@ import com.trongus.oom.config.WatchdogConfig;
 import com.trongus.oom.i18n.Messages;
 import com.trongus.oom.model.JvmSnapshot;
 import com.trongus.oom.model.OomRiskLevel;
+import com.trongus.oom.platform.JvmPlatform;
 
 import java.lang.management.GarbageCollectorMXBean;
 import java.lang.management.ManagementFactory;
@@ -172,20 +173,11 @@ public final class MxBeanDiagnosticsCollector implements JvmDiagnosticsCollector
         String osName      = OS_MX.getName() + " " + OS_MX.getVersion()
                            + " (" + OS_MX.getArch() + ")";
         int    cpuCount    = OS_MX.getAvailableProcessors();
-        double cpuPct      = -1.0;
-        long   cpuMs       = -1L;
-        try {
-            java.lang.reflect.Method m = OS_MX.getClass().getMethod("getProcessCpuLoad");
-            m.setAccessible(true);
-            Object v = m.invoke(OS_MX);
-            if (v instanceof Double) cpuPct = (Double) v * 100.0;
-        } catch (Exception ignored) { /* not on this JVM */ }
-        try {
-            java.lang.reflect.Method m = OS_MX.getClass().getMethod("getProcessCpuTime");
-            m.setAccessible(true);
-            Object v = m.invoke(OS_MX);
-            if (v instanceof Long) cpuMs = (Long) v / 1_000_000L; // ns → ms
-        } catch (Exception ignored) { /* not on this JVM */ }
+        // Read process CPU via JvmPlatform helpers — uses the public
+        // com.sun.management.OperatingSystemMXBean interface, no setAccessible,
+        // no illegal-access warnings on any JVM or JDK version.
+        double cpuPct = JvmPlatform.processCpuPct();
+        long   cpuMs  = JvmPlatform.processCpuMs();
         List<String> inputArgsList = RUNTIME_MX.getInputArguments();
         StringBuilder inputArgsSb  = new StringBuilder();
         for (int i = 0; i < inputArgsList.size(); i++) {
