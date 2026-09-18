@@ -1,6 +1,5 @@
 package com.trongus.oom.logging;
 
-import java.net.InetAddress;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -8,22 +7,24 @@ import java.util.logging.Formatter;
 import java.util.logging.LogRecord;
 
 /**
- * Structured single-line log formatter for {@link WatchdogLogger}.
+ * Compact, visually scannable log formatter for {@link WatchdogLogger}.
  *
  * <h2>Output format</h2>
  * <pre>
- * 2026-09-17T08:00:00.123+1000 [INFO ] [pid=12345@prod-host] [thread=oom-watchdog] com.trongus.oom.monitor.OomWatchdog – message
+ * 12:36:55.246  INFO   OomWatchdog      Started – polling every 200 ms.
+ * 12:36:55.312  WARN   JmxCollector     Failed to connect to [hostcontext]: connection refused
+ * 12:36:55.400  SEVERE WatchdogMain     Unrecoverable error: …
+ *                                       java.lang.NullPointerException: config
+ *                                           at com.trongus.oom.WatchdogMain.main(WatchdogMain.java:215)
  * </pre>
  *
- * <p>Each record includes, in order:
+ * <p>Each record includes:
  * <ol>
- *   <li>ISO-8601 timestamp with millisecond precision and timezone offset</li>
- *   <li>Fixed-width log level label (5 chars, left-aligned)</li>
- *   <li>Process identifier ({@code pid=<pid>@<hostname>})</li>
- *   <li>Thread name</li>
- *   <li>Logger name (fully-qualified class name)</li>
+ *   <li>Time-of-day timestamp ({@code HH:mm:ss.SSS}) — no date, no timezone clutter</li>
+ *   <li>Fixed-width level label ({@code INFO}, {@code WARN}, {@code SEVERE}, etc.)</li>
+ *   <li>Short class name — just the simple class name, not the full package path</li>
  *   <li>Message text</li>
- *   <li>Exception stack trace (if a {@link Throwable} is attached)</li>
+ *   <li>Exception stack trace (if a {@link Throwable} is attached), indented below</li>
  * </ol>
  *
  * <p>This formatter is package-private: callers obtain a pre-configured
@@ -38,40 +39,40 @@ import java.util.logging.LogRecord;
 final class WatchdogLogFormatter extends Formatter {
 
     private static final DateTimeFormatter TIMESTAMP_FMT =
-            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSxxx")
+            DateTimeFormatter.ofPattern("HH:mm:ss.SSS")
                              .withZone(ZoneId.systemDefault());
-
-    /** Process-identity string ({@code pid=<pid>@<host>}), computed once at class-load time. */
-    private static final String PROCESS_ID = buildProcessId();
 
     /** Line separator for the current platform. */
     private static final String NL = System.lineSeparator();
 
+    /** Width of the level column — "WARNING" is the longest at 7 chars. */
+    private static final int LEVEL_WIDTH  = 7;
+    /** Width of the class-name column — padded so messages align. */
+    private static final int SOURCE_WIDTH = 16;
+
     /** {@inheritDoc} */
     @Override
     public String format(LogRecord record) {
-        String timestamp  = TIMESTAMP_FMT.format(Instant.ofEpochMilli(record.getMillis()));
-        String level      = padLevel(record.getLevel().getName());
-        String thread     = record.getSourceMethodName() != null
-                            ? Thread.currentThread().getName()
-                            : Thread.currentThread().getName();
-        String loggerName = record.getLoggerName() != null ? record.getLoggerName() : "com.trongus.oom";
-        String message    = formatMessage(record);
+        String timestamp = TIMESTAMP_FMT.format(Instant.ofEpochMilli(record.getMillis()));
+        String level     = abbreviateLevel(record.getLevel());
+        String source    = shortClassName(record.getLoggerName());
+        String message   = formatMessage(record);
 
-        StringBuilder sb = new StringBuilder(256);
+        StringBuilder sb = new StringBuilder(160);
         sb.append(timestamp)
-          .append(" [").append(level).append(']')
-          .append(" [").append(PROCESS_ID).append(']')
-          .append(" [thread=").append(sanitiseThreadName(Thread.currentThread().getName())).append(']')
-          .append(' ').append(loggerName)
-          .append(" \u2013 ")   // em-dash separator
+          .append("  ")
+          .append(padRight(level,  LEVEL_WIDTH))
+          .append("  ")
+          .append(padRight(source, SOURCE_WIDTH))
+          .append("  ")
           .append(message)
           .append(NL);
 
-        // Append exception stack trace when present
+        // Append exception stack trace when present, indented to align with message
         Throwable thrown = record.getThrown();
         if (thrown != null) {
-            sb.append(stackTraceOf(thrown));
+            String indent = " ".repeat(timestamp.length() + 2 + LEVEL_WIDTH + 2 + SOURCE_WIDTH + 2);
+            sb.append(stackTraceOf(thrown, indent));
         }
 
         return sb.toString();
@@ -82,72 +83,51 @@ final class WatchdogLogFormatter extends Formatter {
     // -------------------------------------------------------------------------
 
     /**
-     * Left-pads the level name to exactly 7 characters so columns align.
-     * Levels used: FINEST(6), FINE(4), CONFIG(6), INFO(4), WARNING(7), SEVERE(6).
+     * Returns a short, fixed-width level label. WARNING → WARN to keep
+     * columns tighter; all others use their natural name.
      */
-    private static String padLevel(String name) {
-        if (name.length() >= 7) return name;
-        return name + "       ".substring(name.length());
+    private static String abbreviateLevel(java.util.logging.Level level) {
+        String name = level.getName();
+        if ("WARNING".equals(name)) return "WARN";
+        if ("CONFIG".equals(name))  return "CONFIG";
+        return name; // INFO(4), FINE(4), FINEST(6), SEVERE(6)
     }
 
     /**
-     * Replaces control characters in the thread name to prevent log-injection.
-     *
-     * @param name raw thread name
-     * @return sanitised thread name
+     * Extracts the simple class name from a fully-qualified logger name.
+     * {@code "com.trongus.oom.monitor.OomWatchdog"} → {@code "OomWatchdog"}.
      */
-    private static String sanitiseThreadName(String name) {
-        if (name == null) return "unknown";
-        return name.replaceAll("[\\x00-\\x1F\\x7F\\[\\]]", "_");
+    private static String shortClassName(String loggerName) {
+        if (loggerName == null) return "OomWatchdog";
+        int dot = loggerName.lastIndexOf('.');
+        return dot >= 0 ? loggerName.substring(dot + 1) : loggerName;
+    }
+
+    /** Right-pads {@code s} to exactly {@code width} chars. */
+    private static String padRight(String s, int width) {
+        if (s.length() >= width) return s;
+        return s + " ".repeat(width - s.length());
     }
 
     /**
-     * Renders the full stack trace of a {@link Throwable} as a string.
+     * Renders the full stack trace of a {@link Throwable} as a string,
+     * with each line prefixed by {@code indent} so it aligns under the message column.
      *
-     * @param t the throwable to render
-     * @return multi-line stack trace string
+     * @param t      the throwable to render
+     * @param indent leading whitespace to prepend to each line
+     * @return multi-line indented stack trace string
      */
-    private static String stackTraceOf(Throwable t) {
+    private static String stackTraceOf(Throwable t, String indent) {
         StringBuilder sb = new StringBuilder();
-        sb.append(t.getClass().getName()).append(": ").append(t.getMessage()).append(NL);
+        sb.append(indent).append(t.getClass().getName()).append(": ").append(t.getMessage()).append(NL);
         for (StackTraceElement ste : t.getStackTrace()) {
-            sb.append("    at ").append(ste).append(NL);
+            sb.append(indent).append("  at ").append(ste).append(NL);
         }
         Throwable cause = t.getCause();
         if (cause != null) {
-            sb.append("Caused by: ").append(stackTraceOf(cause));
+            sb.append(indent).append("Caused by: ");
+            sb.append(stackTraceOf(cause, indent));
         }
         return sb.toString();
-    }
-
-    /**
-     * Builds the static process-identity string {@code pid=<pid>@<hostname>}.
-     * Hostname resolution failure falls back to {@code "localhost"}.
-     */
-    private static String buildProcessId() {
-        // PID: JDK 9+ uses ProcessHandle; JDK 8 parses RuntimeMXBean name
-        long pid = -1L;
-        try {
-            Class<?> ph   = Class.forName("java.lang.ProcessHandle");
-            Object   curr = ph.getMethod("current").invoke(null);
-            pid = (Long) curr.getClass().getMethod("pid").invoke(curr);
-        } catch (Exception ignored) {
-            try {
-                String name = java.lang.management.ManagementFactory.getRuntimeMXBean().getName();
-                int at = name.indexOf('@');
-                pid = Long.parseLong(at > 0 ? name.substring(0, at) : name);
-            } catch (Exception ignored2) {
-                // leave as -1
-            }
-        }
-
-        String host;
-        try {
-            host = InetAddress.getLocalHost().getHostName();
-        } catch (Exception ignored) {
-            host = "localhost";
-        }
-
-        return "pid=" + pid + "@" + host;
     }
 }

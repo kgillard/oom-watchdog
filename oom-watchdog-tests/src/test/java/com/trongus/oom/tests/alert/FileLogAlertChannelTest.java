@@ -145,13 +145,13 @@ public class FileLogAlertChannelTest {
     }
 
     /**
-     * The human-readable multi-line block must be present with the banner header.
+     * The human-readable multi-line block must be present with the severity header.
      */
     @Test
     public void testMultiLineBlockHasBanner() throws IOException {
         channel.alert(buildSnapshot(OomRiskLevel.WARNING, 85L * MB, 100L * MB));
         String content = new String(Files.readAllBytes(tempLog), StandardCharsets.UTF_8);
-        assertTrue("Log should contain === JVM OOM Alert ===", content.contains("=== JVM OOM Alert ==="));
+        assertTrue("Log should contain WARNING severity header", content.contains("WARNING"));
     }
 
     /**

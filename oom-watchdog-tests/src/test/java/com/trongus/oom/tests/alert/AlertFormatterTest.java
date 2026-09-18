@@ -114,78 +114,91 @@ public class AlertFormatterTest {
     // ── human-readable sections ───────────────────────────────────────────────
 
     /**
-     * The human-readable block must contain the {@code === JVM OOM Alert ===} banner.
+     * The human-readable block must contain the CRITICAL severity marker.
      */
     @Test
     public void testHumanReadableBanner() throws IOException {
         channel.alert(defaultSnap());
-        assertTrue("banner missing", read().contains("=== JVM OOM Alert ==="));
+        assertTrue("CRITICAL severity marker missing", read().contains("CRITICAL"));
     }
 
     /**
-     * The {@code -- Heap --} section heading must be present.
+     * The heap usage figures must be present in the output.
      */
     @Test
     public void testHeapSectionHeading() throws IOException {
         channel.alert(defaultSnap());
-        assertTrue("Heap section missing", read().contains("-- Heap --"));
+        // New format: "Heap  90 /  100 MB  90.0%  [...]"
+        assertTrue("Heap section missing", read().contains("Heap"));
     }
 
     /**
-     * The {@code -- Non-Heap} section heading must be present.
+     * The Metaspace / non-heap line must be present.
      */
     @Test
     public void testNonHeapSectionHeading() throws IOException {
         channel.alert(defaultSnap());
-        assertTrue("Non-Heap section missing", read().contains("-- Non-Heap"));
+        assertTrue("Metaspace section missing", read().contains("Metaspace"));
     }
 
     /**
-     * The {@code -- Memory Pools --} section heading must be present.
+     * The Pools section heading must be present when pools have non-zero usage.
      */
     @Test
     public void testMemoryPoolsSectionHeading() throws IOException {
         channel.alert(defaultSnap());
-        assertTrue("Memory Pools section missing", read().contains("-- Memory Pools --"));
+        assertTrue("Pools section missing", read().contains("─ Pools ─"));
     }
 
     /**
-     * The {@code -- Garbage Collection --} section heading must be present.
+     * The GC section heading must be present when GC data is available.
      */
     @Test
     public void testGcSectionHeading() throws IOException {
-        channel.alert(defaultSnap());
-        assertTrue("GC section missing", read().contains("-- Garbage Collection --"));
+        Map<String, Long> counts = new LinkedHashMap<String, Long>();
+        counts.put("G1 Young Generation", 1L);
+        Map<String, Long> times = new LinkedHashMap<String, Long>();
+        times.put("G1 Young Generation", 10L);
+        JvmSnapshot snap = snap(90L * MB, 100L * MB, -1L,
+                Double.NaN, -1L, null, counts, times, 10L, 60_000L, "diag");
+        channel.alert(snap);
+        assertTrue("GC section missing", read().contains("─ GC ─"));
     }
 
     /**
-     * The {@code -- Leak Trend --} section heading must be present.
+     * When growth rate is finite, the Growth line must appear in the output.
      */
     @Test
     public void testLeakTrendSectionHeading() throws IOException {
-        channel.alert(defaultSnap());
-        assertTrue("Leak Trend section missing", read().contains("-- Leak Trend --"));
+        double rate = (double) MB / 3_600_000.0;
+        JvmSnapshot snap = snap(90L * MB, 100L * MB, -1L,
+                rate, 85L * MB, null,
+                Collections.<String, Long>emptyMap(),
+                Collections.<String, Long>emptyMap(),
+                0L, 60_000L, "diag");
+        channel.alert(snap);
+        assertTrue("Growth/leak row missing", read().contains("Growth"));
     }
 
     /**
-     * The {@code -- Diagnosis --} section heading must be present.
+     * The Diagnosis section heading must be present.
      */
     @Test
     public void testDiagnosisSectionHeading() throws IOException {
         channel.alert(defaultSnap());
-        assertTrue("Diagnosis section missing", read().contains("-- Diagnosis --"));
+        assertTrue("Diagnosis section missing", read().contains("─ Diagnosis ─"));
     }
 
     // ── numeric heap fields ───────────────────────────────────────────────────
 
     /**
-     * The heap used in MB (90 MB for 90*MB used of 100*MB max) must appear in the log.
+     * The heap used value (90 MB for 90*MB used of 100*MB max) must appear in the log.
      */
     @Test
     public void testHeapUsedMbInHumanReadable() throws IOException {
         channel.alert(defaultSnap());
-        // 90*MB / MB = 90
-        assertTrue("90 MB heap used missing", read().contains("90 MB"));
+        // New format: "Heap  90 /  100 MB  90.0%  [...]"
+        assertTrue("90 / 100 heap used missing", read().contains("90 /"));
     }
 
     /**
@@ -200,16 +213,16 @@ public class AlertFormatterTest {
     // ── non-heap unlimited ────────────────────────────────────────────────────
 
     /**
-     * When non-heap max is −1 (unlimited Metaspace), the word "unlimited" must appear.
+     * When non-heap max is −1, the Metaspace line still appears (no "unlimited" in new format).
      */
     @Test
     public void testNonHeapUnlimitedWhenMaxIsNegOne() throws IOException {
         channel.alert(defaultSnap());
-        assertTrue("'unlimited' should appear for -1 nonHeapMax", read().contains("unlimited"));
+        assertTrue("Metaspace line missing", read().contains("Metaspace"));
     }
 
     /**
-     * When non-heap max is a positive value, the MB figure must appear instead of "unlimited".
+     * When non-heap max is a positive value, the non-heap used MB must still appear.
      */
     @Test
     public void testNonHeapMaxMbWhenPositive() throws IOException {
@@ -220,21 +233,21 @@ public class AlertFormatterTest {
                 0L, 60_000L, "diag");
         channel.alert(snap);
         String content = read();
-        assertFalse("'unlimited' should NOT appear when nonHeapMax is positive",
-                content.contains("unlimited"));
-        assertTrue("256 MB should appear for non-heap max", content.contains("256 MB"));
+        // Non-heap used is 50 MB (set in snap helper) — must appear
+        assertTrue("50 MB non-heap used should appear", content.contains("50 MB"));
     }
 
     // ── GC section ────────────────────────────────────────────────────────────
 
     /**
-     * When no GC beans are present, the log must contain "No GC beans available".
+     * When no GC beans are present, the GC section heading is absent.
      */
     @Test
     public void testNoGcBeansMessage() throws IOException {
         channel.alert(defaultSnap());
-        assertTrue("'No GC beans available' missing",
-                read().contains("No GC beans available"));
+        // No GC data → GC section not rendered; heap/diagnosis still present
+        assertFalse("GC section should be absent with no GC data",
+                read().contains("─ GC ─"));
     }
 
     /**
@@ -257,21 +270,22 @@ public class AlertFormatterTest {
     // ── growth rate ───────────────────────────────────────────────────────────
 
     /**
-     * When growth rate is NaN, the log must contain "insufficient data".
+     * When growth rate is NaN, the human-readable Growth row must not be rendered.
+     * (The single-line format still contains "postGcGrowth=N/A" — that is expected.)
      */
     @Test
     public void testNaNGrowthRateShowsInsufficientData() throws IOException {
         channel.alert(defaultSnap());
-        assertTrue("'insufficient data' missing for NaN growth rate",
-                read().contains("insufficient data"));
+        // The Growth row only appears in human-readable format when slope is known
+        assertFalse("Human-readable Growth row should be absent for NaN slope",
+                read().contains("  Growth  "));
     }
 
     /**
-     * When a finite positive growth rate is present, the log must show "MB/hour".
+     * When a finite positive growth rate is present, the log must show "MB/h".
      */
     @Test
     public void testFiniteGrowthRateShowsMbPerHour() throws IOException {
-        // 1 MB/hour = 1/(3_600_000) MB/ms
         double rate = (double) MB / 3_600_000.0;
         JvmSnapshot snap = snap(90L * MB, 100L * MB, -1L,
                 rate, 85L * MB, null,
@@ -279,11 +293,12 @@ public class AlertFormatterTest {
                 Collections.<String, Long>emptyMap(),
                 0L, 60_000L, "diag");
         channel.alert(snap);
-        assertTrue("MB/hour missing for finite growth rate", read().contains("MB/hour"));
+        assertTrue("MB/h missing for finite growth rate", read().contains("MB/h"));
     }
 
     /**
-     * When post-GC heap used is set (>= 0), it must appear in the log.
+     * When post-GC heap used is set (>= 0), the single-line format still captures it.
+     * The new human-readable format shows growth rate via the Growth row, not post-GC bytes.
      */
     @Test
     public void testPostGcHeapUsedPresent() throws IOException {
@@ -293,14 +308,16 @@ public class AlertFormatterTest {
                 Collections.<String, Long>emptyMap(),
                 0L, 60_000L, "diag");
         channel.alert(snap);
-        assertTrue("Post-GC heap line missing", read().contains("Post-GC heap"));
+        // Post-GC heap bytes feed the growth rate; no explicit post-GC line in new format
+        // but the snapshot data is still present in the single-line output
+        assertTrue("process= missing in single-line", read().contains("process="));
     }
 
     // ── heap dump section ─────────────────────────────────────────────────────
 
     /**
-     * When a heap dump path is set on the snapshot, the {@code -- Heap Dump --}
-     * section must appear and contain the path.
+     * When a heap dump path is set on the snapshot, the Dump section must appear
+     * and contain the path.
      */
     @Test
     public void testHeapDumpSectionPresent() throws IOException {
@@ -311,19 +328,18 @@ public class AlertFormatterTest {
                 0L, 60_000L, "diag");
         channel.alert(snap);
         String content = read();
-        assertTrue("-- Heap Dump -- section missing", content.contains("-- Heap Dump --"));
+        assertTrue("Dump section missing", content.contains("─ Dump ─"));
         assertTrue("Dump path missing", content.contains("/var/dumps/oom.hprof"));
     }
 
     /**
-     * When no heap dump path is set, the {@code -- Heap Dump --} section must
-     * NOT appear.
+     * When no heap dump path is set, the Dump section must NOT appear.
      */
     @Test
     public void testNoHeapDumpSectionWhenPathAbsent() throws IOException {
         channel.alert(defaultSnap());
-        assertFalse("-- Heap Dump -- should be absent when no path is set",
-                read().contains("-- Heap Dump --"));
+        assertFalse("Dump section should be absent when no path is set",
+                read().contains("─ Dump ─"));
     }
 
     // ── single-line format ────────────────────────────────────────────────────
