@@ -379,6 +379,9 @@
     .cpu-badge.low  { background: #051409; color: var(--ok); border: 1px solid var(--ok); }
     .cpu-badge.med  { background: #1c1507; color: var(--warn); border: 1px solid var(--warn); }
     .cpu-badge.high { background: #1c0505; color: var(--crit); border: 1px solid var(--crit); }
+    .jvm-flags-list { margin: 2px 0 0 0; padding: 0; list-style: none; }
+    .jvm-flags-list li { font-family: monospace; font-size: 10px; line-height: 1.7;
+                         word-break: break-word; color: var(--text); }
 
     /* ── Footer ──────────────────────────────────────────────────────────────── */
     footer { text-align: left; padding: 7px 20px; color: var(--muted); font-size: 11px;
@@ -775,7 +778,7 @@ function jvmDetailCardHtml(s) {
             '<div class="info-k">Non-heap</div><div class="info-v" id="' + s + '-jvm-nonheap">—</div>',
             '<div class="info-k">GC overhead</div><div class="info-v" id="' + s + '-jvm-gc-ovhd">—</div>',
             '<div class="info-k">JVM flags</div>',
-            '<div class="info-v" id="' + s + '-jvm-flags" style="font-family:monospace;font-size:10px;line-height:1.5">—</div>',
+            '<div class="info-v" id="' + s + '-jvm-flags">—</div>',
             '<div class="info-k">App command</div>',
             '<div class="info-v" id="' + s + '-jvm-cmd" style="font-family:monospace;font-size:10px">—</div>',
           '</div>',
@@ -865,7 +868,7 @@ function renderPane(name) {
   setEl(s + '-jvm-nonheap',  fmt1(d.nonHeapUsedMB) + ' MB');
   setEl(s + '-jvm-gc-ovhd',  fmt2(d.gcOverheadPct) + '%');
   setEl(s + '-jvm-threads',  d.threadCount > 0 ? d.threadCount + (d.peakThreadCount > 0 ? ' (peak ' + d.peakThreadCount + ')' : '') : '—');
-  setEl(s + '-jvm-flags',    nvl(d.jvmInputArgs));
+  setHtml(s + '-jvm-flags',  fmtFlags(d.jvmInputArgs));
   setEl(s + '-jvm-cmd',      nvl(d.javaCommand));
 
   var cpuPct = parseFloat(d.processCpuPct);
@@ -947,9 +950,21 @@ function drawSparkline(svgId, data, maxVal, threshPct, curId, curText, lineColor
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
-function setEl(id, val)  { var e = document.getElementById(id); if (e) e.textContent = val; }
+function setEl(id, val)   { var e = document.getElementById(id); if (e) e.textContent = val; }
+function setHtml(id, html) { var e = document.getElementById(id); if (e) e.innerHTML = html; }
 // nvl: show '—' for null, undefined, or empty/whitespace-only strings
 function nvl(v) { return (v != null && String(v).trim() !== '') ? String(v) : '—'; }
+// fmtFlags: render space-joined JVM flag string as one flag per line
+function fmtFlags(raw) {
+  if (!raw || String(raw).trim() === '') return '—';
+  // Split on whitespace that is followed by a dash (flag boundary), keeping the dash
+  var flags = String(raw).trim().split(/\s+(?=-)/).filter(function(f) { return f !== ''; });
+  if (flags.length === 0) return '—';
+  if (flags.length === 1) return '<span style="font-family:monospace;font-size:10px">' + esc(flags[0]) + '</span>';
+  return '<ul class="jvm-flags-list">' +
+    flags.map(function(f) { return '<li>' + esc(f) + '</li>'; }).join('') +
+    '</ul>';
+}
 
 function setGauge(id, pct, color) {
   var e = document.getElementById(id);
