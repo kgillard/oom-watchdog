@@ -22,3 +22,9 @@ test-harness/target/*-shaded.jar
 oom-watchdog-tests/target/
 
 *.code-workspace
+
+# Built JARs — distributed via GitHub Releases, not git
+core/target/*.jar
+test-harness/target/*.jar
+core/target/original-*.jar
+test-harness/target/original-*.jar
