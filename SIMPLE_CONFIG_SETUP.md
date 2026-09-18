@@ -102,6 +102,7 @@ You do not need to memorise these.  Come back here when you need to change somet
 | `--qradar-port` | The network port QRadar listens on. Default is `514`. | `514` |
 | `--qradar-tcp` | Add this flag (no value) to use TCP instead of UDP to send to QRadar. | _(flag only)_ |
 | `--metrics-port` | Enables the live dashboard on this port number. | `9090` |
+| `--metrics-bind-all` | Allow connections from other machines (binds to all network interfaces). Without this the dashboard only works on the same machine as the watchdog. | _(flag only)_ |
 | `--metrics-no-tls` | Add this flag to use plain HTTP for the dashboard instead of HTTPS. | _(flag only)_ |
 | `--daemon` | Run in remote monitoring mode — monitors other JVMs over the network. | _(flag only)_ |
 | `--targets-file` | Points to a configuration file listing which remote JVMs to monitor. | `./targets.properties` |
@@ -565,7 +566,12 @@ The `dashboard.html` file is a single-page web application that connects to the 
 
 Add `--metrics-port` to your command.  The watchdog will start a small HTTPS server on that port.
 
-#### Mac / Linux
+> **Opening the dashboard on the same machine as the watchdog?** The commands below are all you need.
+>
+> **Opening the dashboard on a different machine** (e.g. your laptop connecting to a remote server)?
+> Add `--metrics-bind-all` — without it the server only listens on `127.0.0.1` and remote connections are refused.  Also make sure the port is open in the server's firewall.
+
+#### Mac / Linux — local (same machine)
 
 ```bash
 java -jar /opt/oom-watchdog/oom-watchdog.jar \
@@ -575,13 +581,35 @@ java -jar /opt/oom-watchdog/oom-watchdog.jar \
     --log-file /var/log/oom-watchdog.log
 ```
 
-#### Windows
+#### Mac / Linux — remote access (dashboard on a different machine)
+
+```bash
+java -jar /opt/oom-watchdog/oom-watchdog.jar \
+    --warn-threshold 0.80 \
+    --crit-threshold 0.90 \
+    --metrics-port 9090 \
+    --metrics-bind-all \
+    --log-file /var/log/oom-watchdog.log
+```
+
+#### Windows — local (same machine)
 
 ```cmd
 java -jar C:\oom-watchdog\oom-watchdog.jar ^
     --warn-threshold 0.80 ^
     --crit-threshold 0.90 ^
     --metrics-port 9090 ^
+    --log-file C:\logs\oom-watchdog.log
+```
+
+#### Windows — remote access (dashboard on a different machine)
+
+```cmd
+java -jar C:\oom-watchdog\oom-watchdog.jar ^
+    --warn-threshold 0.80 ^
+    --crit-threshold 0.90 ^
+    --metrics-port 9090 ^
+    --metrics-bind-all ^
     --log-file C:\logs\oom-watchdog.log
 ```
 
@@ -612,14 +640,18 @@ java -jar /opt/oom-watchdog/oom-watchdog.jar \
 
 1. Download `dashboard.html` from the GitHub releases page (same page as `oom-watchdog.jar`).
 2. Open `dashboard.html` directly in any modern browser — no web server needed.
-3. In the **Endpoint** field at the top of the page, type the address of the watchdog:
-   - HTTPS (default): `https://localhost:9090/metrics`
-   - HTTP (if you used `--metrics-no-tls`): `http://localhost:9090/metrics`
+3. In the **Server** field at the top of the page, type the address of the watchdog:
+   - Same machine (default): `https://localhost:9090`
+   - Remote machine (requires `--metrics-bind-all` on the server): `https://9.60.246.81:9090`
+   - Plain HTTP (if you used `--metrics-no-tls`): `http://localhost:9090` or `http://9.60.246.81:9090`
 4. Click **Connect**.
 
 The dashboard will start updating live every few seconds.
 
-> **Monitoring a remote machine?**  Replace `localhost` with the hostname or IP address of the server running OOM Watchdog.  Make sure port `9090` (or whichever port you chose) is open in any firewall between your browser and the server.
+> **Remote access checklist:**
+> 1. The watchdog was started with `--metrics-bind-all`
+> 2. Port `9090` (or your chosen port) is open in the server's firewall / security group
+> 3. You typed the server's IP address in the dashboard's Server field, not `localhost`
 
 ### Dashboard features at a glance
 
@@ -734,6 +766,7 @@ The table below lists every available option.  You only need the ones relevant t
 | `--qradar-port` | port | `514` | QRadar / syslog destination port |
 | `--qradar-tcp` | flag | UDP | Add this flag to use TCP instead of UDP |
 | `--metrics-port` | port | _(off)_ | Start the live metrics endpoint on this port |
+| `--metrics-bind-all` | flag | loopback | Bind to all interfaces — required for remote browser access |
 | `--metrics-cert` | path | _(auto)_ | Path to a PKCS#12 or JKS keystore for HTTPS |
 | `--metrics-cert-password` | text | _(empty)_ | Password for the keystore file |
 | `--metrics-no-tls` | flag | HTTPS | Add this flag to use plain HTTP instead of HTTPS |

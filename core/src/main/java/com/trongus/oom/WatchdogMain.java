@@ -295,7 +295,7 @@ public final class WatchdogMain {
                 try {
                     TlsConfig tls = buildTlsConfig(cli);
                     MetricsHttpServer metricsServer = new MetricsHttpServer(
-                            null, daemon.getActiveWatchdogs(), cli.metricsPort, false, tls);
+                            null, daemon.getActiveWatchdogs(), cli.metricsPort, cli.metricsBindAll, tls);
                     metricsServer.start();
                     Runtime.getRuntime().addShutdownHook(
                             new Thread(metricsServer::stop, "oom-metrics-shutdown"));
@@ -336,7 +336,7 @@ public final class WatchdogMain {
             try {
                 TlsConfig tls = buildTlsConfig(cli);
                 MetricsHttpServer metricsServer = new MetricsHttpServer(
-                        watchdog, cli.metricsPort, false, tls);
+                        watchdog, cli.metricsPort, cli.metricsBindAll, tls);
                 metricsServer.start();
                 Runtime.getRuntime().addShutdownHook(
                         new Thread(metricsServer::stop, "oom-metrics-shutdown"));
@@ -467,8 +467,10 @@ public final class WatchdogMain {
         System.out.printf( "║  Log level               : %s%n",      config.getLogLevel().getName());
         System.out.printf( "║  Test mode               : %s%n",      cli.testMode ? "YES" : "no");
         if (cli.metricsPort > 0) {
-            System.out.printf("║  Metrics endpoint        : https://localhost:%d/metrics%n", cli.metricsPort);
-            System.out.printf("║  Dashboard               : open dashboard.html in browser%n");
+            String metricsHost = cli.metricsBindAll ? "0.0.0.0 (all interfaces)" : "127.0.0.1 (loopback only)";
+            System.out.printf("║  Metrics bind address    : %s%n", metricsHost);
+            System.out.printf("║  Metrics endpoint        : https://<host>:%d/metrics%n", cli.metricsPort);
+            System.out.printf("║  Dashboard               : open dashboard.html, set URL to https://<host>:%d%n", cli.metricsPort);
         }
         System.out.println("╚══════════════════════════════════════════════════════════╝");
         System.out.println();
@@ -517,8 +519,9 @@ public final class WatchdogMain {
           + "  --qradar-host    <host>       QRadar syslog host (disables QRadar if omitted)\n"
           + "  --qradar-port    <port>       QRadar syslog port (default: 514)\n"
           + "  --qradar-tcp                  Use TCP instead of UDP for QRadar syslog\n"
-          + "  --metrics-port   <port>       Expose JSON metrics on http://localhost:<port>/metrics\n"
-          + "                                for use with dashboard.html (disabled if omitted)\n"
+          + "  --metrics-port   <port>       Expose JSON metrics endpoint for dashboard.html (disabled if omitted)\n"
+          + "  --metrics-bind-all            Bind metrics server to 0.0.0.0 (all interfaces) so remote\n"
+          + "                                browsers can reach it; default is loopback (127.0.0.1) only\n"
           + "  --test-mode                   Run OOM simulator to exercise all alert levels\n"
           + "  --test-leak-secs <s>          Slow-leak phase seconds in test mode (default: 20)\n"
           + "  --help                        Print this help and exit\n"
@@ -532,9 +535,13 @@ public final class WatchdogMain {
           + "       --poll-ms 1000 \\\n"
           + "       --test-leak-secs 10\n"
           + "\n"
-          + "Dashboard (real-time browser UI):\n"
+          + "Dashboard (real-time browser UI — local):\n"
           + "  java -Xmx256m -jar oom-watchdog.jar --metrics-port 9090 --poll-ms 2000\n"
-          + "  Then open dashboard.html in a browser and set server URL to https://localhost:9090\n"
+          + "  Then open dashboard.html and set server URL to https://localhost:9090\n"
+          + "\n"
+          + "Dashboard (remote host — accessible from another machine):\n"
+          + "  java -Xmx256m -jar oom-watchdog.jar --metrics-port 9090 --metrics-bind-all --poll-ms 2000\n"
+          + "  Then open dashboard.html and set server URL to https://<server-ip>:9090\n"
         );
     }
 
@@ -626,6 +633,13 @@ public final class WatchdogMain {
          */
         boolean metricsNoTls = false;
 
+        /**
+         * When {@code true}, the metrics server binds to all interfaces ({@code 0.0.0.0})
+         * so it is reachable from remote hosts.  Defaults to {@code false} (loopback only).
+         * Only set this when the metrics port is protected by a firewall or you are using TLS.
+         */
+        boolean metricsBindAll = false;
+
         /** Whether the help flag was requested. */
         boolean help = false;
 
@@ -659,7 +673,8 @@ public final class WatchdogMain {
                     case "--metrics-port":  c.metricsPort    = nextInt(list, i++, arg);      break;
                     case "--metrics-cert":  c.metricsCert    = nextStr(list, i++, arg);      break;
                     case "--metrics-cert-password": c.metricsCertPassword = nextStr(list, i++, arg); break;
-                    case "--metrics-no-tls": c.metricsNoTls  = true;                         break;
+                    case "--metrics-no-tls":   c.metricsNoTls   = true;                      break;
+                    case "--metrics-bind-all":  c.metricsBindAll = true;                      break;
                     case "--dump-dir":      c.dumpDir        = nextStr(list, i++, arg);      break;
                     case "--log-file":      c.logFile        = nextStr(list, i++, arg);      break;
                     case "--log-level":     c.logLevel       = parseLogLevel(nextStr(list, i++, arg)); break;
