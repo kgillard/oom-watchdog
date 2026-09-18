@@ -42,7 +42,7 @@ import java.util.Map;
  * Both fields default to {@code 0} / {@link Double#NaN} when no matching pools are found.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.7
+ * @version 1.7.8
  * @since 1.0.0
  * @see com.trongus.oom.remote.JmxDiagnosticsCollector
  */
@@ -82,6 +82,10 @@ public final class MxBeanDiagnosticsCollector implements JvmDiagnosticsCollector
      *   <li>Per-pool breakdown including nursery/young-gen aggregates.</li>
      *   <li>Garbage collection counts and elapsed time per collector.</li>
      *   <li>Post-GC heap trend slope for memory-leak detection.</li>
+     *   <li>JVM process detail: {@code java.home}, Java version, JVM name, OS, CPU count,
+     *       process CPU load/time (via {@code com.sun.management.OperatingSystemMXBean}
+     *       reflection — returns {@code -1} gracefully when unavailable), JVM input
+     *       arguments, {@code sun.java.command}, live and peak thread counts.</li>
      * </ul>
      *
      * @return a fully populated {@link JvmSnapshot} with risk level initialised to

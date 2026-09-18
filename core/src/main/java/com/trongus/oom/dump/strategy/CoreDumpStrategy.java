@@ -15,14 +15,17 @@ import java.util.logging.Logger;
  *
  * <p>Strategy order:
  * <ol>
- *   <li>IBM J9 / OpenJ9 {@code com.ibm.jvm.Dump#SystemDump}</li>
+ *   <li>IBM J9 / OpenJ9 — calls {@code com.ibm.jvm.Dump#SystemDump(String)} with
+ *       {@code "file=<path>"} so the {@code .dmp} is written to the watchdog's
+ *       configured dump directory.  Falls back to the no-arg {@code SystemDump()}
+ *       on older J9 builds.</li>
  *   <li>{@code gcore <pid>} on Linux / macOS (JDK 9+ uses {@code ProcessHandle}
  *       for a reliable PID; JDK 8 parses {@code RuntimeMXBean.getName()})</li>
  * </ol>
  *
  * <p>Returns {@code null} on Windows or when neither mechanism is available.
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.7
+ * @version 1.7.8
  * @since 1.7.0
  */
 public final class CoreDumpStrategy implements DumpStrategy {

@@ -7,18 +7,18 @@
 [![Security Audit](https://img.shields.io/badge/security%20audit-4%20passes%20clean-brightgreen)]()
 [![JDK](https://img.shields.io/badge/JDK-8%20%E2%80%93%2026%2B-blue)]()
 [![Vendors](https://img.shields.io/badge/JVM-HotSpot%20%7C%20OpenJ9%20%7C%20GraalVM-blue)]()
-[![Release](https://img.shields.io/badge/release-v1.7.7-blue)](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.7)
+[![Release](https://img.shields.io/badge/release-v1.7.8-blue)](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.8)
 
 ---
 
 ## Download
 
-Pre-built JARs are available in the [v1.7.7 release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.7):
+Pre-built JARs are available in the [v1.7.8 release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.8):
 
 | Artefact | Description | Size |
 |----------|-------------|------|
-| [`oom-watchdog.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.7.7/oom-watchdog.jar) | Fat JAR — monitoring agent + CLI entry point | ~157 KB |
-| [`test-harness.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.7.7/test-harness.jar) | Fat JAR — interactive OOM test harness | ~171 KB |
+| [`oom-watchdog.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.7.8/oom-watchdog.jar) | Fat JAR — monitoring agent + CLI entry point | ~157 KB |
+| [`test-harness.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.7.8/test-harness.jar) | Fat JAR — interactive OOM test harness | ~171 KB |
 
 ---
 
@@ -49,7 +49,7 @@ OOM Watchdog provides real-time health monitoring, per-process logging named aft
 ```bash
 # Download the release JAR or self-extracting installer
 curl -L -o oom-watchdog.jar \
-  https://github.com/kgillard/oom-watchdog/releases/download/v1.7.7/oom-watchdog.jar
+  https://github.com/kgillard/oom-watchdog/releases/download/v1.7.8/oom-watchdog.jar
 
 # Run in multi-target daemon mode (monitors external JVMs over JMX)
 java -jar oom-watchdog.jar --daemon --targets-file /etc/oom-watchdog/targets.properties
@@ -1241,6 +1241,7 @@ python3 -m http.server 8080
 | **Young Gen** | Young-gen pool usage gauge |
 | **Non-Heap** | Metaspace + code cache MB |
 | **JVM Process** | Process name, uptime, critical threshold, last poll time |
+| **JVM Detail** | JVM location (`java.home`), JVM name, Java version, OS, CPU cores, process CPU %, CPU time, thread count, JVM flags, application command |
 | **Risk Level** | Current `OK` / `WARNING` / `CRITICAL` / `OOM_FIRING` with colour badge |
 | **Sparkline Charts** | 60-sample rolling charts for Heap %, GC Overhead %, Young Gen % |
 | **Diagnosis** | Full assessment text from `ThresholdRiskAssessor` |
@@ -1302,6 +1303,17 @@ The `/metrics` endpoint returns:
   "critThresholdPct": 90.00,
   "diagnosisNotes":   "[Assessment] WARNING – …",
   "heapDumpPath":     null,
+  "javaHome":         "/usr/lib/jvm/java-21-openjdk",
+  "javaVersion":      "21.0.3 (Eclipse Adoptium)",
+  "jvmName":          "OpenJDK 64-Bit Server VM 21.0.3+9",
+  "osName":           "Linux 5.15.0 (amd64)",
+  "cpuCount":         8,
+  "processCpuPct":    12.40,
+  "processCpuMs":     45230,
+  "jvmInputArgs":     "-Xmx512m -Xms128m",
+  "javaCommand":      "com.example.MyApp --port 8080",
+  "threadCount":      42,
+  "peakThreadCount":  55,
   "gcCounts":         { "G1 Young Generation": 42 },
   "poolUsedMB":       { "G1 Eden Space": 64.00 }
 }
@@ -1309,7 +1321,10 @@ The `/metrics` endpoint returns:
 
 All numeric fields are rounded to 2 decimal places. `heapDumpPath` is `null` unless a
 dump was taken in the current episode. `nurseryUsedMB` / `nurseryUsedPct` are `0` when
-no young-gen pool is detected (e.g. ZGC or Epsilon GC).
+no young-gen pool is detected (e.g. ZGC or Epsilon GC). `processCpuPct` and
+`processCpuMs` are `-1` on JVMs that do not expose `com.sun.management.OperatingSystemMXBean`
+(e.g. some IBM J9 builds). All process-detail fields (`javaHome`, `jvmName`, etc.) are
+populated for every target — both the self-watchdog and all remote targets in daemon mode.
 
 ### Rebranding the dashboard
 

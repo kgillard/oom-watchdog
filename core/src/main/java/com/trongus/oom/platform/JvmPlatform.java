@@ -14,7 +14,7 @@ import java.lang.management.ManagementFactory;
  * time to avoid repeated string/reflection overhead in the poll loop.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.7
+ * @version 1.7.8
  * @since 1.0.0
  */
 public final class JvmPlatform {

@@ -11,10 +11,16 @@ import java.util.logging.Logger;
 /**
  * Heap dump via IBM J9 / Eclipse OpenJ9 {@code com.ibm.jvm.Dump#HeapDump}.
  *
- * <p>Produces a Portable Heap Dump (PHD) file.  Works on: IBM J9 JDK 8+,
- * Eclipse OpenJ9 JDK 8+.  Silently returns {@code null} on any other JVM.
+ * <p>Produces a Portable Heap Dump (PHD) file written to the watchdog's
+ * configured dump directory.  The {@code HeapDump(String agentOptions)} overload
+ * is used when available so J9 writes to the path chosen by the watchdog
+ * ({@code "file=<path>"} option).  Falls back to the no-arg {@code HeapDump()}
+ * on older J9 builds that do not expose the String overload.
+ *
+ * <p>Works on: IBM J9 JDK 8+, Eclipse OpenJ9 JDK 8+.
+ * Silently returns {@code null} on any other JVM.
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.7
+ * @version 1.7.8
  * @since 1.7.0
  */
 public final class J9HeapDumpStrategy implements DumpStrategy {

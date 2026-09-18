@@ -522,7 +522,7 @@ flowchart TD
 ## Module Structure
 
 ```
-oom-watchdog/                  Maven multi-module root (v1.7.7)
+oom-watchdog/                  Maven multi-module root (v1.7.8)
 ├── core/                      oom-watchdog.jar  (fat jar via maven-shade-plugin)
 │   └── src/main/java/com/trongus/oom/
 │       ├── WatchdogMain.java  CLI entry point (local + daemon modes)
@@ -638,6 +638,8 @@ The following table shows exactly where OOM Watchdog alert output appears for ev
 | TCP socket connect + read timeout (5 s) | Slow/unreachable QRadar host cannot block the watchdog poll thread |
 | UDP payload capped at 65 007 bytes | Prevents silent datagram truncation on standard Ethernet MTUs |
 | `gcore` path canonicalization + 60 s timeout | Prevents path-traversal; avoids hung dump process blocking the JVM |
+| J9 `HeapDump(String)` / `SystemDump(String)` used when available | PHD and DMP files written to the configured dump directory; falls back to no-arg form on older J9 builds |
+| JVM process-detail fields stored in `JvmSnapshot` | All `/metrics` responses — including remote targets — carry `javaHome`, `jvmName`, `osName`, `cpuCount`, etc. from the actual monitored JVM |
 | `AtomicInteger` counters in `HarnessAlertRecorder` | Thread-safe read-modify-write without external synchronisation |
 | `CopyOnWriteArrayList` for `HarnessAlertRecorder.dumpPaths` | Lock-free iteration from the results thread; no unsynchronised read race (SEC-4) |
 | All file writes use explicit `StandardCharsets.UTF_8` | Consistent output across all platforms; no platform-default charset risk |
@@ -683,8 +685,8 @@ Pass 5 identified and fixed 4 issues in the remote JMX monitoring subsystem.
 
 ## Release Artefacts
 
-The v1.7.7 release publishes two executable fat JARs built with `maven-shade-plugin`.
-Both will be attached to the [GitHub release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.7).
+The v1.7.8 release publishes two executable fat JARs built with `maven-shade-plugin`.
+Both will be attached to the [GitHub release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.8).
 
 | Artefact | Main class | Contents | Size (approx) |
 |----------|-----------|----------|---------------|

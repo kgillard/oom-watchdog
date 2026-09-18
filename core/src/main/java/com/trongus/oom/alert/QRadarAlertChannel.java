@@ -77,7 +77,7 @@ import java.util.logging.Logger;
  * (guaranteed delivery) via the constructor.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.7
+ * @version 1.7.8
  * @since 1.0.0
  * @see AlertChannel
  * @see com.trongus.oom.model.JvmSnapshot
