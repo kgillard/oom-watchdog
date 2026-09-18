@@ -286,10 +286,14 @@
     .table-card     { background: var(--surface); border: 1px solid var(--border);
                       border-radius: var(--radius); overflow: hidden; margin-bottom: 14px; }
     .table-card-hdr { padding: 8px 12px; border-bottom: 1px solid var(--border); }
-    table           { width: 100%; border-collapse: collapse; font-size: 12px; }
+    /* width:auto so Pool and Used(MB) columns hug their content instead of
+       stretching to full page width.  min-width on the value column keeps it
+       from collapsing when content is short.                                   */
+    table           { width: auto; min-width: 260px; border-collapse: collapse; font-size: 12px; }
     th { text-align: left; color: var(--muted); font-weight: 600;
-         padding: 5px 10px; border-bottom: 1px solid var(--border); }
-    td { padding: 4px 10px; border-bottom: 1px solid rgba(255,255,255,0.04); }
+         padding: 5px 14px 5px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+    td { padding: 4px 14px 4px 10px; border-bottom: 1px solid rgba(255,255,255,0.04); white-space: nowrap; }
+    td:last-child, th:last-child { text-align: right; padding-right: 16px; }
     tr:last-child td { border-bottom: none; }
 
     /* ── Sticky alert panel at bottom ────────────────────────────────────────── */
@@ -1020,61 +1024,86 @@ function requestDump(slug, type, encoded) {
 // Storage key: "oom-card-order:<pane-slug>"
 // Stored value: JSON array of data-card-id strings in desired order.
 
-var _dragSrc = null;  // the card element being dragged
+var _dragSrc  = null;   // the card element being dragged
+var _dragOver = null;   // card currently highlighted as drop target
 
 function initCardDrag(gridEl) {
   if (!gridEl) return;
 
+  // dragstart / dragend are on individual cards (they fire on the dragged element).
+  // dragover / drop are on the GRID so they fire regardless of which card row
+  // the pointer is over — avoids the "only top row works" gap-hit-test failure.
+
   function onDragStart(e) {
     _dragSrc = e.currentTarget;
-    _dragSrc.classList.add('dragging');
+    // Use a short timeout so the drag ghost captures the card before opacity drops
+    setTimeout(function() { if (_dragSrc) _dragSrc.classList.add('dragging'); }, 0);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', _dragSrc.dataset.cardId || '');
   }
 
   function onDragEnd(e) {
-    e.currentTarget.classList.remove('dragging');
-    gridEl.querySelectorAll('.mcard').forEach(function(c) {
-      c.classList.remove('drag-over');
-    });
+    if (_dragSrc) _dragSrc.classList.remove('dragging');
+    clearDragOver();
     saveCardOrder(gridEl);
+    _dragSrc  = null;
+    _dragOver = null;
   }
 
-  function onDragOver(e) {
+  function clearDragOver() {
+    gridEl.querySelectorAll('.mcard.drag-over').forEach(function(c) {
+      c.classList.remove('drag-over');
+    });
+  }
+
+  // Find the nearest .mcard to the pointer position within the grid.
+  function cardAtPoint(x, y) {
+    var cards = Array.prototype.slice.call(gridEl.querySelectorAll('.mcard'));
+    var best = null, bestDist = Infinity;
+    cards.forEach(function(card) {
+      var r    = card.getBoundingClientRect();
+      // Check if pointer is inside the card
+      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+        best = card; bestDist = 0; return;
+      }
+      // Otherwise compute distance to nearest edge (for gap areas)
+      var dx = Math.max(r.left - x, 0, x - r.right);
+      var dy = Math.max(r.top  - y, 0, y - r.bottom);
+      var d  = dx * dx + dy * dy;
+      if (d < bestDist) { bestDist = d; best = card; }
+    });
+    return best;
+  }
+
+  function onGridDragOver(e) {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
-    var target = e.currentTarget;
-    if (target !== _dragSrc) {
-      gridEl.querySelectorAll('.mcard').forEach(function(c) { c.classList.remove('drag-over'); });
-      target.classList.add('drag-over');
+    var over = cardAtPoint(e.clientX, e.clientY);
+    if (over !== _dragOver) {
+      clearDragOver();
+      _dragOver = over;
+      if (over && over !== _dragSrc) over.classList.add('drag-over');
     }
   }
 
-  function onDragLeave(e) {
-    e.currentTarget.classList.remove('drag-over');
-  }
-
-  function onDrop(e) {
+  function onGridDrop(e) {
     e.preventDefault();
-    var target = e.currentTarget;
-    target.classList.remove('drag-over');
-    if (!_dragSrc || target === _dragSrc) return;
+    clearDragOver();
+    if (!_dragSrc) return;
+    var target = cardAtPoint(e.clientX, e.clientY);
+    if (!target || target === _dragSrc) return;
 
-    // Determine insertion position: insert _dragSrc before or after target
-    // based on which half of the target the pointer is in.
-    var rect    = target.getBoundingClientRect();
-    var midX    = rect.left + rect.width  / 2;
-    var midY    = rect.top  + rect.height / 2;
-    var afterX  = e.clientX > midX;
-    var afterY  = e.clientY > midY;
-
-    // Use column-flow heuristic: compare DOM index
-    var cards = Array.prototype.slice.call(gridEl.querySelectorAll('.mcard'));
+    // Insert before or after based on pointer position relative to target centre
+    var cards  = Array.prototype.slice.call(gridEl.querySelectorAll('.mcard'));
     var srcIdx = cards.indexOf(_dragSrc);
     var tgtIdx = cards.indexOf(target);
-    var insertAfter = tgtIdx > srcIdx ? true : (afterX || afterY);
+    var rect   = target.getBoundingClientRect();
+    // For horizontal grid: use X midpoint; fall back to Y for same-column stacks
+    var afterTarget = tgtIdx > srcIdx
+      ? true
+      : (e.clientX > rect.left + rect.width / 2 || e.clientY > rect.top + rect.height / 2);
 
-    if (insertAfter) {
+    if (afterTarget) {
       gridEl.insertBefore(_dragSrc, target.nextSibling);
     } else {
       gridEl.insertBefore(_dragSrc, target);
@@ -1082,13 +1111,15 @@ function initCardDrag(gridEl) {
     saveCardOrder(gridEl);
   }
 
+  // dragstart / dragend stay on each card
   gridEl.querySelectorAll('.mcard').forEach(function(card) {
-    card.addEventListener('dragstart',  onDragStart);
-    card.addEventListener('dragend',    onDragEnd);
-    card.addEventListener('dragover',   onDragOver);
-    card.addEventListener('dragleave',  onDragLeave);
-    card.addEventListener('drop',       onDrop);
+    card.addEventListener('dragstart', onDragStart);
+    card.addEventListener('dragend',   onDragEnd);
   });
+
+  // dragover / drop on the grid container — catches all rows and gap areas
+  gridEl.addEventListener('dragover', onGridDragOver);
+  gridEl.addEventListener('drop',     onGridDrop);
 }
 
 function saveCardOrder(gridEl) {
