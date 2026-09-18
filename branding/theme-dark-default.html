@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<!--
+  OOM Watchdog — Branding preset: Dark Default
+  ─────────────────────────────────────────────
+  This is the out-of-the-box dark theme, preserved here as a named reference.
+  Copy the <style> block into dashboard.html :root to restore defaults.
+
+  See BRANDING.md for full instructions.
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Theme Preview — Dark Default</title>
+  <style>
+    /* Paste this :root block into dashboard.html to use this theme */
+    :root {
+      /* ── Palette ── */
+      --bg:        #0f1117;
+      --surface:   #1a1d27;
+      --surface2:  #222638;
+      --border:    #2a2d3a;
+      --text:      #e4e6f0;
+      --muted:     #7a7e96;
+
+      /* ── Risk colours ── */
+      --ok:        #22c55e;
+      --warn:      #f59e0b;
+      --crit:      #ef4444;
+      --oom:       #a855f7;
+
+      /* ── Accent (buttons, active tab, links) ── */
+      --accent:    #3b82f6;
+
+      /* ── Shape ── */
+      --radius:    10px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+      padding: 32px;
+      font-size: 14px;
+    }
+    .swatch-grid { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+    .swatch { width: 80px; height: 52px; border-radius: 8px; border: 1px solid var(--border); display: flex; align-items: flex-end; padding: 4px 6px; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+    h2 { color: var(--text); margin-bottom: 4px; }
+    p  { color: var(--muted); font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h2>Dark Default</h2>
+  <p>The factory theme — charcoal backgrounds with vibrant status colours.</p>
+  <div class="swatch-grid">
+    <div class="swatch" style="background:var(--bg);    color:var(--muted)">--bg</div>
+    <div class="swatch" style="background:var(--surface); color:var(--muted)">--surface</div>
+    <div class="swatch" style="background:var(--surface2);color:var(--muted)">--surface2</div>
+    <div class="swatch" style="background:var(--accent); color:#fff">--accent</div>
+    <div class="swatch" style="background:var(--ok);     color:#fff">--ok</div>
+    <div class="swatch" style="background:var(--warn);   color:#000">--warn</div>
+    <div class="swatch" style="background:var(--crit);   color:#fff">--crit</div>
+    <div class="swatch" style="background:var(--oom);    color:#fff">--oom</div>
+  </div>
+</body>
+</html>

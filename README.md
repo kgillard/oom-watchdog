@@ -1290,6 +1290,24 @@ All numeric fields are rounded to 2 decimal places. `heapDumpPath` is `null` unl
 dump was taken in the current episode. `nurseryUsedMB` / `nurseryUsedPct` are `0` when
 no young-gen pool is detected (e.g. ZGC or Epsilon GC).
 
+### Rebranding the dashboard
+
+`dashboard.html` is designed to be rebranded with zero code changes. Every colour,
+font, corner radius, header text, and logo is controlled by a small CSS custom-property
+block and two clearly marked HTML sections at the top of the file.
+
+See **[BRANDING.md](BRANDING.md)** for:
+
+- Full token reference table (mandatory and optional tokens)
+- Step-by-step instructions for showing an org logo (SVG, data URI, or external URL)
+- Three ready-to-paste theme presets in the `branding/` directory:
+  - `branding/theme-dark-default.html` — factory dark theme
+  - `branding/theme-light-corporate.html` — light page with dark navy header
+  - `branding/theme-ibm-carbon.html` — IBM Carbon Design System inspired
+- Copy-paste colour presets (minimal accent swap, navy enterprise, high-contrast)
+- Light-theme checklist (hardcoded colours that also need updating)
+- FAQ (fonts, persistence across upgrades, high-DPI logos)
+
 ### Daemon mode + dashboard
 
 In `--daemon` mode the watchdog monitors multiple remote JVMs. The metrics endpoint
@@ -1306,6 +1324,8 @@ oom-watchdog/
 ├── ARCHITECTURE.md                  Architecture with Mermaid diagrams
 ├── README.md                        This file
 ├── dashboard.html                   Self-contained real-time JVM dashboard (open in browser)
+├── BRANDING.md                      Rebranding guide — tokens, logo, theme presets
+├── branding/                        Ready-to-paste theme presets (dark, light, Carbon)
 ├── make-installer.sh                Generates oom-watchdog-installer.sh from built JARs
 ├── core/                            → oom-watchdog.jar (fat jar)
 │   └── src/main/java/com/trongus/oom/

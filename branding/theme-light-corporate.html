@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<!--
+  OOM Watchdog — Branding preset: Light Corporate
+  ─────────────────────────────────────────────────
+  A clean, professional light theme suited to intranet portals and corporate
+  tooling where dark UIs are not the standard.
+
+  HOW TO APPLY
+  ────────────
+  1. Open dashboard.html in a text editor.
+  2. Replace the entire :root { … } block inside the BRANDING TOKENS section
+     with the :root block below.
+  3. Save and open dashboard.html in your browser — no server restart needed.
+
+  See BRANDING.md for full instructions.
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Theme Preview — Light Corporate</title>
+  <style>
+    /* ─────────────────────────────────────────────────────────────────────────
+       PASTE THIS :root BLOCK INTO dashboard.html TO USE THIS THEME
+       ───────────────────────────────────────────────────────────────────────── */
+    :root {
+      /* ── Palette ── */
+      --bg:        #f4f5f7;
+      --surface:   #ffffff;
+      --surface2:  #eaecf0;
+      --border:    #d1d5db;
+      --text:      #111827;
+      --muted:     #6b7280;
+
+      /* ── Risk colours ── */
+      --ok:        #16a34a;
+      --warn:      #d97706;
+      --crit:      #dc2626;
+      --oom:       #7c3aed;
+
+      /* ── Accent (buttons, active tab, links) ── */
+      --accent:    #2563eb;
+
+      /* ── Shape ── */
+      --radius:    8px;
+
+      /* ── Optional overrides ── */
+      --header-bg:      #1e3a5f;
+      --header-border:  #163354;
+      --font-family:    "Segoe UI", system-ui, sans-serif;
+    }
+    /* ── END OF THEME BLOCK ── */
+
+    /* Preview page styles only — not part of the theme */
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-family, system-ui, sans-serif);
+      padding: 32px;
+      font-size: 14px;
+    }
+    header-preview {
+      display: flex; align-items: center; gap: 14px;
+      background: var(--header-bg, var(--surface));
+      border-bottom: 1px solid var(--header-border, var(--border));
+      padding: 12px 24px; margin-bottom: 24px; border-radius: var(--radius);
+    }
+    header-preview h1 { font-size: 17px; color: #fff; flex: 1; font-family: var(--font-family); }
+    .swatch-grid { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+    .swatch { width: 80px; height: 52px; border-radius: 8px; border: 1px solid var(--border);
+              display: flex; align-items: flex-end; padding: 4px 6px;
+              font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+    h2 { color: var(--text); margin-bottom: 4px; }
+    p  { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+    .note { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+            padding: 10px 14px; font-size: 12px; color: var(--muted); margin-top: 20px; }
+    .note code { background: var(--surface2); padding: 1px 5px; border-radius: 4px; font-family: monospace; }
+  </style>
+</head>
+<body>
+  <header-preview>
+    <h1>⚡ OOM Watchdog Dashboard</h1>
+  </header-preview>
+
+  <h2>Light Corporate</h2>
+  <p>Neutral light backgrounds with a navy header. Ideal for intranet portals and corporate tooling.</p>
+  <p>The header overrides (<code>--header-bg</code>, <code>--header-border</code>) produce a dark navy bar
+     while the rest of the page stays light.</p>
+
+  <div class="swatch-grid">
+    <div class="swatch" style="background:var(--bg);    color:var(--muted)">--bg</div>
+    <div class="swatch" style="background:var(--surface); color:var(--muted)">--surface</div>
+    <div class="swatch" style="background:var(--surface2);color:var(--muted)">--surface2</div>
+    <div class="swatch" style="background:var(--accent); color:#fff">--accent</div>
+    <div class="swatch" style="background:var(--ok);     color:#fff">--ok</div>
+    <div class="swatch" style="background:var(--warn);   color:#000">--warn</div>
+    <div class="swatch" style="background:var(--crit);   color:#fff">--crit</div>
+    <div class="swatch" style="background:var(--oom);    color:#fff">--oom</div>
+  </div>
+
+  <div class="note">
+    <strong>Header colour note:</strong> Because the header is dark navy on a light page,
+    any logo shown via <code>#brand-logo</code> should be a white or light variant.
+    Set <code>src</code> to a white-on-transparent SVG or PNG and add <code>class="visible"</code>
+    to the <code>&lt;img&gt;</code> element in the HTML.
+  </div>
+</body>
+</html>

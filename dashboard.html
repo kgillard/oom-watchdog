@@ -3,173 +3,321 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OOM Watchdog Dashboard</title>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+  <!-- ═══════════════════════════════════════════════════════════════════════════
+       BRANDING CONFIGURATION — edit anything in this section to rebrand.
+       See BRANDING.md for full instructions and ready-to-paste theme presets.
+       ═══════════════════════════════════════════════════════════════════════════ -->
+
+  <!-- ── Page title (shown in the browser tab) ── -->
+  <title>OOM Watchdog Dashboard</title>
+
+  <style>
+    /* ── BRANDING TOKENS ──────────────────────────────────────────────────────
+       Every visual aspect of the dashboard is driven by the CSS custom
+       properties below. Change them here; nowhere else in this file needs
+       to be touched for a colour / font rebrand.
+
+       Mandatory tokens (must all have a value):
+         --bg          Page background
+         --surface     Card / header background
+         --surface2    Slightly elevated surface (toolbar, secondary cards)
+         --border      Dividing lines and card outlines
+         --text        Primary body text
+         --muted       De-emphasised labels, helper text, sub-values
+         --ok          Risk OK indicator (green or equivalent)
+         --warn        Risk WARNING indicator (amber or equivalent)
+         --crit        Risk CRITICAL indicator (red or equivalent)
+         --oom         Risk OOM_FIRING indicator (purple or equivalent)
+         --accent      Interactive elements: buttons, links, active tab underline
+         --radius      Global border-radius for cards / inputs
+
+       Optional branding tokens:
+         --header-bg          Header bar background (defaults to --surface)
+         --header-border      Header bottom border (defaults to --border)
+         --logo-display       Set to "inline-block" to show the logo element
+         --logo-height        Height of the logo image (default 28px)
+         --font-family        Override the body font stack
+    ─────────────────────────────────────────────────────────────────────────── */
     :root {
+      /* ── Palette ── */
       --bg:        #0f1117;
       --surface:   #1a1d27;
       --surface2:  #222638;
       --border:    #2a2d3a;
       --text:      #e4e6f0;
       --muted:     #7a7e96;
+
+      /* ── Risk colours ── */
       --ok:        #22c55e;
       --warn:      #f59e0b;
       --crit:      #ef4444;
       --oom:       #a855f7;
+
+      /* ── Accent (buttons, active tab, links) ── */
       --accent:    #3b82f6;
+
+      /* ── Shape ── */
       --radius:    10px;
+
+      /* ── Optional overrides (uncomment to activate) ── */
+      /* --header-bg:         #0a0c14;         */
+      /* --header-border:     #1e2130;         */
+      /* --logo-display:      inline-block;    */
+      /* --logo-height:       28px;            */
+      /* --font-family:       "Inter", system-ui, sans-serif; */
+    }
+    /* ── END BRANDING TOKENS ────────────────────────────────────────────────── */
+
+    /* ═══════════════════════════════════════════════════════════════════════════
+       BRANDING CONTENT — edit the <header> block in the HTML below to change:
+         · The logo image  (replace the #brand-logo <img> src)
+         · The dashboard title  (the <h1> text)
+         · The subtitle text
+         · The footer links and attribution
+       See BRANDING.md section "Content tokens" for full details.
+       ═══════════════════════════════════════════════════════════════════════════ */
+
+    /* ── Reset ─────────────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ── Base ──────────────────────────────────────────────────────────────── */
+    body {
+      background:  var(--bg);
+      color:       var(--text);
+      font-family: var(--font-family, -apple-system, "Segoe UI", system-ui, sans-serif);
+      font-size:   14px;
+      line-height: 1.6;
+      min-height:  100vh;
     }
 
-    body { background: var(--bg); color: var(--text);
-           font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
-           font-size: 14px; line-height: 1.6; min-height: 100vh; }
+    /* ── Header ────────────────────────────────────────────────────────────── */
+    header {
+      background:    var(--header-bg,     var(--surface));
+      border-bottom: 1px solid var(--header-border, var(--border));
+      padding:       12px 24px;
+      display:       flex;
+      align-items:   center;
+      gap:           14px;
+    }
+    #brand-logo {
+      display: var(--logo-display, none);
+      height:  var(--logo-height,  28px);
+      width:   auto;
+      flex-shrink: 0;
+    }
+    #brand-logo.visible { display: inline-block; }
+    header h1    { font-size: 17px; font-weight: 700; letter-spacing: 0.3px; flex: 1; }
+    .subtitle    { color: var(--muted); font-size: 11px; }
 
-    /* ── header ── */
-    header { background: var(--surface); border-bottom: 1px solid var(--border);
-             padding: 12px 24px; display: flex; align-items: center; gap: 14px; }
-    header h1 { font-size: 17px; font-weight: 700; letter-spacing: 0.3px; flex: 1; }
-    .subtitle  { color: var(--muted); font-size: 11px; }
-
-    /* ── toolbar ── */
-    .toolbar { padding: 10px 24px; display: flex; align-items: center; gap: 10px;
-               border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+    /* ── Toolbar ───────────────────────────────────────────────────────────── */
+    .toolbar {
+      padding:       10px 24px;
+      display:       flex;
+      align-items:   center;
+      gap:           10px;
+      border-bottom: 1px solid var(--border);
+      flex-wrap:     wrap;
+      background:    var(--surface2, var(--surface));
+    }
     .toolbar label { color: var(--muted); font-size: 12px; }
-    .toolbar input[type=text] { background: var(--surface); border: 1px solid var(--border);
-                                 color: var(--text); border-radius: 6px; padding: 5px 10px;
-                                 font-size: 13px; width: 220px; }
+    .toolbar input[type=text] {
+      background: var(--surface);
+      border:     1px solid var(--border);
+      color:      var(--text);
+      border-radius: 6px;
+      padding:    5px 10px;
+      font-size:  13px;
+      width:      220px;
+    }
     .toolbar input[type=text]:focus { outline: none; border-color: var(--accent); }
-    .toolbar select { background: var(--surface); border: 1px solid var(--border);
-                      color: var(--text); border-radius: 6px; padding: 5px 8px; font-size: 13px; }
-    .btn { background: var(--accent); color: #fff; border: none; border-radius: 6px;
-           padding: 6px 14px; font-size: 13px; cursor: pointer; font-weight: 600; }
-    .btn:hover { opacity: 0.85; }
-    .btn.stop { background: #374151; }
-    #status-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
-    #status-dot.alive { background: var(--ok); }
-    #status-dot.error { background: var(--crit); }
-    #status-text { font-size: 12px; color: var(--muted); }
+    .toolbar select {
+      background: var(--surface);
+      border:     1px solid var(--border);
+      color:      var(--text);
+      border-radius: 6px;
+      padding:    5px 8px;
+      font-size:  13px;
+    }
 
-    /* ── risk badge ── */
-    .risk-badge { padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700;
-                  letter-spacing: 0.5px; text-transform: uppercase; }
-    .risk-OK        { background: #14532d; color: var(--ok); }
-    .risk-WARNING   { background: #78350f; color: var(--warn); }
-    .risk-CRITICAL  { background: #7f1d1d; color: var(--crit); }
-    .risk-OOM_FIRING{ background: #581c87; color: var(--oom); }
-    .risk-UNKNOWN   { background: #1e293b; color: var(--muted); }
+    /* ── Buttons ───────────────────────────────────────────────────────────── */
+    .btn {
+      background:    var(--accent);
+      color:         #fff;
+      border:        none;
+      border-radius: 6px;
+      padding:       6px 14px;
+      font-size:     13px;
+      cursor:        pointer;
+      font-weight:   600;
+      font-family:   inherit;
+    }
+    .btn:hover  { opacity: 0.85; }
+    .btn.stop   { background: #374151; }
 
-    /* ── tabs ── */
-    #tabs-bar { display: flex; gap: 0; padding: 0 24px;
-                border-bottom: 1px solid var(--border); background: var(--surface);
-                overflow-x: auto; scrollbar-width: thin; }
-    .tab-btn { background: none; border: none; border-bottom: 2px solid transparent;
-               color: var(--muted); padding: 9px 16px; font-size: 13px; cursor: pointer;
-               white-space: nowrap; display: flex; align-items: center; gap: 7px;
-               font-family: inherit; transition: color 0.15s; }
-    .tab-btn:hover  { color: var(--text); }
-    .tab-btn.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
-    .tab-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
-    .tab-dot.ok   { background: var(--ok);   }
-    .tab-dot.warn { background: var(--warn); }
-    .tab-dot.crit { background: var(--crit); }
-    .tab-dot.oom  { background: var(--oom);  }
+    /* ── Connection status dot ─────────────────────────────────────────────── */
+    #status-dot        { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+    #status-dot.alive  { background: var(--ok); }
+    #status-dot.error  { background: var(--crit); }
+    #status-text       { font-size: 12px; color: var(--muted); }
 
-    /* ── main pane ── */
-    main { padding: 18px 24px; max-width: 1280px; margin: 0 auto; }
-    .tab-pane { display: none; }
+    /* ── Risk badges ───────────────────────────────────────────────────────── */
+    .risk-badge      { padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700;
+                       letter-spacing: 0.5px; text-transform: uppercase; }
+    .risk-OK         { background: #14532d; color: var(--ok); }
+    .risk-WARNING    { background: #78350f; color: var(--warn); }
+    .risk-CRITICAL   { background: #7f1d1d; color: var(--crit); }
+    .risk-OOM_FIRING { background: #581c87; color: var(--oom); }
+    .risk-UNKNOWN    { background: #1e293b; color: var(--muted); }
+
+    /* ── Tabs bar ──────────────────────────────────────────────────────────── */
+    #tabs-bar {
+      display:    flex;
+      gap:        0;
+      padding:    0 24px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      overflow-x: auto;
+      scrollbar-width: thin;
+    }
+    .tab-btn {
+      background:    none;
+      border:        none;
+      border-bottom: 2px solid transparent;
+      color:         var(--muted);
+      padding:       9px 16px;
+      font-size:     13px;
+      cursor:        pointer;
+      white-space:   nowrap;
+      display:       flex;
+      align-items:   center;
+      gap:           7px;
+      font-family:   inherit;
+      transition:    color 0.15s;
+    }
+    .tab-btn:hover   { color: var(--text); }
+    .tab-btn.active  { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+    .tab-dot         { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+    .tab-dot.ok      { background: var(--ok); }
+    .tab-dot.warn    { background: var(--warn); }
+    .tab-dot.crit    { background: var(--crit); }
+    .tab-dot.oom     { background: var(--oom); }
+
+    /* ── Main content area ─────────────────────────────────────────────────── */
+    main          { padding: 18px 24px; max-width: 1280px; margin: 0 auto; }
+    .tab-pane     { display: none; }
     .tab-pane.active { display: block; }
 
-    /* ── metric grid ── */
-    .metric-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-                   gap: 14px; margin-bottom: 20px; }
+    /* ── Metric cards grid ─────────────────────────────────────────────────── */
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+    .mcard        { background: var(--surface); border: 1px solid var(--border);
+                    border-radius: var(--radius); padding: 14px 16px; }
+    .mcard-label  { font-size: 10px; text-transform: uppercase; letter-spacing: 0.7px;
+                    color: var(--muted); margin-bottom: 4px; }
+    .mcard-value  { font-size: 26px; font-weight: 700; line-height: 1.2; }
+    .mcard-sub    { font-size: 11px; color: var(--muted); margin-top: 3px; }
 
-    .mcard { background: var(--surface); border: 1px solid var(--border);
-             border-radius: var(--radius); padding: 14px 16px; }
-    .mcard-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.7px;
-                   color: var(--muted); margin-bottom: 4px; }
-    .mcard-value { font-size: 26px; font-weight: 700; line-height: 1.2; }
-    .mcard-sub   { font-size: 11px; color: var(--muted); margin-top: 3px; }
-
-    /* ── gauge bar ── */
+    /* ── Gauge bars ────────────────────────────────────────────────────────── */
     .gauge-wrap { margin-top: 8px; }
     .gauge-bg   { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
     .gauge-fill { height: 100%; border-radius: 3px; width: 0%;
-                  transition: width 0.4s ease, background 0.4s ease; background: var(--ok); }
+                  transition: width 0.4s ease, background 0.4s ease;
+                  background: var(--ok); }
 
-    /* ── sparkline charts ── */
-    .charts-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-                   gap: 16px; margin-bottom: 20px; }
-    .chart-card { background: var(--surface); border: 1px solid var(--border);
-                  border-radius: var(--radius); padding: 14px 16px; }
+    /* ── Sparkline charts grid ─────────────────────────────────────────────── */
+    .charts-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .chart-card  { background: var(--surface); border: 1px solid var(--border);
+                   border-radius: var(--radius); padding: 14px 16px; }
     .chart-title { font-size: 11px; font-weight: 600; color: var(--muted);
                    text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 10px;
                    display: flex; justify-content: space-between; align-items: center; }
-    .chart-cur { color: var(--text); font-size: 13px; font-weight: 700; }
-    svg.spark { display: block; width: 100%; height: 70px; overflow: visible; }
+    .chart-cur   { color: var(--text); font-size: 13px; font-weight: 700; }
+    svg.spark    { display: block; width: 100%; height: 70px; overflow: visible; }
 
-    /* ── section title ── */
-    .sec-title { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase;
-                 letter-spacing: 0.6px; margin-bottom: 8px; }
+    /* ── Section headings ──────────────────────────────────────────────────── */
+    .sec-title { font-size: 11px; font-weight: 700; color: var(--muted);
+                 text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 8px; }
 
-    /* ── diagnosis ── */
+    /* ── Diagnosis box ─────────────────────────────────────────────────────── */
     .diag-box { background: var(--surface); border: 1px solid var(--border);
                 border-radius: var(--radius); padding: 12px 14px; font-size: 12px;
                 color: var(--muted); line-height: 1.7; word-break: break-word;
                 min-height: 44px; margin-bottom: 18px; }
     .diag-box span { color: var(--text); }
 
-    /* ── tables ── */
-    .table-card { background: var(--surface); border: 1px solid var(--border);
-                  border-radius: var(--radius); overflow: hidden; margin-bottom: 16px; }
+    /* ── Tables ────────────────────────────────────────────────────────────── */
+    .table-card     { background: var(--surface); border: 1px solid var(--border);
+                      border-radius: var(--radius); overflow: hidden; margin-bottom: 16px; }
     .table-card-hdr { padding: 10px 14px; border-bottom: 1px solid var(--border); }
-    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    table           { width: 100%; border-collapse: collapse; font-size: 12px; }
     th { text-align: left; color: var(--muted); font-weight: 600;
          padding: 5px 10px; border-bottom: 1px solid var(--border); }
     td { padding: 5px 10px; border-bottom: 1px solid rgba(255,255,255,0.04); }
     tr:last-child td { border-bottom: none; }
 
-    /* ── alert log ── */
-    #alert-log { list-style: none; }
-    #alert-log li { padding: 6px 10px; border-radius: 6px; margin-bottom: 5px; font-size: 12px;
-                    display: flex; gap: 10px; align-items: flex-start; }
-    #alert-log .ts  { color: var(--muted); white-space: nowrap; flex-shrink: 0; }
-    #alert-log .msg { word-break: break-word; }
-    #alert-log li.lvl-WARNING   { background: #1c1507; border-left: 3px solid var(--warn); }
-    #alert-log li.lvl-CRITICAL  { background: #1c0505; border-left: 3px solid var(--crit); }
-    #alert-log li.lvl-OOM_FIRING{ background: #160b21; border-left: 3px solid var(--oom); }
-    #alert-log li.lvl-OK        { background: #051409; border-left: 3px solid var(--ok); }
+    /* ── Per-target alert log ──────────────────────────────────────────────── */
+    .alert-log          { list-style: none; }
+    .alert-log li       { padding: 6px 10px; border-radius: 6px; margin-bottom: 5px;
+                          font-size: 12px; display: flex; gap: 10px; align-items: flex-start; }
+    .alert-log .ts      { color: var(--muted); white-space: nowrap; flex-shrink: 0; }
+    .alert-log .msg     { word-break: break-word; }
+    .alert-log li.lvl-WARNING   { background: #1c1507; border-left: 3px solid var(--warn); }
+    .alert-log li.lvl-CRITICAL  { background: #1c0505; border-left: 3px solid var(--crit); }
+    .alert-log li.lvl-OOM_FIRING{ background: #160b21; border-left: 3px solid var(--oom); }
+    .alert-log li.lvl-OK        { background: #051409; border-left: 3px solid var(--ok); }
 
-    /* ── dump path ── */
-    .dump-path { background: #0c1929; border: 1px solid var(--border); border-radius: 6px;
-                 padding: 7px 10px; font-size: 12px; font-family: monospace; color: #93c5fd;
-                 margin-top: 6px; word-break: break-all; display: none; }
+    /* ── Heap dump path ────────────────────────────────────────────────────── */
+    .dump-path         { background: #0c1929; border: 1px solid var(--border); border-radius: 6px;
+                         padding: 7px 10px; font-size: 12px; font-family: monospace;
+                         color: #93c5fd; margin-top: 6px; word-break: break-all; display: none; }
     .dump-path.visible { display: block; }
 
-    /* ── info grid in process card ── */
+    /* ── Process info key/value grid ───────────────────────────────────────── */
     .info-grid { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; margin-top: 8px; }
-    .info-k { font-size: 11px; color: var(--muted); }
-    .info-v { font-size: 11px; color: var(--text); font-weight: 600; }
+    .info-k    { font-size: 11px; color: var(--muted); }
+    .info-v    { font-size: 11px; color: var(--text); font-weight: 600; }
 
-    footer { text-align: center; padding: 14px; color: var(--muted); font-size: 11px;
-             border-top: 1px solid var(--border); margin-top: 6px; }
+    /* ── Footer ────────────────────────────────────────────────────────────── */
+    footer   { text-align: center; padding: 14px; color: var(--muted); font-size: 11px;
+               border-top: 1px solid var(--border); margin-top: 6px; }
     footer a { color: var(--accent); text-decoration: none; }
   </style>
 </head>
 <body>
 
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     BRANDING CONTENT — safe to edit:
+       · #brand-logo  src=""  — set to your logo URL or data:image/... URI
+                      Add class="visible" to make it appear
+       · <h1>         — dashboard title
+       · .subtitle    — one-line description beneath the title
+       · <footer>     — attribution and links
+     ═══════════════════════════════════════════════════════════════════════════ -->
 <header>
+  <!-- Logo: add class="visible" and set src to show an org logo -->
+  <img id="brand-logo" src="" alt="Logo">
+
   <div>
     <h1>⚡ OOM Watchdog Dashboard</h1>
     <div class="subtitle">Real-time JVM health — heap, GC, and nursery metrics per monitored target</div>
   </div>
   <div id="risk-badge" class="risk-badge risk-UNKNOWN">—</div>
 </header>
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
 
 <div class="toolbar">
   <label>Server</label>
-  <input type="text" id="server-url" value="http://localhost:9090" placeholder="http://host:port">
+  <input type="text" id="server-url" value="https://localhost:9090" placeholder="https://host:port">
   <label>Interval</label>
   <select id="poll-interval">
     <option value="1000">1 s</option>
@@ -191,6 +339,7 @@
   </p>
 </main>
 
+<!-- ── Footer — edit links and attribution below ──────────────────────────── -->
 <footer>
   OOM Watchdog Dashboard &nbsp;·&nbsp;
   <a href="https://github.com/kgillard/oom-watchdog" target="_blank">kgillard/oom-watchdog</a>
@@ -205,8 +354,8 @@
 var pollTimer   = null;
 var POLL_MS     = 2000;
 var BASE_URL    = '';
-var HISTORY_LEN = 60;          // data points per sparkline
-var targets     = {};          // keyed by targetName
+var HISTORY_LEN = 60;   // sparkline rolling window (data points)
+var targets     = {};   // keyed by targetName
 var activeTab   = null;
 var alertLog    = [];
 
@@ -230,7 +379,7 @@ function stopPolling() {
 }
 
 function pollOnce() {
-  // Try /metrics/all first (multi-target); fall back to /metrics (single-target)
+  // Try /metrics/all first (multi-target daemon mode); fall back to /metrics.
   fetch(BASE_URL + '/metrics/all', { mode: 'cors' })
     .then(function(r) {
       if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -243,7 +392,6 @@ function pollOnce() {
       renderAll();
     })
     .catch(function() {
-      // fall back to single /metrics endpoint
       fetch(BASE_URL + '/metrics', { mode: 'cors' })
         .then(function(r) {
           if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -254,14 +402,12 @@ function pollOnce() {
           ingress(d);
           renderAll();
         })
-        .catch(function(e) {
-          setStatus('error', 'Error: ' + e.message);
-        });
+        .catch(function(e) { setStatus('error', 'Error: ' + e.message); });
     });
 }
 
 function setStatus(cls, msg) {
-  document.getElementById('status-dot').className  = cls;
+  document.getElementById('status-dot').className    = cls;
   document.getElementById('status-text').textContent = msg;
 }
 
@@ -281,21 +427,19 @@ function ingress(d) {
 
   var h = t.history;
   h.ts.push(d.timestampMs);
-  h.heap.push(parseFloat(d.heapUsedPct)   || 0);
-  h.gc.push  (parseFloat(d.gcOverheadPct) || 0);
+  h.heap.push(parseFloat(d.heapUsedPct)    || 0);
+  h.gc.push  (parseFloat(d.gcOverheadPct)  || 0);
   h.nursery.push(parseFloat(d.nurseryUsedPct) || 0);
   if (h.heap.length > HISTORY_LEN) {
     h.heap.splice(0, 1); h.gc.splice(0, 1);
     h.nursery.splice(0, 1); h.ts.splice(0, 1);
   }
 
-  // alert history per-target
   var risk = d.riskLevel || 'UNKNOWN';
   var prev = t.alertHistory.length > 0 ? t.alertHistory[0].risk : null;
   if (risk !== 'OK' && risk !== prev) {
     t.alertHistory.unshift({ risk: risk, msg: d.diagnosisNotes, ts: d.timestampMs });
     if (t.alertHistory.length > 50) t.alertHistory.pop();
-    // global alert log
     alertLog.unshift({ target: name, risk: risk, msg: d.diagnosisNotes, ts: d.timestampMs });
     if (alertLog.length > 100) alertLog.pop();
   }
@@ -306,11 +450,9 @@ function renderAll() {
   ensureTabs();
   var names = Object.keys(targets);
   if (!activeTab || !targets[activeTab]) activeTab = names[0];
-  names.forEach(function(name) {
-    renderPane(name);
-  });
+  names.forEach(function(name) { renderPane(name); });
 
-  // Update overall risk badge = worst risk across all targets
+  // Header badge = worst risk across all targets
   var worst = 'OK';
   names.forEach(function(name) {
     var r = (targets[name].latest || {}).riskLevel || 'OK';
@@ -325,24 +467,22 @@ function ensureTabs() {
   var bar   = document.getElementById('tabs-bar');
   var names = Object.keys(targets);
 
-  // Add missing tabs
   names.forEach(function(name) {
     if (!document.getElementById('tab-btn-' + slugify(name))) {
       var btn = document.createElement('button');
       btn.className = 'tab-btn' + (name === activeTab ? ' active' : '');
-      btn.id = 'tab-btn-' + slugify(name);
+      btn.id        = 'tab-btn-' + slugify(name);
       btn.innerHTML = '<span class="tab-dot" id="tab-dot-' + slugify(name) + '"></span>' + esc(name);
-      btn.onclick = (function(n) { return function() { switchTab(n); }; })(name);
+      btn.onclick   = (function(n) { return function() { switchTab(n); }; })(name);
       bar.appendChild(btn);
     }
-    // Ensure pane exists
     var paneId = 'pane-' + slugify(name);
     if (!document.getElementById(paneId)) {
       var pane = document.createElement('div');
       pane.className = 'tab-pane' + (name === activeTab ? ' active' : '');
-      pane.id = paneId;
+      pane.id        = paneId;
       pane.innerHTML = buildPaneHtml(name);
-      document.getElementById('main-content').innerHTML = ''; // clear placeholder once
+      document.getElementById('main-content').innerHTML = '';
       document.getElementById('main-content').appendChild(pane);
     }
   });
@@ -362,44 +502,42 @@ function buildPaneHtml(name) {
   var s = slugify(name);
   return [
     '<div class="metric-grid" id="mgrid-' + s + '">',
-      mcardHtml(s + '-heap-pct',    'Heap Usage',        '—', '— MB / — MB', true),
-      mcardHtml(s + '-gc-pct',      'GC Overhead',       '—', 'Total GC: — ms', true),
-      mcardHtml(s + '-nursery-pct', 'Young Gen',         '—', '— MB used', true),
-      mcardHtml(s + '-nonheap-mb',  'Non-Heap',          '—', 'MB used', false),
+      mcardHtml(s + '-heap-pct',    'Heap Usage',  '—', '— MB / — MB',   true),
+      mcardHtml(s + '-gc-pct',      'GC Overhead', '—', 'Total GC: — ms', true),
+      mcardHtml(s + '-nursery-pct', 'Young Gen',   '—', '— MB used',      true),
+      mcardHtml(s + '-nonheap-mb',  'Non-Heap',    '—', 'MB used',         false),
       processCardHtml(s),
       riskCardHtml(s),
     '</div>',
     '<div class="charts-grid">',
-      chartCardHtml(s + '-chart-heap',    'Heap Usage %',     s + '-chart-heap-cur'),
-      chartCardHtml(s + '-chart-gc',      'GC Overhead %',    s + '-chart-gc-cur'),
-      chartCardHtml(s + '-chart-nursery', 'Young Gen %',      s + '-chart-nursery-cur'),
+      chartCardHtml(s + '-chart-heap',    'Heap Usage %',  s + '-chart-heap-cur'),
+      chartCardHtml(s + '-chart-gc',      'GC Overhead %', s + '-chart-gc-cur'),
+      chartCardHtml(s + '-chart-nursery', 'Young Gen %',   s + '-chart-nursery-cur'),
     '</div>',
     '<div class="sec-title">Diagnosis</div>',
     '<div class="diag-box"><span id="' + s + '-diag">Waiting for first poll…</span></div>',
     '<div class="table-card">',
       '<div class="table-card-hdr"><span class="sec-title" style="margin:0">Memory Pools</span></div>',
       '<table><thead><tr><th>Pool</th><th>Used (MB)</th></tr></thead>',
-      '<tbody id="' + s + '-pools">',
-        '<tr><td colspan="2" style="color:var(--muted)">No data yet</td></tr>',
-      '</tbody></table>',
-    '</div>',
+      '<tbody id="' + s + '-pools"><tr><td colspan="2" style="color:var(--muted)">No data yet</td></tr></tbody>',
+      '</table></div>',
     '<div class="table-card">',
       '<div class="table-card-hdr"><span class="sec-title" style="margin:0">GC Collections</span></div>',
       '<table><thead><tr><th>Collector</th><th>Count</th></tr></thead>',
-      '<tbody id="' + s + '-gctable">',
-        '<tr><td colspan="2" style="color:var(--muted)">No data yet</td></tr>',
-      '</tbody></table>',
-    '</div>',
+      '<tbody id="' + s + '-gctable"><tr><td colspan="2" style="color:var(--muted)">No data yet</td></tr></tbody>',
+      '</table></div>',
     '<div class="sec-title">Alert History (this target)</div>',
-    '<ul id="' + s + '-alerts"><li style="color:var(--muted);font-size:12px;padding:6px 0">No alerts yet.</li></ul>',
+    '<ul class="alert-log" id="' + s + '-alerts">',
+      '<li style="color:var(--muted);font-size:12px;padding:6px 0">No alerts yet.</li>',
+    '</ul>',
   ].join('');
 }
 
 function mcardHtml(id, label, value, sub, withGauge) {
   return '<div class="mcard">' +
-    '<div class="mcard-label">' + label + '</div>' +
+    '<div class="mcard-label">'  + label + '</div>' +
     '<div class="mcard-value" id="' + id + '-val">' + value + '</div>' +
-    '<div class="mcard-sub" id="' + id + '-sub">' + sub + '</div>' +
+    '<div class="mcard-sub" id="'   + id + '-sub">' + sub   + '</div>' +
     (withGauge
       ? '<div class="gauge-wrap"><div class="gauge-bg"><div class="gauge-fill" id="' + id + '-gauge"></div></div></div>'
       : '') +
@@ -414,8 +552,7 @@ function processCardHtml(s) {
       '<div class="info-k">Uptime</div><div class="info-v" id="' + s + '-uptime">—</div>' +
       '<div class="info-k">Crit thr.</div><div class="info-v" id="' + s + '-crit-thr">—</div>' +
       '<div class="info-k">Last poll</div><div class="info-v" id="' + s + '-lastpoll">—</div>' +
-    '</div>' +
-    '</div>';
+    '</div></div>';
 }
 
 function riskCardHtml(s) {
@@ -439,16 +576,15 @@ function chartCardHtml(id, title, curId) {
       '<path id="' + id + '-line" fill="none" stroke="#3b82f6" stroke-width="1.5" d=""/>' +
       '<line id="' + id + '-thresh" x1="0" x2="300" y1="0" y2="0"' +
             ' stroke="#ef4444" stroke-width="1" stroke-dasharray="4 3" opacity="0.5"/>' +
-    '</svg>' +
-    '</div>';
+    '</svg></div>';
 }
 
 // ── per-pane render ───────────────────────────────────────────────────────────
 function renderPane(name) {
   var t = targets[name];
   if (!t || !t.latest) return;
-  var d  = t.latest;
-  var s  = slugify(name);
+  var d = t.latest;
+  var s = slugify(name);
 
   var heapPct    = parseFloat(d.heapUsedPct)    || 0;
   var gcPct      = parseFloat(d.gcOverheadPct)  || 0;
@@ -457,32 +593,28 @@ function renderPane(name) {
   var warnPct    = critPct * 0.88;
   var risk       = d.riskLevel || 'UNKNOWN';
 
-  // Update tab indicator dot
   var dot = document.getElementById('tab-dot-' + s);
   if (dot) dot.className = 'tab-dot ' + riskDotClass(risk);
 
-  // Metric cards
   setEl(s + '-heap-pct-val',  heapPct.toFixed(1) + '%');
   setEl(s + '-heap-pct-sub',  fmt1(d.heapUsedMB) + ' MB / ' + fmt1(d.heapMaxMB) + ' MB');
   setGauge(s + '-heap-pct-gauge', heapPct, gaugeColor(heapPct, warnPct, critPct));
 
-  setEl(s + '-gc-pct-val',    gcPct.toFixed(2) + '%');
-  setEl(s + '-gc-pct-sub',    'Total GC: ' + d.totalGcTimeMs + ' ms');
+  setEl(s + '-gc-pct-val', gcPct.toFixed(2) + '%');
+  setEl(s + '-gc-pct-sub', 'Total GC: ' + d.totalGcTimeMs + ' ms');
   setGauge(s + '-gc-pct-gauge', Math.min(gcPct * 2, 100), gaugeColor(gcPct, 25, 50));
 
-  setEl(s + '-nursery-pct-val',  nurseryPct.toFixed(1) + '%');
-  setEl(s + '-nursery-pct-sub',  fmt1(d.nurseryUsedMB) + ' MB used');
+  setEl(s + '-nursery-pct-val', nurseryPct.toFixed(1) + '%');
+  setEl(s + '-nursery-pct-sub', fmt1(d.nurseryUsedMB) + ' MB used');
   setGauge(s + '-nursery-pct-gauge', nurseryPct, gaugeColor(nurseryPct, 70, 90));
 
   setEl(s + '-nonheap-mb-val', fmt1(d.nonHeapUsedMB));
 
-  // Process card
   setEl(s + '-proc',     d.processName || '—');
   setEl(s + '-uptime',   fmtUptime(d.jvmUptimeMs || 0));
   setEl(s + '-crit-thr', critPct.toFixed(1) + '%');
   setEl(s + '-lastpoll', new Date(d.timestampMs).toLocaleTimeString());
 
-  // Risk card
   var rEl = document.getElementById(s + '-risk-val');
   if (rEl) { rEl.textContent = risk; rEl.style.color = riskColor(risk); }
   setEl(s + '-risk-sub', 'Crit: ' + critPct.toFixed(1) + '%');
@@ -493,19 +625,16 @@ function renderPane(name) {
     else                { dumpEl.classList.remove('visible'); }
   }
 
-  // Diagnosis
   setEl(s + '-diag', d.diagnosisNotes || '—');
 
-  // Memory pools table
   var poolsEl = document.getElementById(s + '-pools');
   if (poolsEl && d.poolUsedMB && Object.keys(d.poolUsedMB).length > 0) {
     poolsEl.innerHTML = Object.entries(d.poolUsedMB)
-      .sort(function(a,b){ return b[1]-a[1]; })
+      .sort(function(a, b) { return b[1] - a[1]; })
       .map(function(e) { return '<tr><td>' + esc(e[0]) + '</td><td>' + fmt2(e[1]) + '</td></tr>'; })
       .join('');
   }
 
-  // GC counts table
   var gcTableEl = document.getElementById(s + '-gctable');
   if (gcTableEl && d.gcCounts && Object.keys(d.gcCounts).length > 0) {
     gcTableEl.innerHTML = Object.entries(d.gcCounts)
@@ -513,23 +642,20 @@ function renderPane(name) {
       .join('');
   }
 
-  // Target alert log
   renderAlertLog(s + '-alerts', t.alertHistory);
 
-  // Sparklines
   var h = t.history;
-  drawSparkline(s + '-chart-heap',    h.heap,    100, critPct, s + '-chart-heap-cur',    heapPct.toFixed(1) + '%', riskColor(risk));
-  drawSparkline(s + '-chart-gc',      h.gc,       100, 50,     s + '-chart-gc-cur',      gcPct.toFixed(2)   + '%', gaugeColor(gcPct, 25, 50));
-  drawSparkline(s + '-chart-nursery', h.nursery,  100, 90,     s + '-chart-nursery-cur', nurseryPct.toFixed(1) + '%', gaugeColor(nurseryPct, 70, 90));
+  drawSparkline(s + '-chart-heap',    h.heap,    100, critPct, s + '-chart-heap-cur',    heapPct.toFixed(1) + '%',    riskColor(risk));
+  drawSparkline(s + '-chart-gc',      h.gc,      100, 50,      s + '-chart-gc-cur',      gcPct.toFixed(2)   + '%',    gaugeColor(gcPct, 25, 50));
+  drawSparkline(s + '-chart-nursery', h.nursery, 100, 90,      s + '-chart-nursery-cur', nurseryPct.toFixed(1) + '%', gaugeColor(nurseryPct, 70, 90));
 }
 
 function renderAlertLog(elId, history) {
   var el = document.getElementById(elId);
-  if (!el) return;
-  if (!history || history.length === 0) return;
+  if (!el || !history || history.length === 0) return;
   el.innerHTML = history.map(function(a) {
     return '<li class="lvl-' + a.risk + '">' +
-      '<span class="ts">' + new Date(a.ts).toLocaleTimeString() + '</span>' +
+      '<span class="ts">'  + new Date(a.ts).toLocaleTimeString() + '</span>' +
       '<span class="msg">[' + esc(a.risk) + '] ' + esc((a.msg || '').slice(0, 200)) + '</span>' +
       '</li>';
   }).join('');
@@ -543,14 +669,11 @@ function drawSparkline(svgId, data, maxVal, threshPct, curId, curText, lineColor
   var threshEl = document.getElementById(svgId + '-thresh');
   if (!svg || !lineEl) return;
 
-  var W = 300, H = 70;
-  var n = data.length;
+  var W = 300, H = 70, n = data.length;
 
-  // Update current value label
   var curEl = document.getElementById(curId);
   if (curEl) { curEl.textContent = curText; curEl.style.color = lineColor; }
 
-  // Update threshold line
   if (threshEl) {
     var ty = H - (threshPct / maxVal) * H;
     threshEl.setAttribute('y1', ty);
@@ -559,47 +682,41 @@ function drawSparkline(svgId, data, maxVal, threshPct, curId, curText, lineColor
 
   if (n < 2) return;
 
-  // Update gradient stop color
   var grad = document.getElementById('grad-' + svgId);
   if (grad) {
     var stops = grad.querySelectorAll('stop');
     if (stops[0]) stops[0].setAttribute('stop-color', lineColor);
     if (stops[1]) stops[1].setAttribute('stop-color', lineColor);
   }
-  if (lineEl) lineEl.setAttribute('stroke', lineColor);
+  lineEl.setAttribute('stroke', lineColor);
 
-  // Build path points
   var pts = [];
   for (var i = 0; i < n; i++) {
-    var x = (i / (n - 1)) * W;
-    var y = H - Math.min(Math.max(data[i] / maxVal, 0), 1) * H;
-    pts.push([x, y]);
+    pts.push([
+      (i / (n - 1)) * W,
+      H - Math.min(Math.max(data[i] / maxVal, 0), 1) * H
+    ]);
   }
 
-  // Smooth polyline (cubic bezier)
   var linePath = 'M ' + pts[0][0] + ' ' + pts[0][1];
   for (var j = 1; j < pts.length; j++) {
     var cx = (pts[j-1][0] + pts[j][0]) / 2;
     linePath += ' C ' + cx + ' ' + pts[j-1][1] + ' ' + cx + ' ' + pts[j][1] + ' ' + pts[j][0] + ' ' + pts[j][1];
   }
-  if (lineEl) lineEl.setAttribute('d', linePath);
+  lineEl.setAttribute('d', linePath);
 
-  // Area path: same line + close at bottom
   var areaPath = linePath + ' L ' + pts[pts.length-1][0] + ' ' + H + ' L ' + pts[0][0] + ' ' + H + ' Z';
   if (areaEl) areaEl.setAttribute('d', areaPath);
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
-function setEl(id, val) {
-  var el = document.getElementById(id);
-  if (el) el.textContent = val;
-}
+function setEl(id, val)  { var e = document.getElementById(id); if (e) e.textContent = val; }
 
 function setGauge(id, pct, color) {
-  var el = document.getElementById(id);
-  if (!el) return;
-  el.style.width      = Math.min(Math.max(pct, 0), 100) + '%';
-  el.style.background = color;
+  var e = document.getElementById(id);
+  if (!e) return;
+  e.style.width      = Math.min(Math.max(pct, 0), 100) + '%';
+  e.style.background = color;
 }
 
 function gaugeColor(pct, warnPct, critPct) {
@@ -609,10 +726,10 @@ function gaugeColor(pct, warnPct, critPct) {
 }
 
 function riskColor(level) {
-  if (level === 'OK')         return 'var(--ok)';
-  if (level === 'WARNING')    return 'var(--warn)';
-  if (level === 'CRITICAL')   return 'var(--crit)';
-  if (level === 'OOM_FIRING') return 'var(--oom)';
+  if (level === 'OK')          return 'var(--ok)';
+  if (level === 'WARNING')     return 'var(--warn)';
+  if (level === 'CRITICAL')    return 'var(--crit)';
+  if (level === 'OOM_FIRING')  return 'var(--oom)';
   return 'var(--muted)';
 }
 
@@ -641,8 +758,9 @@ function fmt2(v) { return (parseFloat(v) || 0).toFixed(2); }
 function slugify(s) { return String(s).replace(/[^A-Za-z0-9]/g, '_'); }
 
 function esc(s) {
-  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-                         .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  return String(s || '')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 </script>
 </body>

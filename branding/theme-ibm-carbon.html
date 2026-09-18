@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<!--
+  OOM Watchdog — Branding preset: IBM Carbon (inspired)
+  ───────────────────────────────────────────────────────
+  A dark theme inspired by the IBM Carbon Design System colour palette.
+  Uses Carbon Gray 100 for backgrounds and IBM Blue 60 as the accent.
+
+  HOW TO APPLY
+  ────────────
+  1. Open dashboard.html in a text editor.
+  2. Replace the entire :root { … } block inside the BRANDING TOKENS section
+     with the :root block below.
+  3. Save and open dashboard.html in your browser — no server restart needed.
+
+  See BRANDING.md for full instructions.
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Theme Preview — IBM Carbon (inspired)</title>
+  <style>
+    /* ─────────────────────────────────────────────────────────────────────────
+       PASTE THIS :root BLOCK INTO dashboard.html TO USE THIS THEME
+       ───────────────────────────────────────────────────────────────────────── */
+    :root {
+      /* ── Palette (Carbon Gray 100 scale) ── */
+      --bg:        #161616;   /* $gray-100 */
+      --surface:   #262626;   /* $gray-90  */
+      --surface2:  #393939;   /* $gray-80  */
+      --border:    #525252;   /* $gray-70  */
+      --text:      #f4f4f4;   /* $gray-10  */
+      --muted:     #8d8d8d;   /* $gray-50  */
+
+      /* ── Risk colours (Carbon status palette) ── */
+      --ok:        #42be65;   /* $green-40  */
+      --warn:      #f1c21b;   /* $yellow-30 */
+      --crit:      #fa4d56;   /* $red-40    */
+      --oom:       #be95ff;   /* $purple-40 */
+
+      /* ── Accent (IBM Blue 60) ── */
+      --accent:    #0f62fe;
+
+      /* ── Shape ── */
+      --radius:    0px;   /* Carbon uses sharp corners */
+
+      /* ── Optional overrides ── */
+      --header-bg:     #0f0f0f;   /* slightly darker than --bg for the header bar */
+      --header-border: #393939;
+      --font-family:   "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+    }
+    /* ── END OF THEME BLOCK ── */
+
+    /* Preview page styles only — not part of the theme */
+    @import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700&display=swap");
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-family, system-ui, sans-serif);
+      padding: 32px;
+      font-size: 14px;
+    }
+    header-preview {
+      display: flex; align-items: center; gap: 14px;
+      background: var(--header-bg, var(--surface));
+      border-bottom: 1px solid var(--header-border, var(--border));
+      padding: 12px 24px; margin-bottom: 24px;
+    }
+    header-preview h1 { font-size: 17px; color: var(--text); flex: 1; font-family: var(--font-family); font-weight: 600; }
+    .swatch-grid { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+    .swatch { width: 80px; height: 52px; border-radius: var(--radius); border: 1px solid var(--border);
+              display: flex; align-items: flex-end; padding: 4px 6px;
+              font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+    h2 { color: var(--text); margin-bottom: 4px; }
+    p  { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+    .note { background: var(--surface); border: 1px solid var(--border);
+            padding: 10px 14px; font-size: 12px; color: var(--muted); margin-top: 20px; }
+    .note code { background: var(--surface2); padding: 1px 5px; font-family: monospace; }
+    .notice { background: #012749; border: 1px solid var(--accent); color: #82cfff;
+              padding: 10px 14px; font-size: 12px; margin-top: 12px; }
+  </style>
+</head>
+<body>
+  <header-preview>
+    <h1>⚡ OOM Watchdog Dashboard</h1>
+  </header-preview>
+
+  <h2>IBM Carbon (inspired)</h2>
+  <p>Carbon Gray 100 backgrounds with IBM Blue 60 accent. Sharp corners (<code>--radius: 0px</code>) match Carbon's design language.</p>
+  <p>For the authentic Carbon typeface, load IBM Plex Sans from Google Fonts or IBM's CDN (see note below).</p>
+
+  <div class="swatch-grid">
+    <div class="swatch" style="background:var(--bg);    color:var(--muted)">--bg</div>
+    <div class="swatch" style="background:var(--surface); color:var(--muted)">--surface</div>
+    <div class="swatch" style="background:var(--surface2);color:var(--muted)">--surface2</div>
+    <div class="swatch" style="background:var(--accent); color:#fff">--accent</div>
+    <div class="swatch" style="background:var(--ok);     color:#000">--ok</div>
+    <div class="swatch" style="background:var(--warn);   color:#000">--warn</div>
+    <div class="swatch" style="background:var(--crit);   color:#fff">--crit</div>
+    <div class="swatch" style="background:var(--oom);    color:#000">--oom</div>
+  </div>
+
+  <div class="notice">
+    <strong>IBM Plex Sans:</strong> Add this line inside &lt;head&gt; in dashboard.html for the official Carbon typeface:<br>
+    <code>&lt;link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700&amp;display=swap"&gt;</code>
+  </div>
+
+  <div class="note">
+    <strong>Carbon colours:</strong> These are approximations from the Carbon Design System colour tokens
+    (Gray 100 theme). For pixel-perfect accuracy use the official IBM Design Language palette at
+    <a href="https://carbondesignsystem.com/guidelines/color/tokens" style="color:var(--accent)">carbondesignsystem.com</a>.
+  </div>
+</body>
+</html>
