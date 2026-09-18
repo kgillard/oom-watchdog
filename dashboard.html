@@ -8,129 +8,140 @@
        BRANDING CONFIGURATION — edit anything in this section to rebrand.
        See BRANDING.md for full instructions and ready-to-paste theme presets.
        ═══════════════════════════════════════════════════════════════════════════ -->
-
-  <!-- ── Page title (shown in the browser tab) ── -->
   <title>OOM Watchdog Dashboard</title>
 
   <style>
-    /* ── BRANDING TOKENS ──────────────────────────────────────────────────────
-       Every visual aspect of the dashboard is driven by the CSS custom
-       properties below. Change them here; nowhere else in this file needs
-       to be touched for a colour / font rebrand.
-
-       Mandatory tokens (must all have a value):
-         --bg          Page background
-         --surface     Card / header background
-         --surface2    Slightly elevated surface (toolbar, secondary cards)
-         --border      Dividing lines and card outlines
-         --text        Primary body text
-         --muted       De-emphasised labels, helper text, sub-values
-         --ok          Risk OK indicator (green or equivalent)
-         --warn        Risk WARNING indicator (amber or equivalent)
-         --crit        Risk CRITICAL indicator (red or equivalent)
-         --oom         Risk OOM_FIRING indicator (purple or equivalent)
-         --accent      Interactive elements: buttons, links, active tab underline
-         --radius      Global border-radius for cards / inputs
-
-       Optional branding tokens:
-         --header-bg          Header bar background (defaults to --surface)
-         --header-border      Header bottom border (defaults to --border)
-         --logo-display       Set to "inline-block" to show the logo element
-         --logo-height        Height of the logo image (default 28px)
-         --font-family        Override the body font stack
-    ─────────────────────────────────────────────────────────────────────────── */
+    /* ── BRANDING TOKENS ──────────────────────────────────────────────────────── */
     :root {
-      /* ── Palette ── */
       --bg:        #0f1117;
       --surface:   #1a1d27;
       --surface2:  #222638;
       --border:    #2a2d3a;
       --text:      #e4e6f0;
       --muted:     #7a7e96;
-
-      /* ── Risk colours ── */
       --ok:        #22c55e;
       --warn:      #f59e0b;
       --crit:      #ef4444;
       --oom:       #a855f7;
-
-      /* ── Accent (buttons, active tab, links) ── */
       --accent:    #3b82f6;
-
-      /* ── Shape ── */
       --radius:    10px;
-
-      /* ── Optional overrides (uncomment to activate) ── */
-      /* --header-bg:         #0a0c14;         */
-      /* --header-border:     #1e2130;         */
-      /* --logo-display:      inline-block;    */
-      /* --logo-height:       28px;            */
-      /* --font-family:       "Inter", system-ui, sans-serif; */
+      /* --header-bg:      #0a0c14; */
+      /* --header-border:  #1e2130; */
+      /* --logo-display:   inline-block; */
+      /* --logo-height:    28px; */
+      /* --font-family:    "Inter", system-ui, sans-serif; */
     }
-    /* ── END BRANDING TOKENS ────────────────────────────────────────────────── */
+    /* ── END BRANDING TOKENS ─────────────────────────────────────────────────── */
 
-    /* ═══════════════════════════════════════════════════════════════════════════
-       BRANDING CONTENT — edit the <header> block in the HTML below to change:
-         · The logo image  (replace the #brand-logo <img> src)
-         · The dashboard title  (the <h1> text)
-         · The subtitle text
-         · The footer links and attribution
-       See BRANDING.md section "Content tokens" for full details.
-       ═══════════════════════════════════════════════════════════════════════════ */
-
-    /* ── Reset ─────────────────────────────────────────────────────────────── */
+    /* ── Reset ──────────────────────────────────────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    /* ── Base ──────────────────────────────────────────────────────────────── */
+    /* ── Sticky layout: header + toolbar + tabs fixed at top,
+          alert panel + footer fixed at bottom, content scrolls ─────────────── */
+    html, body { height: 100%; overflow: hidden; }
     body {
       background:  var(--bg);
       color:       var(--text);
       font-family: var(--font-family, -apple-system, "Segoe UI", system-ui, sans-serif);
       font-size:   14px;
       line-height: 1.6;
-      min-height:  100vh;
+      display:     flex;
+      flex-direction: column;
     }
 
-    /* ── Header ────────────────────────────────────────────────────────────── */
+    /* ── Sticky top region ───────────────────────────────────────────────────── */
+    #sticky-top {
+      flex-shrink: 0;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    /* ── Header ──────────────────────────────────────────────────────────────── */
     header {
-      background:    var(--header-bg,     var(--surface));
+      background:    var(--header-bg, var(--surface));
       border-bottom: 1px solid var(--header-border, var(--border));
-      padding:       12px 24px;
+      padding:       10px 20px;
       display:       flex;
       align-items:   center;
-      gap:           14px;
+      gap:           12px;
     }
     #brand-logo {
       display: var(--logo-display, none);
-      height:  var(--logo-height,  28px);
+      height:  var(--logo-height, 26px);
       width:   auto;
       flex-shrink: 0;
     }
     #brand-logo.visible { display: inline-block; }
-    header h1    { font-size: 17px; font-weight: 700; letter-spacing: 0.3px; flex: 1; }
-    .subtitle    { color: var(--muted); font-size: 11px; }
+    header h1   { font-size: 16px; font-weight: 700; letter-spacing: 0.3px; }
+    .subtitle   { color: var(--muted); font-size: 11px; margin-top: 1px; }
+    #risk-badge { margin-left: auto; }
 
-    /* ── Toolbar ───────────────────────────────────────────────────────────── */
+    /* ── Toolbar ─────────────────────────────────────────────────────────────── */
     .toolbar {
-      padding:       10px 24px;
+      padding:       8px 20px;
       display:       flex;
       align-items:   center;
-      gap:           10px;
+      gap:           8px;
       border-bottom: 1px solid var(--border);
       flex-wrap:     wrap;
       background:    var(--surface2, var(--surface));
     }
-    .toolbar label { color: var(--muted); font-size: 12px; }
-    .toolbar input[type=text] {
+    .toolbar label { color: var(--muted); font-size: 12px; white-space: nowrap; }
+    #server-url-wrap { position: relative; display: flex; align-items: center; }
+    #server-url {
       background: var(--surface);
       border:     1px solid var(--border);
       color:      var(--text);
-      border-radius: 6px;
+      border-radius: 6px 0 0 6px;
       padding:    5px 10px;
       font-size:  13px;
-      width:      220px;
+      width:      240px;
     }
-    .toolbar input[type=text]:focus { outline: none; border-color: var(--accent); }
+    #server-url:focus { outline: none; border-color: var(--accent); }
+    #server-history-btn {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: none;
+      border-radius: 0 6px 6px 0;
+      color: var(--muted);
+      padding: 5px 8px;
+      cursor: pointer;
+      font-size: 12px;
+      line-height: 1;
+    }
+    #server-history-btn:hover { color: var(--text); background: var(--surface2); }
+    #server-history-list {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 0 0 6px 6px;
+      z-index: 200;
+      max-height: 200px;
+      overflow-y: auto;
+      display: none;
+    }
+    #server-history-list.open { display: block; }
+    #server-history-list .hist-item {
+      padding: 6px 10px;
+      font-size: 13px;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+    #server-history-list .hist-item:hover { background: var(--surface); }
+    #server-history-list .hist-del {
+      color: var(--muted);
+      font-size: 11px;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    #server-history-list .hist-del:hover { color: var(--crit); }
     .toolbar select {
       background: var(--surface);
       border:     1px solid var(--border);
@@ -140,17 +151,18 @@
       font-size:  13px;
     }
 
-    /* ── Buttons ───────────────────────────────────────────────────────────── */
+    /* ── Buttons ─────────────────────────────────────────────────────────────── */
     .btn {
       background:    var(--accent);
       color:         #fff;
       border:        none;
       border-radius: 6px;
-      padding:       6px 14px;
+      padding:       5px 13px;
       font-size:     13px;
       cursor:        pointer;
       font-weight:   600;
       font-family:   inherit;
+      white-space:   nowrap;
     }
     .btn:hover          { opacity: 0.85; }
     .btn.stop           { background: #374151; }
@@ -159,13 +171,13 @@
     .btn.dump-core      { background: #b45309; }
     .btn:disabled       { opacity: 0.45; cursor: not-allowed; }
 
-    /* ── Connection status dot ─────────────────────────────────────────────── */
-    #status-dot        { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+    /* ── Status dot ──────────────────────────────────────────────────────────── */
+    #status-dot        { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
     #status-dot.alive  { background: var(--ok); }
     #status-dot.error  { background: var(--crit); }
     #status-text       { font-size: 12px; color: var(--muted); }
 
-    /* ── Risk badges ───────────────────────────────────────────────────────── */
+    /* ── Risk badges ─────────────────────────────────────────────────────────── */
     .risk-badge      { padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700;
                        letter-spacing: 0.5px; text-transform: uppercase; }
     .risk-OK         { background: #14532d; color: var(--ok); }
@@ -174,11 +186,11 @@
     .risk-OOM_FIRING { background: #581c87; color: var(--oom); }
     .risk-UNKNOWN    { background: #1e293b; color: var(--muted); }
 
-    /* ── Tabs bar ──────────────────────────────────────────────────────────── */
+    /* ── Tabs bar ────────────────────────────────────────────────────────────── */
     #tabs-bar {
       display:    flex;
       gap:        0;
-      padding:    0 24px;
+      padding:    0 20px;
       border-bottom: 1px solid var(--border);
       background: var(--surface);
       overflow-x: auto;
@@ -189,7 +201,7 @@
       border:        none;
       border-bottom: 2px solid transparent;
       color:         var(--muted);
-      padding:       9px 16px;
+      padding:       8px 15px;
       font-size:     13px;
       cursor:        pointer;
       white-space:   nowrap;
@@ -202,77 +214,111 @@
     .tab-btn:hover   { color: var(--text); }
     .tab-btn.active  { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
     .tab-dot         { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
-    .tab-dot.ok      { background: var(--ok); }
-    .tab-dot.warn    { background: var(--warn); }
-    .tab-dot.crit    { background: var(--crit); }
-    .tab-dot.oom     { background: var(--oom); }
+    .tab-dot.ok   { background: var(--ok); }
+    .tab-dot.warn { background: var(--warn); }
+    .tab-dot.crit { background: var(--crit); }
+    .tab-dot.oom  { background: var(--oom); }
 
-    /* ── Main content area ─────────────────────────────────────────────────── */
-    main          { padding: 18px 24px; max-width: 1280px; margin: 0 auto; }
-    .tab-pane     { display: none; }
+    /* ── Scrollable middle content ───────────────────────────────────────────── */
+    #scroll-region {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+    main {
+      padding: 16px 20px;
+    }
+    .tab-pane        { display: none; }
     .tab-pane.active { display: block; }
 
-    /* ── Metric cards grid ─────────────────────────────────────────────────── */
+    /* ── Metric cards grid ───────────────────────────────────────────────────── */
     .metric-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-      gap: 14px;
-      margin-bottom: 20px;
+      grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
     }
     .mcard        { background: var(--surface); border: 1px solid var(--border);
-                    border-radius: var(--radius); padding: 14px 16px; }
+                    border-radius: var(--radius); padding: 12px 14px; }
     .mcard-label  { font-size: 10px; text-transform: uppercase; letter-spacing: 0.7px;
                     color: var(--muted); margin-bottom: 4px; }
-    .mcard-value  { font-size: 26px; font-weight: 700; line-height: 1.2; }
+    .mcard-value  { font-size: 24px; font-weight: 700; line-height: 1.2; }
     .mcard-sub    { font-size: 11px; color: var(--muted); margin-top: 3px; }
 
-    /* ── Gauge bars ────────────────────────────────────────────────────────── */
-    .gauge-wrap { margin-top: 8px; }
-    .gauge-bg   { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+    /* ── Gauge bars ──────────────────────────────────────────────────────────── */
+    .gauge-wrap { margin-top: 7px; }
+    .gauge-bg   { height: 5px; background: var(--border); border-radius: 3px; overflow: hidden; }
     .gauge-fill { height: 100%; border-radius: 3px; width: 0%;
                   transition: width 0.4s ease, background 0.4s ease;
                   background: var(--ok); }
 
-    /* ── Sparkline charts grid ─────────────────────────────────────────────── */
+    /* ── Sparkline charts grid ───────────────────────────────────────────────── */
     .charts-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-      gap: 16px;
-      margin-bottom: 20px;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 14px;
+      margin-bottom: 16px;
     }
     .chart-card  { background: var(--surface); border: 1px solid var(--border);
-                   border-radius: var(--radius); padding: 14px 16px; }
+                   border-radius: var(--radius); padding: 12px 14px; }
     .chart-title { font-size: 11px; font-weight: 600; color: var(--muted);
-                   text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 10px;
+                   text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 8px;
                    display: flex; justify-content: space-between; align-items: center; }
     .chart-cur   { color: var(--text); font-size: 13px; font-weight: 700; }
-    svg.spark    { display: block; width: 100%; height: 70px; overflow: visible; }
+    svg.spark    { display: block; width: 100%; height: 65px; overflow: visible; }
 
-    /* ── Section headings ──────────────────────────────────────────────────── */
+    /* ── Section headings ────────────────────────────────────────────────────── */
     .sec-title { font-size: 11px; font-weight: 700; color: var(--muted);
-                 text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 8px; }
+                 text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 7px; }
 
-    /* ── Diagnosis box ─────────────────────────────────────────────────────── */
+    /* ── Diagnosis box ───────────────────────────────────────────────────────── */
     .diag-box { background: var(--surface); border: 1px solid var(--border);
-                border-radius: var(--radius); padding: 12px 14px; font-size: 12px;
+                border-radius: var(--radius); padding: 10px 12px; font-size: 12px;
                 color: var(--muted); line-height: 1.7; word-break: break-word;
-                min-height: 44px; margin-bottom: 18px; }
+                min-height: 40px; margin-bottom: 14px; }
     .diag-box span { color: var(--text); }
 
-    /* ── Tables ────────────────────────────────────────────────────────────── */
+    /* ── Tables ──────────────────────────────────────────────────────────────── */
     .table-card     { background: var(--surface); border: 1px solid var(--border);
-                      border-radius: var(--radius); overflow: hidden; margin-bottom: 16px; }
-    .table-card-hdr { padding: 10px 14px; border-bottom: 1px solid var(--border); }
+                      border-radius: var(--radius); overflow: hidden; margin-bottom: 14px; }
+    .table-card-hdr { padding: 8px 12px; border-bottom: 1px solid var(--border); }
     table           { width: 100%; border-collapse: collapse; font-size: 12px; }
     th { text-align: left; color: var(--muted); font-weight: 600;
          padding: 5px 10px; border-bottom: 1px solid var(--border); }
-    td { padding: 5px 10px; border-bottom: 1px solid rgba(255,255,255,0.04); }
+    td { padding: 4px 10px; border-bottom: 1px solid rgba(255,255,255,0.04); }
     tr:last-child td { border-bottom: none; }
 
-    /* ── Per-target alert log ──────────────────────────────────────────────── */
+    /* ── Sticky alert panel at bottom ────────────────────────────────────────── */
+    #sticky-bottom { flex-shrink: 0; }
+    #alert-panel {
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      padding: 0;
+      max-height: 160px;
+      display: flex;
+      flex-direction: column;
+    }
+    #alert-panel-hdr {
+      padding: 6px 20px;
+      border-bottom: 1px solid var(--border);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    #alert-scroll {
+      overflow-y: auto;
+      flex: 1;
+      padding: 4px 20px 6px;
+    }
     .alert-log          { list-style: none; }
-    .alert-log li       { padding: 6px 10px; border-radius: 6px; margin-bottom: 5px;
-                          font-size: 12px; display: flex; gap: 10px; align-items: flex-start; }
+    .alert-log li       { padding: 4px 8px; border-radius: 5px; margin-bottom: 3px;
+                          font-size: 11px; display: flex; gap: 8px; align-items: flex-start; }
     .alert-log .ts      { color: var(--muted); white-space: nowrap; flex-shrink: 0; }
     .alert-log .msg     { word-break: break-word; }
     .alert-log li.lvl-WARNING   { background: #1c1507; border-left: 3px solid var(--warn); }
@@ -280,85 +326,124 @@
     .alert-log li.lvl-OOM_FIRING{ background: #160b21; border-left: 3px solid var(--oom); }
     .alert-log li.lvl-OK        { background: #051409; border-left: 3px solid var(--ok); }
 
-    /* ── Heap dump path ────────────────────────────────────────────────────── */
+    /* ── Heap dump path ──────────────────────────────────────────────────────── */
     .dump-path         { background: #0c1929; border: 1px solid var(--border); border-radius: 6px;
-                         padding: 7px 10px; font-size: 12px; font-family: monospace;
-                         color: #93c5fd; margin-top: 6px; word-break: break-all; display: none; }
+                         padding: 6px 10px; font-size: 11px; font-family: monospace;
+                         color: #93c5fd; margin-top: 5px; word-break: break-all; display: none; }
     .dump-path.visible { display: block; }
 
-    /* ── On-demand dump buttons ────────────────────────────────────────────── */
-    .dump-actions       { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
-    .dump-result        { margin-top: 8px; font-size: 12px; font-family: monospace;
-                          padding: 7px 10px; border-radius: 6px; word-break: break-all;
-                          display: none; }
-    .dump-result.ok     { background: #051409; border: 1px solid var(--ok);   color: #4ade80; display: block; }
-    .dump-result.err    { background: #1c0505; border: 1px solid var(--crit); color: #f87171; display: block; }
-    .dump-result.busy   { background: #0f172a; border: 1px solid var(--muted); color: var(--muted); display: block; }
+    /* ── On-demand dump buttons ──────────────────────────────────────────────── */
+    .dump-actions   { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+    .dump-result    { margin-top: 7px; font-size: 12px; font-family: monospace;
+                      padding: 6px 10px; border-radius: 6px; word-break: break-all; display: none; }
+    .dump-result.ok   { background: #051409; border: 1px solid var(--ok);   color: #4ade80; display: block; }
+    .dump-result.err  { background: #1c0505; border: 1px solid var(--crit); color: #f87171; display: block; }
+    .dump-result.busy { background: #0f172a; border: 1px solid var(--muted); color: var(--muted); display: block; }
 
-    /* ── Process info key/value grid ───────────────────────────────────────── */
-    .info-grid { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; margin-top: 8px; }
-    .info-k    { font-size: 11px; color: var(--muted); }
-    .info-v    { font-size: 11px; color: var(--text); font-weight: 600; }
+    /* ── Key/value info grids ────────────────────────────────────────────────── */
+    .info-grid { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin-top: 7px; }
+    .info-k    { font-size: 11px; color: var(--muted); white-space: nowrap; }
+    .info-v    { font-size: 11px; color: var(--text); font-weight: 600; word-break: break-all; }
 
-    /* ── Footer ────────────────────────────────────────────────────────────── */
-    footer   { text-align: center; padding: 14px; color: var(--muted); font-size: 11px;
-               border-top: 1px solid var(--border); margin-top: 6px; }
+    /* ── JVM detail card (wider, full-width) ─────────────────────────────────── */
+    .jvm-detail-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      margin-bottom: 14px;
+    }
+    .jvm-detail-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      gap: 0 28px;
+    }
+    .jvm-detail-grid .info-k { min-width: 130px; }
+    .cpu-bar-wrap { margin-top: 4px; }
+    .cpu-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 700;
+      margin-top: 4px;
+    }
+    .cpu-badge.low  { background: #051409; color: var(--ok); border: 1px solid var(--ok); }
+    .cpu-badge.med  { background: #1c1507; color: var(--warn); border: 1px solid var(--warn); }
+    .cpu-badge.high { background: #1c0505; color: var(--crit); border: 1px solid var(--crit); }
+
+    /* ── Footer ──────────────────────────────────────────────────────────────── */
+    footer { text-align: left; padding: 7px 20px; color: var(--muted); font-size: 11px;
+             border-top: 1px solid var(--border); background: var(--surface); }
     footer a { color: var(--accent); text-decoration: none; }
   </style>
 </head>
 <body>
 
-<!-- ═══════════════════════════════════════════════════════════════════════════
-     BRANDING CONTENT — safe to edit:
-       · #brand-logo  src=""  — set to your logo URL or data:image/... URI
-                      Add class="visible" to make it appear
-       · <h1>         — dashboard title
-       · .subtitle    — one-line description beneath the title
-       · <footer>     — attribution and links
-     ═══════════════════════════════════════════════════════════════════════════ -->
-<header>
-  <!-- Logo: add class="visible" and set src to show an org logo -->
-  <img id="brand-logo" src="" alt="Logo">
+<div id="sticky-top">
+  <!-- ═══════════════════════════════════ BRANDING CONTENT ══════════════════════ -->
+  <header>
+    <img id="brand-logo" src="" alt="Logo">
+    <div>
+      <h1>⚡ OOM Watchdog Dashboard</h1>
+      <div class="subtitle">Real-time JVM health — heap, GC, and nursery metrics per monitored target</div>
+    </div>
+    <div id="risk-badge" class="risk-badge risk-UNKNOWN">—</div>
+  </header>
+  <!-- ═══════════════════════════════════════════════════════════════════════════ -->
 
-  <div>
-    <h1>⚡ OOM Watchdog Dashboard</h1>
-    <div class="subtitle">Real-time JVM health — heap, GC, and nursery metrics per monitored target</div>
+  <div class="toolbar">
+    <label>Server</label>
+    <div id="server-url-wrap">
+      <input type="text" id="server-url" value="https://localhost:9090" placeholder="https://host:port"
+             onkeydown="if(event.key==='Enter')startPolling()">
+      <button id="server-history-btn" title="Recent servers" onclick="toggleHistory()">▾</button>
+      <div id="server-history-list"></div>
+    </div>
+    <label>Interval</label>
+    <select id="poll-interval">
+      <option value="1000">1 s</option>
+      <option value="2000" selected>2 s</option>
+      <option value="5000">5 s</option>
+      <option value="10000">10 s</option>
+    </select>
+    <button class="btn" id="btn-start" onclick="startPolling()">Connect</button>
+    <button class="btn stop" id="btn-stop" onclick="stopPolling()" disabled>Disconnect</button>
+    <div id="status-dot"></div>
+    <div id="status-text">Not connected</div>
   </div>
-  <div id="risk-badge" class="risk-badge risk-UNKNOWN">—</div>
-</header>
-<!-- ═══════════════════════════════════════════════════════════════════════════ -->
 
-<div class="toolbar">
-  <label>Server</label>
-  <input type="text" id="server-url" value="https://localhost:9090" placeholder="https://host:port">
-  <label>Interval</label>
-  <select id="poll-interval">
-    <option value="1000">1 s</option>
-    <option value="2000" selected>2 s</option>
-    <option value="5000">5 s</option>
-    <option value="10000">10 s</option>
-  </select>
-  <button class="btn" id="btn-start" onclick="startPolling()">Connect</button>
-  <button class="btn stop" id="btn-stop" onclick="stopPolling()" disabled>Disconnect</button>
-  <div id="status-dot"></div>
-  <div id="status-text">Not connected</div>
+  <div id="tabs-bar"></div>
+</div><!-- /#sticky-top -->
+
+<div id="scroll-region">
+  <main id="main-content">
+    <p style="color:var(--muted);font-size:13px;padding:20px 0">
+      Enter the OOM Watchdog metrics server URL above and click <strong>Connect</strong>.
+    </p>
+  </main>
 </div>
 
-<div id="tabs-bar"></div>
-
-<main id="main-content">
-  <p style="color:var(--muted);font-size:13px;padding:24px 0">
-    Enter the OOM Watchdog metrics server URL above and click <strong>Connect</strong>.
-  </p>
-</main>
-
-<!-- ── Footer — edit links and attribution below ──────────────────────────── -->
-<footer>
-  OOM Watchdog Dashboard &nbsp;·&nbsp;
-  <a href="https://github.com/kgillard/oom-watchdog" target="_blank">kgillard/oom-watchdog</a>
-  &nbsp;·&nbsp; Heap · GC · pools read live from <code>java.lang.management</code> MXBeans
-  &nbsp;·&nbsp; Risk level &amp; diagnosis from watchdog assessment
-</footer>
+<div id="sticky-bottom">
+  <div id="alert-panel">
+    <div id="alert-panel-hdr">
+      <span>Alert Log — all targets</span>
+      <span id="alert-count" style="font-weight:400"></span>
+    </div>
+    <div id="alert-scroll">
+      <ul class="alert-log" id="global-alert-log">
+        <li style="color:var(--muted);font-size:11px;padding:4px 0">No alerts yet.</li>
+      </ul>
+    </div>
+  </div>
+  <!-- ── Footer ───────────────────────────────────────────────────────────── -->
+  <footer>
+    OOM Watchdog Dashboard &nbsp;·&nbsp;
+    <a href="https://github.com/kgillard/oom-watchdog" target="_blank">kgillard/oom-watchdog</a>
+    &nbsp;·&nbsp; Heap · GC · pools from <code>java.lang.management</code> MXBeans
+    &nbsp;·&nbsp; Risk &amp; diagnosis from watchdog assessment
+  </footer>
+</div>
 
 <script>
 'use strict';
@@ -367,10 +452,66 @@
 var pollTimer   = null;
 var POLL_MS     = 2000;
 var BASE_URL    = '';
-var HISTORY_LEN = 60;   // sparkline rolling window (data points)
-var targets     = {};   // keyed by targetName
+var HISTORY_LEN = 60;
+var targets     = {};
 var activeTab   = null;
 var alertLog    = [];
+var HISTORY_KEY = 'oom-server-history';
+
+// ── server history (localStorage) ────────────────────────────────────────────
+function loadHistory() {
+  try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); }
+  catch(e) { return []; }
+}
+function saveHistory(list) {
+  try { localStorage.setItem(HISTORY_KEY, JSON.stringify(list)); } catch(e) {}
+}
+function addToHistory(url) {
+  var list = loadHistory().filter(function(u) { return u !== url; });
+  list.unshift(url);
+  if (list.length > 20) list = list.slice(0, 20);
+  saveHistory(list);
+  renderHistoryList();
+}
+function removeFromHistory(url) {
+  saveHistory(loadHistory().filter(function(u) { return u !== url; }));
+  renderHistoryList();
+}
+function renderHistoryList() {
+  var el   = document.getElementById('server-history-list');
+  var list = loadHistory();
+  if (list.length === 0) {
+    el.innerHTML = '<div class="hist-item" style="color:var(--muted)">No saved servers</div>';
+    return;
+  }
+  el.innerHTML = list.map(function(u) {
+    return '<div class="hist-item" onclick="selectHistory(\'' + esc(u) + '\')">' +
+      '<span>' + esc(u) + '</span>' +
+      '<span class="hist-del" onclick="event.stopPropagation();removeFromHistory(\'' + esc(u) + '\')">✕</span>' +
+      '</div>';
+  }).join('');
+}
+function selectHistory(url) {
+  document.getElementById('server-url').value = url;
+  toggleHistory(false);
+}
+function toggleHistory(force) {
+  var el = document.getElementById('server-history-list');
+  var open = force === undefined ? !el.classList.contains('open') : force;
+  if (open) { renderHistoryList(); el.classList.add('open'); }
+  else       { el.classList.remove('open'); }
+}
+// Close dropdown when clicking outside
+document.addEventListener('click', function(e) {
+  if (!document.getElementById('server-url-wrap').contains(e.target)) {
+    toggleHistory(false);
+  }
+});
+// Populate input from history on page load
+(function() {
+  var list = loadHistory();
+  if (list.length > 0) document.getElementById('server-url').value = list[0];
+})();
 
 // ── polling ───────────────────────────────────────────────────────────────────
 function startPolling() {
@@ -392,7 +533,6 @@ function stopPolling() {
 }
 
 function pollOnce() {
-  // Try /metrics/all first (multi-target daemon mode); fall back to /metrics.
   fetch(BASE_URL + '/metrics/all', { mode: 'cors' })
     .then(function(r) {
       if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -403,6 +543,7 @@ function pollOnce() {
       if (!Array.isArray(arr)) arr = [arr];
       arr.forEach(function(d) { ingress(d); });
       renderAll();
+      addToHistory(BASE_URL);
     })
     .catch(function() {
       fetch(BASE_URL + '/metrics', { mode: 'cors' })
@@ -414,6 +555,7 @@ function pollOnce() {
           setStatus('alive', 'Live · ' + new Date().toLocaleTimeString());
           ingress(d);
           renderAll();
+          addToHistory(BASE_URL);
         })
         .catch(function(e) { setStatus('error', 'Error: ' + e.message); });
     });
@@ -428,30 +570,23 @@ function setStatus(cls, msg) {
 function ingress(d) {
   var name = d.targetName || d.processName || 'self';
   if (!targets[name]) {
-    targets[name] = {
-      name: name,
-      history: { heap: [], gc: [], nursery: [], ts: [] },
-      latest: null,
-      alertHistory: []
-    };
+    targets[name] = { name: name, history: { heap: [], gc: [], nursery: [], ts: [] },
+                      latest: null, alertHistory: [] };
   }
   var t = targets[name];
   t.latest = d;
-
   var h = t.history;
   h.ts.push(d.timestampMs);
   h.heap.push(parseFloat(d.heapUsedPct)    || 0);
   h.gc.push  (parseFloat(d.gcOverheadPct)  || 0);
   h.nursery.push(parseFloat(d.nurseryUsedPct) || 0);
   if (h.heap.length > HISTORY_LEN) {
-    h.heap.splice(0, 1); h.gc.splice(0, 1);
-    h.nursery.splice(0, 1); h.ts.splice(0, 1);
+    h.heap.splice(0,1); h.gc.splice(0,1); h.nursery.splice(0,1); h.ts.splice(0,1);
   }
-
   var risk = d.riskLevel || 'UNKNOWN';
   var prev = t.alertHistory.length > 0 ? t.alertHistory[0].risk : null;
   if (risk !== 'OK' && risk !== prev) {
-    t.alertHistory.unshift({ risk: risk, msg: d.diagnosisNotes, ts: d.timestampMs });
+    t.alertHistory.unshift({ risk: risk, msg: d.diagnosisNotes, ts: d.timestampMs, target: name });
     if (t.alertHistory.length > 50) t.alertHistory.pop();
     alertLog.unshift({ target: name, risk: risk, msg: d.diagnosisNotes, ts: d.timestampMs });
     if (alertLog.length > 100) alertLog.pop();
@@ -465,7 +600,6 @@ function renderAll() {
   if (!activeTab || !targets[activeTab]) activeTab = names[0];
   names.forEach(function(name) { renderPane(name); });
 
-  // Header badge = worst risk across all targets
   var worst = 'OK';
   names.forEach(function(name) {
     var r = (targets[name].latest || {}).riskLevel || 'OK';
@@ -474,12 +608,26 @@ function renderAll() {
   var badge = document.getElementById('risk-badge');
   badge.textContent = worst;
   badge.className   = 'risk-badge risk-' + worst;
+
+  renderGlobalAlerts();
+}
+
+function renderGlobalAlerts() {
+  var el = document.getElementById('global-alert-log');
+  var cnt = document.getElementById('alert-count');
+  if (alertLog.length === 0) return;
+  el.innerHTML = alertLog.map(function(a) {
+    return '<li class="lvl-' + a.risk + '">' +
+      '<span class="ts">' + new Date(a.ts).toLocaleTimeString() + '</span>' +
+      '<span class="msg">[' + esc(a.target) + '] [' + esc(a.risk) + '] ' +
+        esc((a.msg || '').slice(0, 160)) + '</span></li>';
+  }).join('');
+  if (cnt) cnt.textContent = alertLog.length + ' event' + (alertLog.length !== 1 ? 's' : '');
 }
 
 function ensureTabs() {
   var bar   = document.getElementById('tabs-bar');
   var names = Object.keys(targets);
-
   names.forEach(function(name) {
     if (!document.getElementById('tab-btn-' + slugify(name))) {
       var btn = document.createElement('button');
@@ -511,14 +659,15 @@ function switchTab(name) {
   });
 }
 
+// ── pane HTML builder ─────────────────────────────────────────────────────────
 function buildPaneHtml(name) {
   var s = slugify(name);
   return [
     '<div class="metric-grid" id="mgrid-' + s + '">',
-      mcardHtml(s + '-heap-pct',    'Heap Usage',  '—', '— MB / — MB',   true),
+      mcardHtml(s + '-heap-pct',    'Heap Usage',  '—', '— MB / — MB',    true),
       mcardHtml(s + '-gc-pct',      'GC Overhead', '—', 'Total GC: — ms', true),
       mcardHtml(s + '-nursery-pct', 'Young Gen',   '—', '— MB used',      true),
-      mcardHtml(s + '-nonheap-mb',  'Non-Heap',    '—', 'MB used',         false),
+      mcardHtml(s + '-nonheap-mb',  'Non-Heap',    '—', 'MB used',        false),
       processCardHtml(s),
       riskCardHtml(s),
     '</div>',
@@ -529,6 +678,7 @@ function buildPaneHtml(name) {
     '</div>',
     '<div class="sec-title">Diagnosis</div>',
     '<div class="diag-box"><span id="' + s + '-diag">Waiting for first poll…</span></div>',
+    jvmDetailCardHtml(s),
     '<div class="table-card">',
       '<div class="table-card-hdr"><span class="sec-title" style="margin:0">Memory Pools</span></div>',
       '<table><thead><tr><th>Pool</th><th>Used (MB)</th></tr></thead>',
@@ -541,50 +691,25 @@ function buildPaneHtml(name) {
       '</table></div>',
     '<div class="sec-title">On-Demand Diagnostics</div>',
     dumpActionsHtml(s, name),
-    '<div class="sec-title">Alert History (this target)</div>',
-    '<ul class="alert-log" id="' + s + '-alerts">',
-      '<li style="color:var(--muted);font-size:12px;padding:6px 0">No alerts yet.</li>',
-    '</ul>',
   ].join('');
 }
 
-// name = raw target name (for ?target= param); s = slugified id prefix (for DOM ids)
-function dumpActionsHtml(s, name) {
-  // Encode the raw name once here so it is safe inside the onclick attribute string.
-  // encodeURIComponent is available in all browsers; the result is ASCII-safe.
-  var enc = encodeURIComponent(name);
-  return [
-    '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:16px">',
-      '<div style="font-size:11px;color:var(--muted);margin-bottom:10px">',
-        'Trigger a diagnostic dump for target <strong>' + esc(name) + '</strong> right now.',
-        ' The file is written to the watchdog\'s configured dump directory on the server.',
-      '</div>',
-      '<div class="dump-actions">',
-        '<button class="btn dump-thread" id="' + s + '-btn-thread" onclick="requestDump(\'' + s + '\',\'thread\',\'' + enc + '\')">Thread Dump</button>',
-        '<button class="btn dump-heap"   id="' + s + '-btn-heap"   onclick="requestDump(\'' + s + '\',\'heap\',\''   + enc + '\')">Heap Dump</button>',
-        '<button class="btn dump-core"   id="' + s + '-btn-core"   onclick="requestDump(\'' + s + '\',\'core\',\''   + enc + '\')">Core Dump</button>',
-      '</div>',
-      '<div class="dump-result" id="' + s + '-dump-result"></div>',
-    '</div>',
-  ].join('');
-}
-
+// ── card builders ─────────────────────────────────────────────────────────────
 function mcardHtml(id, label, value, sub, withGauge) {
   return '<div class="mcard">' +
-    '<div class="mcard-label">'  + label + '</div>' +
+    '<div class="mcard-label">' + label + '</div>' +
     '<div class="mcard-value" id="' + id + '-val">' + value + '</div>' +
-    '<div class="mcard-sub" id="'   + id + '-sub">' + sub   + '</div>' +
-    (withGauge
-      ? '<div class="gauge-wrap"><div class="gauge-bg"><div class="gauge-fill" id="' + id + '-gauge"></div></div></div>'
-      : '') +
+    '<div class="mcard-sub"   id="' + id + '-sub">' + sub   + '</div>' +
+    (withGauge ? '<div class="gauge-wrap"><div class="gauge-bg"><div class="gauge-fill" id="' + id + '-gauge"></div></div></div>' : '') +
     '</div>';
 }
 
 function processCardHtml(s) {
   return '<div class="mcard">' +
     '<div class="mcard-label">JVM Process</div>' +
-    '<div class="mcard-value" style="font-size:13px;word-break:break-all" id="' + s + '-proc">—</div>' +
-    '<div class="info-grid" style="margin-top:8px">' +
+    '<div class="mcard-value" style="font-size:12px;word-break:break-all;line-height:1.4" id="' + s + '-proc">—</div>' +
+    '<div class="info-grid" style="margin-top:7px">' +
+      '<div class="info-k">Path</div><div class="info-v" id="' + s + '-jvmpath" style="font-family:monospace;font-size:10px">—</div>' +
       '<div class="info-k">Uptime</div><div class="info-v" id="' + s + '-uptime">—</div>' +
       '<div class="info-k">Crit thr.</div><div class="info-v" id="' + s + '-crit-thr">—</div>' +
       '<div class="info-k">Last poll</div><div class="info-v" id="' + s + '-lastpoll">—</div>' +
@@ -603,16 +728,69 @@ function riskCardHtml(s) {
 function chartCardHtml(id, title, curId) {
   return '<div class="chart-card">' +
     '<div class="chart-title"><span>' + title + '</span><span class="chart-cur" id="' + curId + '">—</span></div>' +
-    '<svg class="spark" id="' + id + '" viewBox="0 0 300 70" preserveAspectRatio="none">' +
+    '<svg class="spark" id="' + id + '" viewBox="0 0 300 65" preserveAspectRatio="none">' +
       '<defs><linearGradient id="grad-' + id + '" x1="0" y1="0" x2="0" y2="1">' +
         '<stop offset="0%" stop-color="#3b82f6" stop-opacity="0.35"/>' +
         '<stop offset="100%" stop-color="#3b82f6" stop-opacity="0.02"/>' +
       '</linearGradient></defs>' +
       '<path id="' + id + '-area" fill="url(#grad-' + id + ')" d=""/>' +
       '<path id="' + id + '-line" fill="none" stroke="#3b82f6" stroke-width="1.5" d=""/>' +
-      '<line id="' + id + '-thresh" x1="0" x2="300" y1="0" y2="0"' +
-            ' stroke="#ef4444" stroke-width="1" stroke-dasharray="4 3" opacity="0.5"/>' +
+      '<line id="' + id + '-thresh" x1="0" x2="300" y1="0" y2="0" stroke="#ef4444" stroke-width="1" stroke-dasharray="4 3" opacity="0.5"/>' +
     '</svg></div>';
+}
+
+function jvmDetailCardHtml(s) {
+  return [
+    '<div class="sec-title">JVM Process Detail</div>',
+    '<div class="jvm-detail-card" id="' + s + '-jvm-detail">',
+      '<div class="jvm-detail-grid">',
+        '<div>',
+          '<div class="info-grid">',
+            '<div class="info-k">JVM location</div><div class="info-v" id="' + s + '-jvm-home" style="font-family:monospace;font-size:10px">—</div>',
+            '<div class="info-k">JVM name</div><div class="info-v" id="' + s + '-jvm-name">—</div>',
+            '<div class="info-k">Java version</div><div class="info-v" id="' + s + '-jvm-version">—</div>',
+            '<div class="info-k">OS</div><div class="info-v" id="' + s + '-jvm-os">—</div>',
+            '<div class="info-k">CPU cores</div><div class="info-v" id="' + s + '-jvm-cpus">—</div>',
+            '<div class="info-k">Process CPU</div>',
+            '<div class="info-v"><span id="' + s + '-jvm-cpu-pct">—</span> <span id="' + s + '-cpu-badge" class="cpu-badge"></span></div>',
+            '<div class="info-k">CPU time</div><div class="info-v" id="' + s + '-jvm-cpu-ms">—</div>',
+            '<div class="info-k">Threads</div><div class="info-v" id="' + s + '-jvm-threads">—</div>',
+          '</div>',
+        '</div>',
+        '<div>',
+          '<div class="info-grid">',
+            '<div class="info-k">Heap used</div><div class="info-v" id="' + s + '-jvm-heap">—</div>',
+            '<div class="info-k">Heap max</div><div class="info-v" id="' + s + '-jvm-heap-max">—</div>',
+            '<div class="info-k">Non-heap</div><div class="info-v" id="' + s + '-jvm-nonheap">—</div>',
+            '<div class="info-k">GC overhead</div><div class="info-v" id="' + s + '-jvm-gc-ovhd">—</div>',
+            '<div class="info-k">JVM flags</div>',
+            '<div class="info-v" id="' + s + '-jvm-flags" style="font-family:monospace;font-size:10px;line-height:1.5">—</div>',
+            '<div class="info-k">App command</div>',
+            '<div class="info-v" id="' + s + '-jvm-cmd" style="font-family:monospace;font-size:10px">—</div>',
+          '</div>',
+        '</div>',
+      '</div>',
+    '</div>',
+  ].join('');
+}
+
+// name = raw target name; s = slug
+function dumpActionsHtml(s, name) {
+  var enc = encodeURIComponent(name);
+  return [
+    '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:14px">',
+      '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">',
+        'Trigger a diagnostic dump for target <strong>' + esc(name) + '</strong>.',
+        ' The file is written to the watchdog\'s configured dump directory on the server.',
+      '</div>',
+      '<div class="dump-actions">',
+        '<button class="btn dump-thread" id="' + s + '-btn-thread" onclick="requestDump(\'' + s + '\',\'thread\',\'' + enc + '\')">Thread Dump</button>',
+        '<button class="btn dump-heap"   id="' + s + '-btn-heap"   onclick="requestDump(\'' + s + '\',\'heap\',\''   + enc + '\')">Heap Dump</button>',
+        '<button class="btn dump-core"   id="' + s + '-btn-core"   onclick="requestDump(\'' + s + '\',\'core\',\''   + enc + '\')">Core Dump</button>',
+      '</div>',
+      '<div class="dump-result" id="' + s + '-dump-result"></div>',
+    '</div>',
+  ].join('');
 }
 
 // ── per-pane render ───────────────────────────────────────────────────────────
@@ -646,7 +824,9 @@ function renderPane(name) {
 
   setEl(s + '-nonheap-mb-val', fmt1(d.nonHeapUsedMB));
 
+  // Process card
   setEl(s + '-proc',     d.processName || '—');
+  setEl(s + '-jvmpath',  d.javaHome    || '—');
   setEl(s + '-uptime',   fmtUptime(d.jvmUptimeMs || 0));
   setEl(s + '-crit-thr', critPct.toFixed(1) + '%');
   setEl(s + '-lastpoll', new Date(d.timestampMs).toLocaleTimeString());
@@ -663,6 +843,40 @@ function renderPane(name) {
 
   setEl(s + '-diag', d.diagnosisNotes || '—');
 
+  // JVM detail card
+  setEl(s + '-jvm-home',     d.javaHome    || '—');
+  setEl(s + '-jvm-name',     d.jvmName     || '—');
+  setEl(s + '-jvm-version',  d.javaVersion || '—');
+  setEl(s + '-jvm-os',       d.osName      || '—');
+  setEl(s + '-jvm-cpus',     d.cpuCount != null ? d.cpuCount + ' logical cores' : '—');
+  setEl(s + '-jvm-heap',     fmt1(d.heapUsedMB)   + ' MB');
+  setEl(s + '-jvm-heap-max', fmt1(d.heapMaxMB)    + ' MB');
+  setEl(s + '-jvm-nonheap',  fmt1(d.nonHeapUsedMB) + ' MB');
+  setEl(s + '-jvm-gc-ovhd',  fmt2(d.gcOverheadPct) + '%');
+  setEl(s + '-jvm-threads',  (d.threadCount || '—') + (d.peakThreadCount ? ' (peak ' + d.peakThreadCount + ')' : ''));
+  setEl(s + '-jvm-flags',    d.jvmInputArgs || '—');
+  setEl(s + '-jvm-cmd',      d.javaCommand  || '—');
+
+  var cpuPct = parseFloat(d.processCpuPct);
+  var cpuEl  = document.getElementById(s + '-jvm-cpu-pct');
+  var badgeEl= document.getElementById(s + '-cpu-badge');
+  if (cpuEl) {
+    if (isNaN(cpuPct) || cpuPct < 0) {
+      cpuEl.textContent = '—';
+      if (badgeEl) { badgeEl.textContent = ''; badgeEl.className = 'cpu-badge'; }
+    } else {
+      cpuEl.textContent = cpuPct.toFixed(1) + '%';
+      if (badgeEl) {
+        if (cpuPct >= 60)      { badgeEl.textContent = 'EXPENSIVE'; badgeEl.className = 'cpu-badge high'; }
+        else if (cpuPct >= 20) { badgeEl.textContent = 'MODERATE';  badgeEl.className = 'cpu-badge med';  }
+        else                   { badgeEl.textContent = 'LOW';       badgeEl.className = 'cpu-badge low';  }
+      }
+    }
+  }
+  var cpuMs = parseInt(d.processCpuMs, 10);
+  setEl(s + '-jvm-cpu-ms', (!isNaN(cpuMs) && cpuMs >= 0) ? fmtUptime(cpuMs) + ' CPU' : '—');
+
+  // Memory pools table
   var poolsEl = document.getElementById(s + '-pools');
   if (poolsEl && d.poolUsedMB && Object.keys(d.poolUsedMB).length > 0) {
     poolsEl.innerHTML = Object.entries(d.poolUsedMB)
@@ -671,6 +885,7 @@ function renderPane(name) {
       .join('');
   }
 
+  // GC table
   var gcTableEl = document.getElementById(s + '-gctable');
   if (gcTableEl && d.gcCounts && Object.keys(d.gcCounts).length > 0) {
     gcTableEl.innerHTML = Object.entries(d.gcCounts)
@@ -678,23 +893,10 @@ function renderPane(name) {
       .join('');
   }
 
-  renderAlertLog(s + '-alerts', t.alertHistory);
-
   var h = t.history;
   drawSparkline(s + '-chart-heap',    h.heap,    100, critPct, s + '-chart-heap-cur',    heapPct.toFixed(1) + '%',    riskColor(risk));
   drawSparkline(s + '-chart-gc',      h.gc,      100, 50,      s + '-chart-gc-cur',      gcPct.toFixed(2)   + '%',    gaugeColor(gcPct, 25, 50));
   drawSparkline(s + '-chart-nursery', h.nursery, 100, 90,      s + '-chart-nursery-cur', nurseryPct.toFixed(1) + '%', gaugeColor(nurseryPct, 70, 90));
-}
-
-function renderAlertLog(elId, history) {
-  var el = document.getElementById(elId);
-  if (!el || !history || history.length === 0) return;
-  el.innerHTML = history.map(function(a) {
-    return '<li class="lvl-' + a.risk + '">' +
-      '<span class="ts">'  + new Date(a.ts).toLocaleTimeString() + '</span>' +
-      '<span class="msg">[' + esc(a.risk) + '] ' + esc((a.msg || '').slice(0, 200)) + '</span>' +
-      '</li>';
-  }).join('');
 }
 
 // ── sparkline drawing ─────────────────────────────────────────────────────────
@@ -704,20 +906,14 @@ function drawSparkline(svgId, data, maxVal, threshPct, curId, curText, lineColor
   var areaEl   = document.getElementById(svgId + '-area');
   var threshEl = document.getElementById(svgId + '-thresh');
   if (!svg || !lineEl) return;
-
-  var W = 300, H = 70, n = data.length;
-
+  var W = 300, H = 65, n = data.length;
   var curEl = document.getElementById(curId);
   if (curEl) { curEl.textContent = curText; curEl.style.color = lineColor; }
-
   if (threshEl) {
     var ty = H - (threshPct / maxVal) * H;
-    threshEl.setAttribute('y1', ty);
-    threshEl.setAttribute('y2', ty);
+    threshEl.setAttribute('y1', ty); threshEl.setAttribute('y2', ty);
   }
-
   if (n < 2) return;
-
   var grad = document.getElementById('grad-' + svgId);
   if (grad) {
     var stops = grad.querySelectorAll('stop');
@@ -725,22 +921,16 @@ function drawSparkline(svgId, data, maxVal, threshPct, curId, curText, lineColor
     if (stops[1]) stops[1].setAttribute('stop-color', lineColor);
   }
   lineEl.setAttribute('stroke', lineColor);
-
   var pts = [];
   for (var i = 0; i < n; i++) {
-    pts.push([
-      (i / (n - 1)) * W,
-      H - Math.min(Math.max(data[i] / maxVal, 0), 1) * H
-    ]);
+    pts.push([(i / (n - 1)) * W, H - Math.min(Math.max(data[i] / maxVal, 0), 1) * H]);
   }
-
   var linePath = 'M ' + pts[0][0] + ' ' + pts[0][1];
   for (var j = 1; j < pts.length; j++) {
     var cx = (pts[j-1][0] + pts[j][0]) / 2;
     linePath += ' C ' + cx + ' ' + pts[j-1][1] + ' ' + cx + ' ' + pts[j][1] + ' ' + pts[j][0] + ' ' + pts[j][1];
   }
   lineEl.setAttribute('d', linePath);
-
   var areaPath = linePath + ' L ' + pts[pts.length-1][0] + ' ' + H + ' L ' + pts[0][0] + ' ' + H + ' Z';
   if (areaEl) areaEl.setAttribute('d', areaPath);
 }
@@ -760,15 +950,13 @@ function gaugeColor(pct, warnPct, critPct) {
   if (pct >= warnPct) return 'var(--warn)';
   return 'var(--ok)';
 }
-
 function riskColor(level) {
-  if (level === 'OK')          return 'var(--ok)';
-  if (level === 'WARNING')     return 'var(--warn)';
-  if (level === 'CRITICAL')    return 'var(--crit)';
-  if (level === 'OOM_FIRING')  return 'var(--oom)';
+  if (level === 'OK')         return 'var(--ok)';
+  if (level === 'WARNING')    return 'var(--warn)';
+  if (level === 'CRITICAL')   return 'var(--crit)';
+  if (level === 'OOM_FIRING') return 'var(--oom)';
   return 'var(--muted)';
 }
-
 function riskDotClass(level) {
   if (level === 'OK')         return 'ok';
   if (level === 'WARNING')    return 'warn';
@@ -776,53 +964,32 @@ function riskDotClass(level) {
   if (level === 'OOM_FIRING') return 'oom';
   return '';
 }
-
 function riskOrd(level) {
   return { 'OK': 0, 'WARNING': 1, 'CRITICAL': 2, 'OOM_FIRING': 3 }[level] || 0;
 }
-
 function fmtUptime(ms) {
-  var s = Math.floor(ms / 1000);
-  var m = Math.floor(s / 60); s %= 60;
-  var h = Math.floor(m / 60); m %= 60;
-  return h + 'h ' + m + 'm ' + s + 's';
+  var sec = Math.floor(ms / 1000);
+  var m = Math.floor(sec / 60); sec %= 60;
+  var h = Math.floor(m / 60);   m   %= 60;
+  return h + 'h ' + m + 'm ' + sec + 's';
 }
-
 function fmt1(v) { return (parseFloat(v) || 0).toFixed(1); }
 function fmt2(v) { return (parseFloat(v) || 0).toFixed(2); }
-
 function slugify(s) { return String(s).replace(/[^A-Za-z0-9]/g, '_'); }
-
 function esc(s) {
-  return String(s || '')
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+                        .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
 // ── on-demand dump ────────────────────────────────────────────────────────────
-// slug    = slugified DOM id prefix  (e.g. "my_app_server")
-// type    = "thread" | "heap" | "core"
-// encoded = encodeURIComponent(rawTargetName) passed from dumpActionsHtml
 function requestDump(slug, type, encoded) {
   var resultEl  = document.getElementById(slug + '-dump-result');
   var btnThread = document.getElementById(slug + '-btn-thread');
   var btnHeap   = document.getElementById(slug + '-btn-heap');
   var btnCore   = document.getElementById(slug + '-btn-core');
-
-  // Disable all three buttons while the dump is running (can take several seconds)
   [btnThread, btnHeap, btnCore].forEach(function(b) { if (b) b.disabled = true; });
-
-  if (resultEl) {
-    resultEl.className   = 'dump-result busy';
-    resultEl.textContent = 'Requesting ' + type + ' dump\u2026';
-  }
-
-  // Build URL: always include ?target= so the server knows which watchdog to use.
-  // For the self-monitoring JVM the target name comes back as "self"; remote targets
-  // use whatever name was registered in the targets file.
-  var url = BASE_URL + '/dump/' + type + '?target=' + (encoded || 'self');
-
-  fetch(url, { method: 'POST', mode: 'cors' })
+  if (resultEl) { resultEl.className = 'dump-result busy'; resultEl.textContent = 'Requesting ' + type + ' dump\u2026'; }
+  fetch(BASE_URL + '/dump/' + type + '?target=' + (encoded || 'self'), { method: 'POST', mode: 'cors' })
     .then(function(r) { return r.json().then(function(j) { return { status: r.status, body: j }; }); })
     .then(function(res) {
       if (resultEl) {
@@ -837,10 +1004,7 @@ function requestDump(slug, type, encoded) {
       }
     })
     .catch(function(e) {
-      if (resultEl) {
-        resultEl.className   = 'dump-result err';
-        resultEl.textContent = '\u2716 Request failed: ' + e.message;
-      }
+      if (resultEl) { resultEl.className = 'dump-result err'; resultEl.textContent = '\u2716 Request failed: ' + e.message; }
     })
     .finally(function() {
       [btnThread, btnHeap, btnCore].forEach(function(b) { if (b) b.disabled = false; });

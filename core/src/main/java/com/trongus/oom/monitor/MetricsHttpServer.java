@@ -22,7 +22,9 @@ import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
 import java.lang.management.MemoryPoolMXBean;
 import java.lang.management.MemoryUsage;
+import java.lang.management.OperatingSystemMXBean;
 import java.lang.management.RuntimeMXBean;
+import java.lang.management.ThreadMXBean;
 import java.math.BigInteger;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -131,8 +133,10 @@ public final class MetricsHttpServer {
     private static final Logger LOG = WatchdogLogger.forClass(MetricsHttpServer.class);
 
     // MXBeans are thread-safe singletons — cache references once.
-    private static final MemoryMXBean  MEMORY_MX  = ManagementFactory.getMemoryMXBean();
-    private static final RuntimeMXBean RUNTIME_MX = ManagementFactory.getRuntimeMXBean();
+    private static final MemoryMXBean         MEMORY_MX  = ManagementFactory.getMemoryMXBean();
+    private static final RuntimeMXBean        RUNTIME_MX = ManagementFactory.getRuntimeMXBean();
+    private static final OperatingSystemMXBean OS_MX      = ManagementFactory.getOperatingSystemMXBean();
+    private static final ThreadMXBean         THREAD_MX  = ManagementFactory.getThreadMXBean();
 
     // TLS protocols and cipher suites: require TLS 1.2+ and forward-secret ciphers only.
     private static final String[] ENABLED_PROTOCOLS = { "TLSv1.2", "TLSv1.3" };
@@ -783,6 +787,46 @@ public final class MetricsHttpServer {
         double gcOverhead = uptimeMs > 0 ? (double) totalGcMs / uptimeMs * 100.0 : 0.0;
         String process    = RUNTIME_MX.getName();
 
+        // ── JVM process detail fields ──────────────────────────────────────────
+        String javaHome      = System.getProperty("java.home", "");
+        String javaVersion   = System.getProperty("java.version", "") + " (" +
+                               System.getProperty("java.vendor",  "") + ")";
+        String jvmName       = System.getProperty("java.vm.name",    "") + " " +
+                               System.getProperty("java.vm.version", "");
+        String osName        = OS_MX.getName() + " " + OS_MX.getVersion()
+                               + " (" + OS_MX.getArch() + ")";
+        int    cpuCount      = OS_MX.getAvailableProcessors();
+        double cpuLoad       = -1.0;  // -1 = unavailable (not on standard API)
+        long   processCpuMs  = -1L;
+
+        // com.sun.management.OperatingSystemMXBean has getProcessCpuLoad / getProcessCpuTime
+        try {
+            java.lang.reflect.Method pcl = OS_MX.getClass().getMethod("getProcessCpuLoad");
+            pcl.setAccessible(true);
+            Object v = pcl.invoke(OS_MX);
+            if (v instanceof Double) cpuLoad = (Double) v * 100.0;
+        } catch (Exception ignored) { /* not available on this JVM */ }
+        try {
+            java.lang.reflect.Method pct = OS_MX.getClass().getMethod("getProcessCpuTime");
+            pct.setAccessible(true);
+            Object v = pct.invoke(OS_MX);
+            if (v instanceof Long) processCpuMs = (Long) v / 1_000_000L; // ns → ms
+        } catch (Exception ignored) { /* not available on this JVM */ }
+
+        // JVM input args (flags, -X, -D passed to the JVM itself)
+        List<String> inputArgs = RUNTIME_MX.getInputArguments();
+        StringBuilder inputArgsSb = new StringBuilder();
+        for (int i = 0; i < inputArgs.size(); i++) {
+            if (i > 0) inputArgsSb.append(' ');
+            inputArgsSb.append(inputArgs.get(i));
+        }
+        // Application main class + args (sun.java.command system property)
+        String javaCommand = System.getProperty("sun.java.command", "");
+
+        // Thread counts
+        int threadCount     = THREAD_MX.getThreadCount();
+        int peakThreadCount = THREAD_MX.getPeakThreadCount();
+
         String riskLevel  = lastSnap != null ? lastSnap.getRiskLevel().name() : OomRiskLevel.OK.name();
         double critPct    = lastSnap != null && lastSnap.getCritThreshold() >= 0
                             ? lastSnap.getCritThreshold() * 100.0 : -1.0;
@@ -791,7 +835,7 @@ public final class MetricsHttpServer {
         String targetName = lastSnap != null && lastSnap.getTargetName() != null
                             ? lastSnap.getTargetName() : label;
 
-        StringBuilder sb = new StringBuilder(512);
+        StringBuilder sb = new StringBuilder(1024);
         sb.append("{\n");
         appendLong  (sb, "timestampMs",      System.currentTimeMillis());
         appendString(sb, "targetName",       targetName);
@@ -809,6 +853,18 @@ public final class MetricsHttpServer {
         appendDouble(sb, "critThresholdPct", critPct);
         appendString(sb, "diagnosisNotes",   diagnosis);
         appendString(sb, "heapDumpPath",     dumpPath);
+        // ── process detail ──
+        appendString(sb, "javaHome",         javaHome);
+        appendString(sb, "javaVersion",      javaVersion);
+        appendString(sb, "jvmName",          jvmName);
+        appendString(sb, "osName",           osName);
+        appendLong  (sb, "cpuCount",         cpuCount);
+        appendDouble(sb, "processCpuPct",    cpuLoad);
+        appendLong  (sb, "processCpuMs",     processCpuMs);
+        appendString(sb, "jvmInputArgs",     inputArgsSb.toString());
+        appendString(sb, "javaCommand",      javaCommand);
+        appendLong  (sb, "threadCount",      threadCount);
+        appendLong  (sb, "peakThreadCount",  peakThreadCount);
         appendGcCounts (sb, gcCounts);
         appendPoolsLast(sb, poolUsed, MB);
         sb.append("}");
