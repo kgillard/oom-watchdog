@@ -182,7 +182,7 @@ import java.util.logging.Logger;
  * }</pre>
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.4
+ * @version 1.7.5
  * @since 1.0.0
  * @see com.trongus.oom.config.WatchdogConfig
  * @see com.trongus.oom.monitor.OomWatchdog
@@ -467,7 +467,7 @@ public final class WatchdogMain {
         System.out.printf( "║  Log level               : %s%n",      config.getLogLevel().getName());
         System.out.printf( "║  Test mode               : %s%n",      cli.testMode ? "YES" : "no");
         if (cli.metricsPort > 0) {
-            System.out.printf("║  Metrics endpoint        : http://localhost:%d/metrics%n", cli.metricsPort);
+            System.out.printf("║  Metrics endpoint        : https://localhost:%d/metrics%n", cli.metricsPort);
             System.out.printf("║  Dashboard               : open dashboard.html in browser%n");
         }
         System.out.println("╚══════════════════════════════════════════════════════════╝");
@@ -534,7 +534,7 @@ public final class WatchdogMain {
           + "\n"
           + "Dashboard (real-time browser UI):\n"
           + "  java -Xmx256m -jar oom-watchdog.jar --metrics-port 9090 --poll-ms 2000\n"
-          + "  Then open dashboard.html in a browser and set server URL to http://localhost:9090\n"
+          + "  Then open dashboard.html in a browser and set server URL to https://localhost:9090\n"
         );
     }
 
@@ -548,7 +548,7 @@ public final class WatchdogMain {
      * applying defaults and basic range validation.
      *
      * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
-     * @version 1.7.4
+     * @version 1.7.5
      * @since 1.0.0
      * @see WatchdogMain
      */

@@ -16,7 +16,7 @@ import java.lang.reflect.Method;
  * Reflection is used so the code compiles without a {@code com.sun.management}
  * import, keeping it compatible with all JDK versions including 26+.
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.4
+ * @version 1.7.5
  * @since 1.7.0
  */
 public final class HotSpotHeapDumpStrategy implements DumpStrategy {

@@ -99,7 +99,7 @@ import java.util.logging.Logger;
  * </table>
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.4
+ * @version 1.7.5
  * @since 1.7.3
  * @see TlsConfig
  * @see OomWatchdog#getLastSnapshot()
@@ -120,7 +120,7 @@ public final class MetricsHttpServer {
         "TLS_AES_128_GCM_SHA256",           // TLS 1.3
         "TLS_CHACHA20_POLY1305_SHA256",     // TLS 1.3
         "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384",  // TLS 1.2 ECDHE
-        "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA384",  // TLS 1.2 ECDHE
+        "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",  // TLS 1.2 ECDHE
         "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256"  // TLS 1.2 ECDHE
     };
 

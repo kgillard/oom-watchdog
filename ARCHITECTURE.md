@@ -36,8 +36,8 @@ graph TD
     W --> D["HeapDumpService"]
     W --> WC["WatchdogConfig"]
 
-    C -->|impl (local)| MX["MxBeanDiagnosticsCollector"]
-    C -->|impl (remote JMX)| JMX["JmxDiagnosticsCollector"]
+    C -->|impl local| MX["MxBeanDiagnosticsCollector"]
+    C -->|impl remote JMX| JMX["JmxDiagnosticsCollector"]
     A -->|impl| TR["ThresholdRiskAssessor"]
     CH -->|impl| CON["ConsoleAlertChannel"]
     CH -->|impl| FILE["FileLogAlertChannel"]
@@ -223,7 +223,8 @@ classDiagram
 
     class CognosAlertChannel {
         -String cognosComponent
-        -String logFilePath
+        -String cognosServer
+        -Path logPath
         +CognosAlertChannel(String, String)
         +alert(JvmSnapshot)
     }
@@ -521,7 +522,7 @@ flowchart TD
 ## Module Structure
 
 ```
-oom-watchdog/                  Maven multi-module root (v1.7.4)
+oom-watchdog/                  Maven multi-module root (v1.7.5)
 ├── core/                      oom-watchdog.jar  (fat jar via maven-shade-plugin)
 │   └── src/main/java/com/trongus/oom/
 │       ├── WatchdogMain.java  CLI entry point (local + daemon modes)
@@ -567,7 +568,7 @@ oom-watchdog/                  Maven multi-module root (v1.7.4)
 │       ├── BuiltInHeapExhauster.java
 │       └── HarnessAlertRecorder.java      (CopyOnWriteArrayList + AtomicInteger)
 │
-└── oom-watchdog-tests/        JUnit 4 test suite (200 tests)
+└── oom-watchdog-tests/        JUnit 4 test suite (239 tests)
     └── src/test/java/com/trongus/oom/tests/
         ├── OomWatchdogTestSuite.java
         ├── model/             OomRiskLevelTest, JvmSnapshotTest
@@ -682,8 +683,8 @@ Pass 5 identified and fixed 4 issues in the remote JMX monitoring subsystem.
 
 ## Release Artefacts
 
-The v1.7.4 release publishes two executable fat JARs built with `maven-shade-plugin`.
-Both will be attached to the [GitHub release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.4).
+The v1.7.5 release publishes two executable fat JARs built with `maven-shade-plugin`.
+Both will be attached to the [GitHub release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.5).
 
 | Artefact | Main class | Contents | Size (approx) |
 |----------|-----------|----------|---------------|

@@ -18,7 +18,7 @@ import com.trongus.oom.model.OomRiskLevel;
  * belongs in a separate post-alert hook, not here.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.4
+ * @version 1.7.5
  * @since 1.0.0
  * @see com.trongus.oom.monitor.ThresholdRiskAssessor
  * @see com.trongus.oom.monitor.OomWatchdog

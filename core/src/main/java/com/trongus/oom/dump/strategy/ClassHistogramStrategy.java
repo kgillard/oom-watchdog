@@ -31,7 +31,7 @@ import java.util.Map;
  *       {@link ManagementFactory#getMemoryPoolMXBeans()} – works on every JVM.</li>
  * </ol>
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.4
+ * @version 1.7.5
  * @since 1.7.0
  */
 public final class ClassHistogramStrategy implements DumpStrategy {
