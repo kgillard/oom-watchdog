@@ -562,14 +562,31 @@ target.myservice.dump-dir      = ./dumps/myservice
 
 The `dashboard.html` file is a single-page web application that connects to the watchdog's built-in metrics server and shows a live view of heap usage, GC overhead, risk level, and alert history.
 
+---
+
+### Before you start — requirements
+
+| Requirement | Details |
+|---|---|
+| Java | Already required to run the watchdog |
+| `netstat` or `ss` | To verify the port is listening on the server (built into Linux/macOS) |
+| `nc` (netcat) | To test connectivity from your laptop to the server |
+| `iptables` or `firewalld` | To open the port in the server's firewall (Linux servers only) |
+
+> **These tools are standard on Linux and macOS.**  On Windows Server use `netstat -ano` and Windows Firewall / `netsh` instead.
+
+---
+
 ### Step 1 — Start the watchdog with the metrics server enabled
 
 Add `--metrics-port` to your command.  The watchdog will start a small HTTPS server on that port.
 
-> **Opening the dashboard on the same machine as the watchdog?** The commands below are all you need.
+> **Opening the dashboard on the same machine as the watchdog?**  No firewall changes are needed — use the local commands below.
 >
 > **Opening the dashboard on a different machine** (e.g. your laptop connecting to a remote server)?
-> Add `--metrics-bind-all` — without it the server only listens on `127.0.0.1` and remote connections are refused.  Also make sure the port is open in the server's firewall.
+> You need **both** of the following or the browser will get `ERR_CONNECTION_REFUSED`:
+> 1. Start the watchdog with `--metrics-bind-all` (binds to all interfaces, not just `127.0.0.1`)
+> 2. Open the port in the server's firewall (see Step 3 below)
 
 #### Mac / Linux — local (same machine)
 
@@ -613,7 +630,7 @@ java -jar C:\oom-watchdog\oom-watchdog.jar ^
     --log-file C:\logs\oom-watchdog.log
 ```
 
-> By default the metrics endpoint uses HTTPS with an automatically generated self-signed certificate.  Your browser will show a security warning the first time — this is expected for internal tools.  Click "Advanced" → "Proceed" (Chrome) or "Accept the Risk" (Firefox).
+> By default the metrics endpoint uses HTTPS with an automatically generated self-signed certificate.  Your browser will show a security warning the first time — this is expected for internal tools.  Click **Advanced → Proceed** (Chrome) or **Accept the Risk** (Firefox).
 
 #### Using plain HTTP instead (less secure, easier for quick testing)
 
@@ -623,6 +640,7 @@ Add `--metrics-no-tls`:
 java -jar /opt/oom-watchdog/oom-watchdog.jar \
     --metrics-port 9090 \
     --metrics-no-tls \
+    --metrics-bind-all \
     --log-file /var/log/oom-watchdog.log
 ```
 
@@ -633,25 +651,123 @@ java -jar /opt/oom-watchdog/oom-watchdog.jar \
     --metrics-port 9090 \
     --metrics-cert /etc/ssl/oom-watchdog.p12 \
     --metrics-cert-password changeit \
+    --metrics-bind-all \
     --log-file /var/log/oom-watchdog.log
 ```
 
-### Step 2 — Open the dashboard in your browser
+---
+
+### Step 2 — Verify the port is listening (on the server)
+
+Run this **on the server** after starting the watchdog:
+
+```bash
+netstat -tlnp | grep 9090
+```
+
+**What to look for:**
+
+| Output | Meaning |
+|---|---|
+| `0.0.0.0:9090` or `:::9090` | Correct — listening on all interfaces. Proceed to Step 3. |
+| `127.0.0.1:9090` | Wrong — `--metrics-bind-all` was not used. Restart with that flag. |
+| _(no output)_ | Watchdog is not running or failed to start. Check the log file. |
+
+---
+
+### Step 3 — Open the port in the server firewall (remote access only)
+
+Even when the watchdog is listening on `0.0.0.0`, the server's OS firewall may still block incoming connections.  This is the most common cause of `ERR_CONNECTION_REFUSED` when the process is running.
+
+#### Linux — iptables (RHEL, CentOS, QRadar)
+
+```bash
+# Open the port
+iptables -I INPUT -p tcp --dport 9090 -j ACCEPT
+
+# Save the rule so it survives a reboot
+service iptables save
+```
+
+#### Linux — firewalld (newer RHEL / Fedora)
+
+```bash
+firewall-cmd --add-port=9090/tcp --permanent
+firewall-cmd --reload
+```
+
+#### Windows Server — Windows Firewall
+
+```cmd
+netsh advfirewall firewall add rule name="OOM Watchdog Metrics" ^
+    protocol=TCP dir=in localport=9090 action=allow
+```
+
+> Replace `9090` with whichever port you chose with `--metrics-port`.
+
+---
+
+### Step 4 — Test connectivity from your machine
+
+Run this **on your laptop / the machine running the browser**, replacing the IP and port:
+
+```bash
+nc -zv 9.60.246.81 9090
+```
+
+**Expected output:**
+
+```
+Connection to 9.60.246.81 9090 port [tcp/*] succeeded!
+```
+
+If it says `Connection refused` — the firewall rule was not applied.  If it times out — a network-level firewall (e.g. cloud security group, VPN ACL) is blocking the traffic between your laptop and the server.
+
+**On macOS** (if `nc` is not installed):
+
+```bash
+/usr/bin/nc -zv 9.60.246.81 9090
+```
+
+---
+
+### Step 5 — Open the dashboard in your browser
 
 1. Download `dashboard.html` from the GitHub releases page (same page as `oom-watchdog.jar`).
 2. Open `dashboard.html` directly in any modern browser — no web server needed.
 3. In the **Server** field at the top of the page, type the address of the watchdog:
    - Same machine (default): `https://localhost:9090`
-   - Remote machine (requires `--metrics-bind-all` on the server): `https://9.60.246.81:9090`
-   - Plain HTTP (if you used `--metrics-no-tls`): `http://localhost:9090` or `http://9.60.246.81:9090`
+   - Remote machine: `https://9.60.246.81:9090` (replace with your server's IP)
+   - Plain HTTP (if you used `--metrics-no-tls`): `http://9.60.246.81:9090`
 4. Click **Connect**.
 
 The dashboard will start updating live every few seconds.
 
-> **Remote access checklist:**
-> 1. The watchdog was started with `--metrics-bind-all`
-> 2. Port `9090` (or your chosen port) is open in the server's firewall / security group
-> 3. You typed the server's IP address in the dashboard's Server field, not `localhost`
+---
+
+### Troubleshooting — `ERR_CONNECTION_REFUSED`
+
+This error always means one of three things.  Work through them in order:
+
+**1. The watchdog is not running**
+
+On the server:
+```bash
+netstat -tlnp | grep 9090
+```
+If there is no output, the process is not running.  Start it and check the log file for errors.
+
+**2. The watchdog is bound to `127.0.0.1` only**
+
+If `netstat` shows `127.0.0.1:9090`, the watchdog was started without `--metrics-bind-all`.  Kill it and restart with that flag.
+
+**3. The OS firewall is blocking the port**
+
+If `netstat` shows `0.0.0.0:9090` or `:::9090` but `nc -zv <ip> 9090` still fails — the firewall is the problem.  Apply the iptables or firewalld rule from Step 3 above.
+
+If `nc` succeeds but the dashboard still shows the error — your browser's self-signed certificate warning needs to be accepted first.  Navigate directly to `https://9.60.246.81:9090/metrics` in the browser, accept the certificate warning, then reload the dashboard.
+
+---
 
 ### Dashboard features at a glance
 
