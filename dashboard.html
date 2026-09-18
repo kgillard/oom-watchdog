@@ -269,7 +269,14 @@
                    text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 8px;
                    display: flex; justify-content: space-between; align-items: center; }
     .chart-cur   { color: var(--text); font-size: 13px; font-weight: 700; }
-    svg.spark    { display: block; width: 100%; height: 65px; overflow: visible; }
+    svg.spark    { display: block; width: 100%; height: 65px; overflow: visible; cursor: crosshair; }
+    #spark-tooltip {
+      position: fixed; pointer-events: none; z-index: 9999;
+      background: #1c2333; border: 1px solid var(--border); border-radius: 6px;
+      padding: 5px 9px; font-size: 11px; color: var(--text); white-space: nowrap;
+      display: none; line-height: 1.6;
+    }
+    #spark-tooltip b { color: var(--accent); }
 
     /* ── Section headings ────────────────────────────────────────────────────── */
     .sec-title { font-size: 11px; font-weight: 700; color: var(--muted);
@@ -394,6 +401,7 @@
   </style>
 </head>
 <body>
+<div id="spark-tooltip"></div>
 
 <div id="sticky-top">
   <!-- ═══════════════════════════════════ BRANDING CONTENT ══════════════════════ -->
@@ -754,6 +762,9 @@ function chartCardHtml(id, title, curId) {
       '<path id="' + id + '-area" fill="url(#grad-' + id + ')" d=""/>' +
       '<path id="' + id + '-line" fill="none" stroke="#3b82f6" stroke-width="1.5" d=""/>' +
       '<line id="' + id + '-thresh" x1="0" x2="300" y1="0" y2="0" stroke="#ef4444" stroke-width="1" stroke-dasharray="4 3" opacity="0.5"/>' +
+      '<line id="' + id + '-xhair" x1="0" x2="0" y1="0" y2="65" stroke="#ffffff" stroke-width="1" opacity="0.25" display="none"/>' +
+      '<circle id="' + id + '-dot" cx="0" cy="0" r="3" fill="#ffffff" stroke="#3b82f6" stroke-width="1.5" display="none"/>' +
+      '<rect id="' + id + '-hover" x="0" y="0" width="300" height="65" fill="transparent"/>' +
     '</svg></div>';
 }
 
@@ -922,6 +933,9 @@ function renderPane(name) {
 }
 
 // ── sparkline drawing ─────────────────────────────────────────────────────────
+// Per-chart state for hover — keyed by svgId
+var _sparkState = {};
+
 function drawSparkline(svgId, data, maxVal, threshPct, curId, curText, lineColor) {
   var svg      = document.getElementById(svgId);
   var lineEl   = document.getElementById(svgId + '-line');
@@ -955,6 +969,68 @@ function drawSparkline(svgId, data, maxVal, threshPct, curId, curText, lineColor
   lineEl.setAttribute('d', linePath);
   var areaPath = linePath + ' L ' + pts[pts.length-1][0] + ' ' + H + ' L ' + pts[0][0] + ' ' + H + ' Z';
   if (areaEl) areaEl.setAttribute('d', areaPath);
+
+  // Store state for hover lookup
+  _sparkState[svgId] = { data: data, maxVal: maxVal, threshPct: threshPct, pts: pts, W: W, H: H, lineColor: lineColor };
+
+  // Wire up hover only once per SVG
+  var hoverEl = document.getElementById(svgId + '-hover');
+  if (hoverEl && !hoverEl._hooked) {
+    hoverEl._hooked = true;
+    hoverEl.addEventListener('mousemove', function(e) { sparkHover(e, svgId); });
+    hoverEl.addEventListener('mouseleave', function()  { sparkLeave(svgId); });
+  }
+}
+
+function sparkHover(e, svgId) {
+  var svg   = document.getElementById(svgId);
+  var st    = _sparkState[svgId];
+  var tip   = document.getElementById('spark-tooltip');
+  var xhair = document.getElementById(svgId + '-xhair');
+  var dot   = document.getElementById(svgId + '-dot');
+  if (!svg || !st || !tip) return;
+
+  // Map mouse → SVG coordinate space
+  var rect  = svg.getBoundingClientRect();
+  var svgX  = ((e.clientX - rect.left) / rect.width)  * st.W;
+  var svgY  = ((e.clientY - rect.top)  / rect.height) * st.H;
+
+  // Check if hovering within ±4px of the threshold line
+  var threshY = st.H - (st.threshPct / st.maxVal) * st.H;
+  var onThresh = Math.abs(svgY - threshY) < 4;
+
+  if (onThresh) {
+    tip.innerHTML = 'Threshold: <b>' + st.threshPct.toFixed(1) + '%</b>';
+    if (xhair) xhair.setAttribute('display', 'none');
+    if (dot)   dot.setAttribute('display', 'none');
+  } else {
+    // Nearest data point by X
+    var idx = Math.round((svgX / st.W) * (st.data.length - 1));
+    idx = Math.max(0, Math.min(st.data.length - 1, idx));
+    var val = st.data[idx];
+    var px  = st.pts[idx][0];
+    var py  = st.pts[idx][1];
+    tip.innerHTML = '<b>' + val.toFixed(1) + '%</b>';
+    if (xhair) { xhair.setAttribute('x1', px); xhair.setAttribute('x2', px); xhair.setAttribute('display', ''); }
+    if (dot)   { dot.setAttribute('cx', px); dot.setAttribute('cy', py); dot.setAttribute('stroke', st.lineColor); dot.setAttribute('display', ''); }
+  }
+
+  // Position tooltip near cursor, keeping it on screen
+  var tx = e.clientX + 12, ty = e.clientY - 28;
+  if (tx + 120 > window.innerWidth)  tx = e.clientX - 130;
+  if (ty < 0) ty = e.clientY + 14;
+  tip.style.left    = tx + 'px';
+  tip.style.top     = ty + 'px';
+  tip.style.display = 'block';
+}
+
+function sparkLeave(svgId) {
+  var tip   = document.getElementById('spark-tooltip');
+  var xhair = document.getElementById(svgId + '-xhair');
+  var dot   = document.getElementById(svgId + '-dot');
+  if (tip)   tip.style.display = 'none';
+  if (xhair) xhair.setAttribute('display', 'none');
+  if (dot)   dot.setAttribute('display', 'none');
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
