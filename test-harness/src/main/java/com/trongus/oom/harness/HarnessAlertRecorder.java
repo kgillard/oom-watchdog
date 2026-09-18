@@ -25,7 +25,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * {@link TestHarnessMain#printResults} — never need to hold an external lock.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.9
+ * @version 1.7.10
  * @since 1.0.0
  * @see com.trongus.oom.alert.AlertChannel
  * @see com.trongus.oom.model.JvmSnapshot

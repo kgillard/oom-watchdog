@@ -69,6 +69,22 @@ import java.util.logging.Logger;
  * {@code cat} and {@code tags} LEEF attributes without requiring awareness of the
  * {@code TargetDescriptor}.
  *
+ * <h2>Remote JVM Detail Fields</h2>
+ * <p>Since 1.7.10, each snapshot also carries the full set of JVM process-detail fields
+ * populated directly from the remote JVM over JMX:
+ * <ul>
+ *   <li>{@code javaHome}, {@code jvmName}, {@code javaVersion} — from
+ *       {@link RuntimeMXBean#getSystemProperties()}</li>
+ *   <li>{@code osName}, {@code cpuCount} — from {@link OperatingSystemMXBean}</li>
+ *   <li>{@code processCpuPct}, {@code processCpuMs} — from
+ *       {@code com.sun.management.OperatingSystemMXBean} if available on the remote JVM;
+ *       {@code -1.0} / {@code -1L} otherwise</li>
+ *   <li>{@code jvmInputArgs} — from {@link RuntimeMXBean#getInputArguments()}</li>
+ *   <li>{@code javaCommand} — from {@code sun.java.command} system property</li>
+ *   <li>{@code threadCount}, {@code peakThreadCount} — from {@link ThreadMXBean}</li>
+ * </ul>
+ * These fields power the <em>JVM Detail</em> card in the monitoring dashboard.
+ *
  * <h2>Security</h2>
  * <p>JMX credentials are never logged; connection errors are masked and sanitized.
  *
@@ -78,7 +94,7 @@ import java.util.logging.Logger;
  * allow safe use from multiple threads if required.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.9
+ * @version 1.7.10
  * @since 1.7.0
  * @see TargetDescriptor
  * @see JvmDiagnosticsCollector

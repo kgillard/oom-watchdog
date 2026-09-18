@@ -522,7 +522,7 @@ flowchart TD
 ## Module Structure
 
 ```
-oom-watchdog/                  Maven multi-module root (v1.7.9)
+oom-watchdog/                  Maven multi-module root (v1.7.10)
 ├── core/                      oom-watchdog.jar  (fat jar via maven-shade-plugin)
 │   └── src/main/java/com/trongus/oom/
 │       ├── WatchdogMain.java  CLI entry point (local + daemon modes)
@@ -568,19 +568,20 @@ oom-watchdog/                  Maven multi-module root (v1.7.9)
 │       ├── BuiltInHeapExhauster.java
 │       └── HarnessAlertRecorder.java      (CopyOnWriteArrayList + AtomicInteger)
 │
-└── oom-watchdog-tests/        JUnit 4 test suite (239 tests)
+└── oom-watchdog-tests/        JUnit 4 test suite (242 tests)
     └── src/test/java/com/trongus/oom/tests/
         ├── OomWatchdogTestSuite.java
         ├── model/             OomRiskLevelTest, JvmSnapshotTest
         ├── config/            WatchdogConfigTest
         ├── dump/              DumpTypeTest, CompositeDumpServiceTest
-        ├── alert/             AlertFormatterTest, FileLogAlertChannelTest
+        ├── alert/             AlertFormatterTest, FileLogAlertChannelTest,
+        │                      QRadarAlertChannelTest
         ├── collector/         MxBeanDiagnosticsCollectorTest
         ├── monitor/           ThresholdRiskAssessorTest
         ├── platform/          JvmPlatformTest
         ├── remote/            TargetDescriptorTest, TargetRegistryTest,
         │                      WatchdogDaemonTest
-        └── integration/       OomWatchdogIntegrationTest
+        └── integration/       OomWatchdogIntegrationTest, QRadarPipelineTest
 ```
 
 ---
@@ -687,8 +688,8 @@ Pass 5 identified and fixed 4 issues in the remote JMX monitoring subsystem.
 
 ## Release Artefacts
 
-The v1.7.9 release publishes two executable fat JARs built with `maven-shade-plugin`.
-Both will be attached to the [GitHub release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.9).
+The v1.7.10 release publishes two executable fat JARs built with `maven-shade-plugin`.
+Both will be attached to the [GitHub release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.10).
 
 | Artefact | Main class | Contents | Size (approx) |
 |----------|-----------|----------|---------------|
