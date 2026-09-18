@@ -15,6 +15,7 @@ import com.trongus.oom.monitor.OomWatchdog;
 import com.trongus.oom.monitor.RiskAssessor;
 import com.trongus.oom.monitor.ThresholdRiskAssessor;
 import com.trongus.oom.monitor.MetricsHttpServer;
+import com.trongus.oom.monitor.TlsConfig;
 import com.trongus.oom.remote.TargetDescriptor;
 import com.trongus.oom.remote.TargetRegistry;
 import com.trongus.oom.remote.WatchdogDaemon;
@@ -181,7 +182,7 @@ import java.util.logging.Logger;
  * }</pre>
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.3
+ * @version 1.7.4
  * @since 1.0.0
  * @see com.trongus.oom.config.WatchdogConfig
  * @see com.trongus.oom.monitor.OomWatchdog
@@ -289,6 +290,22 @@ public final class WatchdogMain {
             daemon.start();
             printDaemonSummary(targets, config, cli);
 
+            // ── Metrics HTTPS server for daemon mode ──────────────────────────
+            if (cli.metricsPort > 0) {
+                try {
+                    TlsConfig tls = buildTlsConfig(cli);
+                    MetricsHttpServer metricsServer = new MetricsHttpServer(
+                            null, daemon.getActiveWatchdogs(), cli.metricsPort, false, tls);
+                    metricsServer.start();
+                    Runtime.getRuntime().addShutdownHook(
+                            new Thread(metricsServer::stop, "oom-metrics-shutdown"));
+                } catch (Exception e) {
+                    WatchdogLogger.warning(LOG, e,
+                            "Failed to start metrics HTTPS server on port {0}: {1}",
+                            cli.metricsPort, e.getMessage());
+                }
+            }
+
             Thread.currentThread().join();
             return;
         }
@@ -314,16 +331,18 @@ public final class WatchdogMain {
         // Launch watchdog monitoring loop
         watchdog.start();
 
-        // ── Metrics HTTP server (optional dashboard support) ──────────────────
+        // ── Metrics HTTPS server (optional dashboard support) ─────────────────
         if (cli.metricsPort > 0) {
             try {
-                MetricsHttpServer metricsServer = new MetricsHttpServer(watchdog, cli.metricsPort, false);
+                TlsConfig tls = buildTlsConfig(cli);
+                MetricsHttpServer metricsServer = new MetricsHttpServer(
+                        watchdog, cli.metricsPort, false, tls);
                 metricsServer.start();
                 Runtime.getRuntime().addShutdownHook(
                         new Thread(metricsServer::stop, "oom-metrics-shutdown"));
             } catch (Exception e) {
                 WatchdogLogger.warning(LOG, e,
-                        "Failed to start metrics HTTP server on port {0}: {1}",
+                        "Failed to start metrics HTTPS server on port {0}: {1}",
                         cli.metricsPort, e.getMessage());
             }
         }
@@ -339,6 +358,35 @@ public final class WatchdogMain {
 
         // Block main thread in production mode
         Thread.currentThread().join(); // block in production mode
+    }
+
+    // =========================================================================
+    // TLS config builder
+    // =========================================================================
+
+    /**
+     * Builds a {@link TlsConfig} from the parsed CLI arguments.
+     *
+     * <ul>
+     *   <li>If {@code --metrics-no-tls} is set → {@link TlsConfig#disabled()}</li>
+     *   <li>If {@code --metrics-cert} is set → {@link TlsConfig#fromKeystore(String, char[])}</li>
+     *   <li>Otherwise → {@link TlsConfig#selfSigned()} (default, auto-generated cert)</li>
+     * </ul>
+     *
+     * @param cli the parsed CLI arguments
+     * @return the appropriate {@link TlsConfig}; never {@code null}
+     */
+    private static TlsConfig buildTlsConfig(CliArgs cli) {
+        if (cli.metricsNoTls) {
+            return TlsConfig.disabled();
+        }
+        if (cli.metricsCert != null && !cli.metricsCert.trim().isEmpty()) {
+            char[] pwd = cli.metricsCertPassword != null
+                    ? cli.metricsCertPassword.toCharArray()
+                    : new char[0];
+            return TlsConfig.fromKeystore(cli.metricsCert, pwd);
+        }
+        return TlsConfig.selfSigned();
     }
 
     // =========================================================================
@@ -500,7 +548,7 @@ public final class WatchdogMain {
      * applying defaults and basic range validation.
      *
      * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
-     * @version 1.7.3
+     * @version 1.7.4
      * @since 1.0.0
      * @see WatchdogMain
      */
@@ -560,6 +608,24 @@ public final class WatchdogMain {
         /** TCP port for the metrics HTTP server; 0 = disabled. */
         int metricsPort = 0;
 
+        /**
+         * Path to a PKCS#12 or JKS keystore file for the metrics HTTPS server.
+         * {@code null} = use auto-generated self-signed certificate (default).
+         */
+        String metricsCert = null;
+
+        /**
+         * Password for the {@link #metricsCert} keystore.
+         * {@code null} when no keystore is configured.
+         */
+        String metricsCertPassword = null;
+
+        /**
+         * When {@code true}, the metrics server uses plain HTTP (TLS disabled).
+         * Use only for loopback/internal-only deployments.
+         */
+        boolean metricsNoTls = false;
+
         /** Whether the help flag was requested. */
         boolean help = false;
 
@@ -591,6 +657,9 @@ public final class WatchdogMain {
                     case "--test-leak-secs":c.testLeakSecs   = nextLong(list, i++, arg);     break;
                     case "--qradar-port":   c.qradarPort     = nextInt(list, i++, arg);      break;
                     case "--metrics-port":  c.metricsPort    = nextInt(list, i++, arg);      break;
+                    case "--metrics-cert":  c.metricsCert    = nextStr(list, i++, arg);      break;
+                    case "--metrics-cert-password": c.metricsCertPassword = nextStr(list, i++, arg); break;
+                    case "--metrics-no-tls": c.metricsNoTls  = true;                         break;
                     case "--dump-dir":      c.dumpDir        = nextStr(list, i++, arg);      break;
                     case "--log-file":      c.logFile        = nextStr(list, i++, arg);      break;
                     case "--log-level":     c.logLevel       = parseLogLevel(nextStr(list, i++, arg)); break;

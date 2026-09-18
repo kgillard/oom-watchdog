@@ -44,7 +44,7 @@ import java.util.logging.Logger;
  * <p>All lifecycle operations ({@link #start()} and {@link #stop()}) are thread-safe and guarded.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.3
+ * @version 1.7.4
  * @since 1.7.0
  * @see TargetDescriptor
  * @see TargetRegistry
@@ -216,6 +216,16 @@ public final class WatchdogDaemon implements Closeable {
      */
     public synchronized int getActiveWatchdogCount() {
         return activeWatchdogs.size();
+    }
+
+    /**
+     * Returns a snapshot of the currently active watchdog instances keyed by target name.
+     * Intended for use by the metrics HTTP server to serve per-target data.
+     *
+     * @return unmodifiable copy of the active watchdog map; never {@code null}
+     */
+    public synchronized Map<String, OomWatchdog> getActiveWatchdogs() {
+        return Collections.unmodifiableMap(new LinkedHashMap<>(activeWatchdogs));
     }
 
     @Override

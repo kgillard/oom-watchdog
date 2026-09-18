@@ -87,7 +87,7 @@ import java.util.logging.Logger;
  * argument list in the Cognos service configuration.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.3
+ * @version 1.7.4
  * @since 1.2.0
  * @see AlertChannel
  * @see WasAlertChannel
@@ -136,7 +136,18 @@ public final class CognosAlertChannel implements AlertChannel {
         }
         this.cognosComponent = cognosComponent.trim();
         this.cognosServer    = resolveHostname();
-        this.logPath         = Paths.get(logFilePath);
+        // Canonicalise the path to prevent path-traversal attacks when logFilePath is
+        // derived from user-supplied configuration (e.g. targets.properties).
+        java.nio.file.Path raw = Paths.get(logFilePath);
+        java.nio.file.Path canonical;
+        try {
+            canonical = raw.toAbsolutePath().normalize();
+        } catch (Exception ex) {
+            WatchdogLogger.warning(DIAG, ex, "Could not normalise Cognos log path [{0}]: {1}",
+                    logFilePath, ex.getMessage());
+            canonical = raw;
+        }
+        this.logPath = canonical;
 
         try {
             if (logPath.getParent() != null) {

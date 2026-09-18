@@ -52,7 +52,7 @@ import java.util.logging.Level;
  * </table>
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.3
+ * @version 1.7.4
  * @since 1.0.0
  */
 public final class WatchdogConfig {

@@ -28,7 +28,7 @@ import java.util.Date;
  * or {@code getThreadId()} on older versions), state, stack trace, held monitors,
  * and held synchronizers.
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.3
+ * @version 1.7.4
  * @since 1.7.0
  */
 public final class ThreadDumpStrategy implements DumpStrategy {
@@ -128,7 +128,7 @@ public final class ThreadDumpStrategy implements DumpStrategy {
      * (non-deprecated) and falling back to {@code getThreadId()} via reflection
      * for JDK 8–18 where {@code threadId()} doesn't exist.
      * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.3
+ * @version 1.7.4
  * @since 1.7.0
  */
     @SuppressWarnings("deprecation")

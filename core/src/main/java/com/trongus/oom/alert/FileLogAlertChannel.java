@@ -21,8 +21,13 @@ import java.util.logging.Logger;
  * A separate detailed multi-line entry is also appended so the file can be
  * both machine-parsed and human-read.
  *
+ * <h2>Security</h2>
+ * <p>The supplied path is normalised to its canonical form at construction time to
+ * prevent path-traversal attacks (e.g. {@code ../../etc/cron.d/evil}) when the
+ * path is derived from user-supplied configuration.
+ *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.3
+ * @version 1.7.4
  * @since 1.0.0
  */
 public final class FileLogAlertChannel implements AlertChannel {
@@ -34,11 +39,23 @@ public final class FileLogAlertChannel implements AlertChannel {
     /**
      * Constructs a file log channel writing to the specified path.
      *
+     * <p>The path is resolved to its canonical (normalised, absolute) form to prevent
+     * path-traversal if the value originates from user-supplied configuration.
+     *
      * @param logFilePath absolute or relative path to the log file;
      *                    parent directories are created if they do not exist
      */
     public FileLogAlertChannel(String logFilePath) {
-        this.logPath = Paths.get(logFilePath);
+        Path raw = Paths.get(logFilePath);
+        Path canonical;
+        try {
+            canonical = raw.toAbsolutePath().normalize();
+        } catch (Exception e) {
+            WatchdogLogger.warning(LOG, e, "Could not normalise log path [{0}]: {1}",
+                    logFilePath, e.getMessage());
+            canonical = raw;
+        }
+        this.logPath = canonical;
         try {
             if (logPath.getParent() != null) {
                 Files.createDirectories(logPath.getParent());

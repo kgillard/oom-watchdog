@@ -95,12 +95,52 @@ classDiagram
         -ScheduledFuture task
         -AtomicBoolean dumpTakenThisEpisode
         -AtomicReference~OomRiskLevel~ lastLevel
+        -AtomicReference~JvmSnapshot~ lastSnapshot
         +OomWatchdog(WatchdogConfig, JvmDiagnosticsCollector, RiskAssessor, List, HeapDumpService)
         +start()
         +stop()
         +getLastRiskLevel() OomRiskLevel
+        +getLastSnapshot() JvmSnapshot
         -poll()
         -checkDumpThresholds(JvmSnapshot)
+    }
+
+    class MetricsHttpServer {
+        -OomWatchdog selfWatchdog
+        -Map~String,OomWatchdog~ remoteWatchdogs
+        -int port
+        -boolean bindAll
+        -TlsConfig tlsConfig
+        -AtomicReference~SSLContext~ sslContextRef
+        +MetricsHttpServer(OomWatchdog, int, boolean, TlsConfig)
+        +MetricsHttpServer(OomWatchdog, Map, int, boolean, TlsConfig)
+        +start()
+        +stop()
+        -buildSslContext() SSLContext
+        -generateSelfSignedKeystore(char[]) KeyStore
+        -buildLiveJson(JvmSnapshot, String) String
+        -buildSnapshotJson(JvmSnapshot, String) String
+    }
+
+    class TlsConfig {
+        <<immutable>>
+        -Mode mode
+        -int selfSignedValidDays
+        -String keystorePath
+        -char[] keystorePassword
+        +disabled() TlsConfig
+        +selfSigned() TlsConfig
+        +selfSigned(int) TlsConfig
+        +fromKeystore(String, char[]) TlsConfig
+        +getMode() Mode
+        +isKeystoreReadable() boolean
+    }
+
+    class Mode {
+        <<enumeration>>
+        DISABLED
+        SELF_SIGNED
+        KEYSTORE
     }
 
     class JvmDiagnosticsCollector {
@@ -401,6 +441,10 @@ classDiagram
     OomCauseAnalyser --> OomCause
     OomCause --> OomCauseCategory
     JvmSnapshot --> OomRiskLevel
+    MetricsHttpServer --> OomWatchdog
+    MetricsHttpServer --> TlsConfig
+    TlsConfig --> Mode
+    WatchdogDaemon --> MetricsHttpServer
 ```
 
 ---
@@ -477,7 +521,7 @@ flowchart TD
 ## Module Structure
 
 ```
-oom-watchdog/                  Maven multi-module root (v1.7.3)
+oom-watchdog/                  Maven multi-module root (v1.7.4)
 ├── core/                      oom-watchdog.jar  (fat jar via maven-shade-plugin)
 │   └── src/main/java/com/trongus/oom/
 │       ├── WatchdogMain.java  CLI entry point (local + daemon modes)
@@ -638,8 +682,8 @@ Pass 5 identified and fixed 4 issues in the remote JMX monitoring subsystem.
 
 ## Release Artefacts
 
-The v1.7.3 release publishes two executable fat JARs built with `maven-shade-plugin`.
-Both will be attached to the [GitHub release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.3).
+The v1.7.4 release publishes two executable fat JARs built with `maven-shade-plugin`.
+Both will be attached to the [GitHub release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.4).
 
 | Artefact | Main class | Contents | Size (approx) |
 |----------|-----------|----------|---------------|

@@ -7,18 +7,18 @@
 [![Security Audit](https://img.shields.io/badge/security%20audit-4%20passes%20clean-brightgreen)]()
 [![JDK](https://img.shields.io/badge/JDK-8%20%E2%80%93%2026%2B-blue)]()
 [![Vendors](https://img.shields.io/badge/JVM-HotSpot%20%7C%20OpenJ9%20%7C%20GraalVM-blue)]()
-[![Release](https://img.shields.io/badge/release-v1.7.3-blue)](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.3)
+[![Release](https://img.shields.io/badge/release-v1.7.4-blue)](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.4)
 
 ---
 
 ## Download
 
-Pre-built JARs are available in the [v1.7.3 release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.3):
+Pre-built JARs are available in the [v1.7.4 release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.4):
 
 | Artefact | Description | Size |
 |----------|-------------|------|
-| [`oom-watchdog.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.7.3/oom-watchdog.jar) | Fat JAR — monitoring agent + CLI entry point | ~157 KB |
-| [`test-harness.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.7.3/test-harness.jar) | Fat JAR — interactive OOM test harness | ~171 KB |
+| [`oom-watchdog.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.7.4/oom-watchdog.jar) | Fat JAR — monitoring agent + CLI entry point | ~157 KB |
+| [`test-harness.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.7.4/test-harness.jar) | Fat JAR — interactive OOM test harness | ~171 KB |
 
 ---
 
@@ -49,7 +49,7 @@ OOM Watchdog provides real-time health monitoring, per-process logging named aft
 ```bash
 # Download the release JAR or self-extracting installer
 curl -L -o oom-watchdog.jar \
-  https://github.com/kgillard/oom-watchdog/releases/download/v1.7.3/oom-watchdog.jar
+  https://github.com/kgillard/oom-watchdog/releases/download/v1.7.4/oom-watchdog.jar
 
 # Run in multi-target daemon mode (monitors external JVMs over JMX)
 java -jar oom-watchdog.jar --daemon --targets-file /etc/oom-watchdog/targets.properties
@@ -120,7 +120,10 @@ chmod +x oom-watchdog-installer.sh
 | `--qradar-host <host>` | _(disabled)_ | QRadar / syslog target hostname |
 | `--qradar-port <port>` | `514` | QRadar / syslog target port (1–65535) |
 | `--qradar-tcp` | _(off)_ | Use TCP instead of UDP for QRadar |
-| `--metrics-port <port>` | _(disabled)_ | Start JSON metrics HTTP server for `dashboard.html` |
+| `--metrics-port <port>` | _(disabled)_ | Start HTTPS metrics server for `dashboard.html` |
+| `--metrics-cert <path>` | _(auto self-signed)_ | PKCS#12 / JKS keystore for the metrics HTTPS server |
+| `--metrics-cert-password <pwd>` | _(empty)_ | Password for the `--metrics-cert` keystore |
+| `--metrics-no-tls` | _(off)_ | Use plain HTTP instead of HTTPS for the metrics server |
 | `--test-mode` | _(off)_ | Run OomSimulator and exit |
 | `--daemon` | _(off)_ | Run in multi-target daemon mode monitoring external JVMs via JMX |
 | `--targets-file <path>` | `./targets.properties` | Path to targets configuration file in daemon mode |
@@ -1152,7 +1155,7 @@ chmod +x make-installer.sh
 ## Real-time Dashboard
 
 OOM Watchdog includes a self-contained browser dashboard (`dashboard.html`) that displays
-live JVM health metrics by polling the built-in metrics HTTP endpoint.
+live JVM health metrics per monitored target, with rolling sparkline charts and per-target tabs.
 
 ### Enabling the metrics endpoint
 
@@ -1166,16 +1169,37 @@ java -Xmx256m -jar oom-watchdog.jar \
     --crit-threshold 0.90
 ```
 
-This starts a lightweight HTTP server on `http://localhost:9090` alongside the normal
+This starts a lightweight **HTTPS** server on `https://localhost:9090` alongside the normal
 watchdog. The server exposes two endpoints:
 
 | Endpoint | Method | Response |
 |---|---|---|
-| `/metrics` | GET | JSON object with the current JVM snapshot (see below) |
+| `/metrics` | GET | JSON object — self-monitoring JVM metrics |
+| `/metrics/all` | GET | JSON array — one entry per monitored target (daemon mode) |
 | `/` | GET | 302 redirect to `/metrics` |
 
-The server binds to **loopback only** (`127.0.0.1`) by default. It is not exposed on the
-network.
+The server binds to **loopback only** (`127.0.0.1`) by default.
+
+#### TLS / HTTPS
+
+The metrics server defaults to HTTPS using an **auto-generated, in-memory self-signed certificate**
+(RSA-2048, 90-day validity, renewed automatically on expiry). No keystore file or configuration
+is needed for the default setup.
+
+| Scenario | Flags |
+|---|---|
+| Default — auto self-signed cert | _(no extra flags)_ |
+| Production — real certificate | `--metrics-cert /path/to/server.p12 --metrics-cert-password <pwd>` |
+| Trusted CA via Let's Encrypt | `--metrics-cert /path/to/fullchain.p12 --metrics-cert-password <pwd>` |
+| Plain HTTP (loopback only) | `--metrics-no-tls` |
+
+> **Browser note:** When using the self-signed certificate, your browser will show a security
+> warning ("Your connection is not private"). This is expected — click **Advanced → Proceed** to
+> open the dashboard. The cert protects the transport; it is just not signed by a trusted CA.
+
+Only **TLS 1.2 and TLS 1.3** are accepted. Weak cipher suites (RC4, 3DES, CBC without HMAC-SHA2,
+export-grade) are disabled. All responses include `X-Content-Type-Options: nosniff`,
+`Cache-Control: no-store`, and `X-Frame-Options: DENY`.
 
 ### Opening the dashboard
 
@@ -1202,32 +1226,38 @@ python3 -m http.server 8080
 
 ### Using the dashboard
 
-1. In the **Server URL** field at the top, enter `http://localhost:9090` (or the host/port you used).
-2. Click **Connect**.
-3. The dashboard polls `/metrics` every 2 seconds and displays:
+1. In the **Server** field at the top, enter `https://localhost:9090` (or your host/port).
+2. Select a polling interval (1 s / 2 s / 5 s / 10 s).
+3. Click **Connect**.
+4. The dashboard displays real-time data per monitored target on separate tabs:
 
 | Panel | What it shows |
 |---|---|
-| **Heap Usage** | Used MB / Max MB + percentage gauge |
-| **GC Overhead** | CPU fraction spent in GC + colour-coded gauge |
-| **Young Gen / Nursery** | Young-gen pool usage gauge (G1, Shenandoah, ZGC) |
-| **Non-Heap (Metaspace)** | Metaspace + code cache MB |
+| **Heap Usage** | Used MB / Max MB + live gauge |
+| **GC Overhead** | CPU fraction in GC + sparkline chart (last 60 samples) |
+| **Young Gen** | Young-gen pool usage gauge |
+| **Non-Heap** | Metaspace + code cache MB |
 | **JVM Process** | Process name, uptime, critical threshold, last poll time |
-| **Risk Level** | Current `OK` / `WARNING` / `CRITICAL` / `OOM_FIRING` with colour |
+| **Risk Level** | Current `OK` / `WARNING` / `CRITICAL` / `OOM_FIRING` with colour badge |
+| **Sparkline Charts** | 60-sample rolling charts for Heap %, GC Overhead %, Young Gen % |
 | **Diagnosis** | Full assessment text from `ThresholdRiskAssessor` |
 | **Memory Pools** | All JVM memory pool usages in MB |
 | **GC Collections** | Per-collector invocation counts |
-| **Alert History** | Rolling log of the last 50 WARNING/CRITICAL/OOM_FIRING events |
+| **Alert History** | Per-target rolling log of WARNING/CRITICAL/OOM_FIRING events |
+
+Each tab header shows a colour dot indicating the target's current risk level.
+In daemon mode (multiple remote JVMs) each target appears as a separate tab.
 
 ### CORS — accessing a remote JVM
 
 The metrics server includes `Access-Control-Allow-Origin: *` on every response, so
 `dashboard.html` can poll a watchdog running on a different host — just enter
-`http://<remote-host>:<port>` in the Server URL field.
+`https://<remote-host>:<port>` in the Server field.
 
 > **Security:** The metrics endpoint has no authentication. Only bind to loopback when
 > the watchdog host is publicly reachable. If you need network access, place it behind
-> a reverse proxy with authentication (e.g. nginx `auth_basic`).
+> a reverse proxy with authentication (e.g. nginx `auth_basic`) and supply a real certificate
+> via `--metrics-cert`.
 
 ### JSON metrics schema
 
