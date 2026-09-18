@@ -855,18 +855,18 @@ function renderPane(name) {
   setEl(s + '-diag', d.diagnosisNotes || '—');
 
   // JVM detail card
-  setEl(s + '-jvm-home',     d.javaHome    || '—');
-  setEl(s + '-jvm-name',     d.jvmName     || '—');
-  setEl(s + '-jvm-version',  d.javaVersion || '—');
-  setEl(s + '-jvm-os',       d.osName      || '—');
-  setEl(s + '-jvm-cpus',     d.cpuCount != null ? d.cpuCount + ' logical cores' : '—');
-  setEl(s + '-jvm-heap',     fmt1(d.heapUsedMB)   + ' MB');
-  setEl(s + '-jvm-heap-max', fmt1(d.heapMaxMB)    + ' MB');
+  setEl(s + '-jvm-home',     nvl(d.javaHome));
+  setEl(s + '-jvm-name',     nvl(d.jvmName));
+  setEl(s + '-jvm-version',  nvl(d.javaVersion));
+  setEl(s + '-jvm-os',       nvl(d.osName));
+  setEl(s + '-jvm-cpus',     d.cpuCount > 0 ? d.cpuCount + ' logical cores' : '—');
+  setEl(s + '-jvm-heap',     fmt1(d.heapUsedMB)    + ' MB');
+  setEl(s + '-jvm-heap-max', fmt1(d.heapMaxMB)     + ' MB');
   setEl(s + '-jvm-nonheap',  fmt1(d.nonHeapUsedMB) + ' MB');
   setEl(s + '-jvm-gc-ovhd',  fmt2(d.gcOverheadPct) + '%');
-  setEl(s + '-jvm-threads',  (d.threadCount || '—') + (d.peakThreadCount ? ' (peak ' + d.peakThreadCount + ')' : ''));
-  setEl(s + '-jvm-flags',    d.jvmInputArgs || '—');
-  setEl(s + '-jvm-cmd',      d.javaCommand  || '—');
+  setEl(s + '-jvm-threads',  d.threadCount > 0 ? d.threadCount + (d.peakThreadCount > 0 ? ' (peak ' + d.peakThreadCount + ')' : '') : '—');
+  setEl(s + '-jvm-flags',    nvl(d.jvmInputArgs));
+  setEl(s + '-jvm-cmd',      nvl(d.javaCommand));
 
   var cpuPct = parseFloat(d.processCpuPct);
   var cpuEl  = document.getElementById(s + '-jvm-cpu-pct');
@@ -948,6 +948,8 @@ function drawSparkline(svgId, data, maxVal, threshPct, curId, curText, lineColor
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 function setEl(id, val)  { var e = document.getElementById(id); if (e) e.textContent = val; }
+// nvl: show '—' for null, undefined, or empty/whitespace-only strings
+function nvl(v) { return (v != null && String(v).trim() !== '') ? String(v) : '—'; }
 
 function setGauge(id, pct, color) {
   var e = document.getElementById(id);

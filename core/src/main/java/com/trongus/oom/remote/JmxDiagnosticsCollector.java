@@ -19,7 +19,9 @@ import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
 import java.lang.management.MemoryPoolMXBean;
 import java.lang.management.MemoryUsage;
+import java.lang.management.OperatingSystemMXBean;
 import java.lang.management.RuntimeMXBean;
+import java.lang.management.ThreadMXBean;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -210,6 +212,51 @@ public final class JmxDiagnosticsCollector implements JvmDiagnosticsCollector, C
             String remoteProcessName = runtimeMx.getName(); // e.g. "54321@remotehost"
             double gcOverhead = (uptime > 0) ? (double) totalGcTime / uptime : 0.0;
 
+            // ── Remote JVM process detail ────────────────────────────────────
+            // Read via standard MXBean proxies — same fields shown in the
+            // JVM Process Detail card on the dashboard.
+            String javaHome    = safeSystemProp(runtimeMx, "java.home");
+            String javaVersion = safeSystemProp(runtimeMx, "java.version")
+                               + " (" + safeSystemProp(runtimeMx, "java.vendor") + ")";
+            String jvmName     = safeSystemProp(runtimeMx, "java.vm.name")
+                               + " " + safeSystemProp(runtimeMx, "java.vm.version");
+            String jvmInputArgs;
+            try {
+                List<String> args = runtimeMx.getInputArguments();
+                StringBuilder sb2 = new StringBuilder();
+                for (int i = 0; i < args.size(); i++) {
+                    if (i > 0) sb2.append(' ');
+                    sb2.append(args.get(i));
+                }
+                jvmInputArgs = sb2.toString();
+            } catch (Exception ignored) { jvmInputArgs = ""; }
+            String javaCommand = safeSystemProp(runtimeMx, "sun.java.command");
+
+            OperatingSystemMXBean osMx = ManagementFactory.newPlatformMXBeanProxy(
+                    mbsc, ManagementFactory.OPERATING_SYSTEM_MXBEAN_NAME, OperatingSystemMXBean.class);
+            String osName   = osMx.getName() + " " + osMx.getVersion() + " (" + osMx.getArch() + ")";
+            int    cpuCount = osMx.getAvailableProcessors();
+            // Process CPU via com.sun.management extension (graceful -1 fallback)
+            double cpuPct = -1.0;
+            long   cpuMs  = -1L;
+            try {
+                Class<?> sunOs = Class.forName("com.sun.management.OperatingSystemMXBean");
+                Object   sunBean = ManagementFactory.newPlatformMXBeanProxy(
+                        mbsc, ManagementFactory.OPERATING_SYSTEM_MXBEAN_NAME,
+                        (Class<OperatingSystemMXBean>) sunOs);
+                java.lang.reflect.Method pcl = sunOs.getMethod("getProcessCpuLoad");
+                Object v = pcl.invoke(sunBean);
+                if (v instanceof Double && (Double) v >= 0) cpuPct = (Double) v * 100.0;
+                java.lang.reflect.Method pct = sunOs.getMethod("getProcessCpuTime");
+                Object t = pct.invoke(sunBean);
+                if (t instanceof Long && (Long) t >= 0) cpuMs = (Long) t / 1_000_000L;
+            } catch (Exception ignored) { /* extension unavailable on remote JVM */ }
+
+            ThreadMXBean threadMx = ManagementFactory.newPlatformMXBeanProxy(
+                    mbsc, ManagementFactory.THREAD_MXBEAN_NAME, ThreadMXBean.class);
+            int threadCount = threadMx.getThreadCount();
+            int peakThreads = threadMx.getPeakThreadCount();
+
             // ── Post-GC Trend ────────────────────────────────────────────────
             long   postGcSample = -1L;
             double growthRate   = Double.NaN;
@@ -256,6 +303,18 @@ public final class JmxDiagnosticsCollector implements JvmDiagnosticsCollector, C
                     .diagnosisNotes(notes)
                     .leefCategory(descriptor.getLeefCategory())
                     .leefTags(descriptor.getLeefTags())
+                    // JVM process detail — populated from remote MXBeans
+                    .javaHome(javaHome)
+                    .javaVersion(javaVersion)
+                    .jvmName(jvmName)
+                    .osName(osName)
+                    .cpuCount(cpuCount)
+                    .processCpuPct(cpuPct)
+                    .processCpuMs(cpuMs)
+                    .jvmInputArgs(jvmInputArgs)
+                    .javaCommand(javaCommand)
+                    .threadCount(threadCount)
+                    .peakThreadCount(peakThreads)
                     .build();
 
         } catch (Exception e) {
@@ -351,6 +410,21 @@ public final class JmxDiagnosticsCollector implements JvmDiagnosticsCollector, C
                 .leefCategory(descriptor.getLeefCategory())
                 .leefTags(descriptor.getLeefTags())
                 .build();
+    }
+
+    /**
+     * Reads a single system property from a remote {@link RuntimeMXBean}.
+     * Returns an empty string if the property is absent or the call fails
+     * (e.g. the remote JVM has restricted {@code java.management} access).
+     */
+    private static String safeSystemProp(RuntimeMXBean runtimeMx, String key) {
+        try {
+            Map<String, String> props = runtimeMx.getSystemProperties();
+            String v = props.get(key);
+            return v != null ? v : "";
+        } catch (Exception ignored) {
+            return "";
+        }
     }
 
     private static double computeSlope(List<long[]> points) {
