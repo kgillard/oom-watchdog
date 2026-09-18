@@ -777,7 +777,26 @@ If `nc` succeeds but the dashboard still shows the error — your browser's self
 | Heap gauge | Heap used as a percentage of maximum |
 | GC overhead | Fraction of CPU time spent garbage collecting |
 | Post-GC growth | Whether memory is gradually leaking (trending upward) |
+| Memory Pools | All JVM memory pool usages in MB |
+| GC Collections | Per-collector invocation counts |
+| **On-Demand Diagnostics** | **Thread Dump**, **Heap Dump**, and **Core Dump** buttons |
 | Alert history | Last N alerts with timestamps and diagnosis text |
+
+### Triggering a dump from the dashboard
+
+Each target tab in the dashboard has an **On-Demand Diagnostics** section.  You do not have to wait for a CRITICAL alert — you can request a dump at any time:
+
+1. Make sure the watchdog is connected (green status dot in the dashboard).
+2. If you have multiple targets, click the tab for the JVM you want to diagnose.
+3. Click one of the three buttons:
+   - **Thread Dump** — captures all thread stack traces (works on every JVM, always safe to run)
+   - **Heap Dump** — captures the full heap object graph (`.hprof` file, can be large)
+   - **Core Dump** — captures a full OS process dump (Linux / IBM J9 only)
+4. The dashboard shows a green confirmation with the full file path once the dump is written, or a red error message if it could not be produced.
+
+> **Where is the file?**  The dump is written to the `--dump-dir` directory on the **server running the watchdog**, not on your laptop.  The dashboard shows the exact path after the dump completes.
+
+> **Core dump availability:**  Core dumps require either IBM J9/OpenJ9 or the `gcore` tool to be installed on the server.  On Windows or with standard HotSpot the button will return an error — use Thread Dump or Heap Dump instead.
 
 ---
 

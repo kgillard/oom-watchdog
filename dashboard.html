@@ -152,8 +152,12 @@
       font-weight:   600;
       font-family:   inherit;
     }
-    .btn:hover  { opacity: 0.85; }
-    .btn.stop   { background: #374151; }
+    .btn:hover          { opacity: 0.85; }
+    .btn.stop           { background: #374151; }
+    .btn.dump-thread    { background: #1d4ed8; }
+    .btn.dump-heap      { background: #7c3aed; }
+    .btn.dump-core      { background: #b45309; }
+    .btn:disabled       { opacity: 0.45; cursor: not-allowed; }
 
     /* ── Connection status dot ─────────────────────────────────────────────── */
     #status-dot        { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
@@ -281,6 +285,15 @@
                          padding: 7px 10px; font-size: 12px; font-family: monospace;
                          color: #93c5fd; margin-top: 6px; word-break: break-all; display: none; }
     .dump-path.visible { display: block; }
+
+    /* ── On-demand dump buttons ────────────────────────────────────────────── */
+    .dump-actions       { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+    .dump-result        { margin-top: 8px; font-size: 12px; font-family: monospace;
+                          padding: 7px 10px; border-radius: 6px; word-break: break-all;
+                          display: none; }
+    .dump-result.ok     { background: #051409; border: 1px solid var(--ok);   color: #4ade80; display: block; }
+    .dump-result.err    { background: #1c0505; border: 1px solid var(--crit); color: #f87171; display: block; }
+    .dump-result.busy   { background: #0f172a; border: 1px solid var(--muted); color: var(--muted); display: block; }
 
     /* ── Process info key/value grid ───────────────────────────────────────── */
     .info-grid { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; margin-top: 8px; }
@@ -526,10 +539,33 @@ function buildPaneHtml(name) {
       '<table><thead><tr><th>Collector</th><th>Count</th></tr></thead>',
       '<tbody id="' + s + '-gctable"><tr><td colspan="2" style="color:var(--muted)">No data yet</td></tr></tbody>',
       '</table></div>',
+    '<div class="sec-title">On-Demand Diagnostics</div>',
+    dumpActionsHtml(s, name),
     '<div class="sec-title">Alert History (this target)</div>',
     '<ul class="alert-log" id="' + s + '-alerts">',
       '<li style="color:var(--muted);font-size:12px;padding:6px 0">No alerts yet.</li>',
     '</ul>',
+  ].join('');
+}
+
+// name = raw target name (for ?target= param); s = slugified id prefix (for DOM ids)
+function dumpActionsHtml(s, name) {
+  // Encode the raw name once here so it is safe inside the onclick attribute string.
+  // encodeURIComponent is available in all browsers; the result is ASCII-safe.
+  var enc = encodeURIComponent(name);
+  return [
+    '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:16px">',
+      '<div style="font-size:11px;color:var(--muted);margin-bottom:10px">',
+        'Trigger a diagnostic dump for target <strong>' + esc(name) + '</strong> right now.',
+        ' The file is written to the watchdog\'s configured dump directory on the server.',
+      '</div>',
+      '<div class="dump-actions">',
+        '<button class="btn dump-thread" id="' + s + '-btn-thread" onclick="requestDump(\'' + s + '\',\'thread\',\'' + enc + '\')">Thread Dump</button>',
+        '<button class="btn dump-heap"   id="' + s + '-btn-heap"   onclick="requestDump(\'' + s + '\',\'heap\',\''   + enc + '\')">Heap Dump</button>',
+        '<button class="btn dump-core"   id="' + s + '-btn-core"   onclick="requestDump(\'' + s + '\',\'core\',\''   + enc + '\')">Core Dump</button>',
+      '</div>',
+      '<div class="dump-result" id="' + s + '-dump-result"></div>',
+    '</div>',
   ].join('');
 }
 
@@ -761,6 +797,54 @@ function esc(s) {
   return String(s || '')
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
     .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// ── on-demand dump ────────────────────────────────────────────────────────────
+// slug    = slugified DOM id prefix  (e.g. "my_app_server")
+// type    = "thread" | "heap" | "core"
+// encoded = encodeURIComponent(rawTargetName) passed from dumpActionsHtml
+function requestDump(slug, type, encoded) {
+  var resultEl  = document.getElementById(slug + '-dump-result');
+  var btnThread = document.getElementById(slug + '-btn-thread');
+  var btnHeap   = document.getElementById(slug + '-btn-heap');
+  var btnCore   = document.getElementById(slug + '-btn-core');
+
+  // Disable all three buttons while the dump is running (can take several seconds)
+  [btnThread, btnHeap, btnCore].forEach(function(b) { if (b) b.disabled = true; });
+
+  if (resultEl) {
+    resultEl.className   = 'dump-result busy';
+    resultEl.textContent = 'Requesting ' + type + ' dump\u2026';
+  }
+
+  // Build URL: always include ?target= so the server knows which watchdog to use.
+  // For the self-monitoring JVM the target name comes back as "self"; remote targets
+  // use whatever name was registered in the targets file.
+  var url = BASE_URL + '/dump/' + type + '?target=' + (encoded || 'self');
+
+  fetch(url, { method: 'POST', mode: 'cors' })
+    .then(function(r) { return r.json().then(function(j) { return { status: r.status, body: j }; }); })
+    .then(function(res) {
+      if (resultEl) {
+        if (res.body.ok) {
+          resultEl.className   = 'dump-result ok';
+          resultEl.textContent = '\u2714 ' + type.charAt(0).toUpperCase() + type.slice(1) +
+                                 ' dump written on server: ' + (res.body.path || '');
+        } else {
+          resultEl.className   = 'dump-result err';
+          resultEl.textContent = '\u2716 ' + (res.body.error || 'Unknown error');
+        }
+      }
+    })
+    .catch(function(e) {
+      if (resultEl) {
+        resultEl.className   = 'dump-result err';
+        resultEl.textContent = '\u2716 Request failed: ' + e.message;
+      }
+    })
+    .finally(function() {
+      [btnThread, btnHeap, btnCore].forEach(function(b) { if (b) b.disabled = false; });
+    });
 }
 </script>
 </body>

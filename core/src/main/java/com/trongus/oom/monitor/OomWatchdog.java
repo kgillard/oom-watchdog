@@ -277,4 +277,34 @@ public final class OomWatchdog {
     public JvmSnapshot getLastSnapshot() {
         return lastSnapshot.get();
     }
+
+    /**
+     * Triggers an on-demand diagnostic dump of the requested type against the
+     * self-monitoring JVM.
+     *
+     * <p>This method is called by {@link MetricsHttpServer} when the dashboard
+     * user clicks one of the <em>Thread Dump</em>, <em>Heap Dump</em>, or
+     * <em>Core Dump</em> action buttons.  Unlike the automated dump path, this
+     * call is <strong>not</strong> subject to the episode-guard
+     * ({@code dumpTakenThisEpisode}) — the operator has explicitly requested a
+     * dump regardless of the current risk level.
+     *
+     * <p>The dump is executed synchronously on the calling thread (an HTTP
+     * worker thread).  If the dump succeeds the absolute file path is returned;
+     * if no strategy in the chain succeeds an empty string is returned and a
+     * warning is logged.
+     *
+     * @param type the dump type to produce; must not be {@code null}
+     * @return the absolute path of the written dump file, or an empty string if
+     *         the dump could not be produced
+     */
+    public String triggerDump(DumpType type) {
+        JvmSnapshot snap = lastSnapshot.get();
+        // If no snapshot yet, create a minimal synthetic one for path-building
+        if (snap == null) {
+            snap = new JvmSnapshot.Builder().targetName("self").build();
+        }
+        List<String> paths = dumpService.dump(snap, java.util.Collections.singletonList(type));
+        return paths.isEmpty() ? "" : paths.get(0);
+    }
 }

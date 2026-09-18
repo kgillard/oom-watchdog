@@ -1170,12 +1170,15 @@ java -Xmx256m -jar oom-watchdog.jar \
 ```
 
 This starts a lightweight **HTTPS** server on `https://localhost:9090` alongside the normal
-watchdog. The server exposes two endpoints:
+watchdog. The server exposes these endpoints:
 
 | Endpoint | Method | Response |
 |---|---|---|
 | `/metrics` | GET | JSON object — self-monitoring JVM metrics |
 | `/metrics/all` | GET | JSON array — one entry per monitored target (daemon mode) |
+| `/dump/thread?target=<name>` | POST | Trigger thread dump; JSON `{"ok":true,"path":"…"}` |
+| `/dump/heap?target=<name>` | POST | Trigger heap dump; JSON `{"ok":true,"path":"…"}` |
+| `/dump/core?target=<name>` | POST | Trigger core dump; JSON `{"ok":true,"path":"…"}` |
 | `/` | GET | 302 redirect to `/metrics` |
 
 The server binds to **loopback only** (`127.0.0.1`) by default.
@@ -1243,10 +1246,28 @@ python3 -m http.server 8080
 | **Diagnosis** | Full assessment text from `ThresholdRiskAssessor` |
 | **Memory Pools** | All JVM memory pool usages in MB |
 | **GC Collections** | Per-collector invocation counts |
+| **On-Demand Diagnostics** | Three buttons per target tab — **Thread Dump**, **Heap Dump**, **Core Dump** |
 | **Alert History** | Per-target rolling log of WARNING/CRITICAL/OOM_FIRING events |
 
 Each tab header shows a colour dot indicating the target's current risk level.
 In daemon mode (multiple remote JVMs) each target appears as a separate tab.
+
+### On-demand dumps from the dashboard
+
+Each target tab contains an **On-Demand Diagnostics** section with three buttons:
+
+| Button | Dump type | File written |
+|---|---|---|
+| **Thread Dump** | `THREAD` | `<dump-dir>/<target>_threads_<timestamp>.txt` |
+| **Heap Dump** | `HEAP` | `<dump-dir>/<target>_heap_<timestamp>.hprof` |
+| **Core Dump** | `CORE` | `<dump-dir>/<target>_core_<timestamp>.dmp` (Linux/J9 only) |
+
+Click a button on any tab to trigger the dump **for that specific target** immediately — without waiting for a `CRITICAL` threshold to fire. The dump is written to the watchdog server's configured `--dump-dir` directory. The dashboard shows the full path once the dump completes, or an error message if it fails.
+
+> **Multi-target note:** In daemon mode each tab represents a different remote JVM. Clicking
+> **Heap Dump** on the `tomcat` tab triggers a heap dump for the `tomcat` target; clicking it on
+> the `liberty` tab triggers one for `liberty`. The dump file is written on the **watchdog
+> server's** filesystem (the machine running `oom-watchdog.jar`), not on the remote JVM's host.
 
 ### CORS — accessing a remote JVM
 

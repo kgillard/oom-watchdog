@@ -5,6 +5,7 @@ import com.sun.net.httpserver.HttpServer;
 import com.sun.net.httpserver.HttpsConfigurator;
 import com.sun.net.httpserver.HttpsParameters;
 import com.sun.net.httpserver.HttpsServer;
+import com.trongus.oom.dump.DumpType;
 import com.trongus.oom.logging.WatchdogLogger;
 import com.trongus.oom.model.JvmSnapshot;
 import com.trongus.oom.model.OomRiskLevel;
@@ -44,10 +45,11 @@ import java.util.logging.Logger;
 
 /**
  * Lightweight HTTP/HTTPS server that serves live JVM health metrics on
- * {@code GET /metrics} (single self-monitoring target) and
- * {@code GET /metrics/all} (all monitored targets as a JSON array).
+ * {@code GET /metrics} (single self-monitoring target),
+ * {@code GET /metrics/all} (all monitored targets as a JSON array), and
+ * on-demand diagnostic dump endpoints triggered from the dashboard.
  *
- * <p>Every response reads directly from the same
+ * <p>Every metrics response reads directly from the same
  * {@link java.lang.management} MXBeans that
  * {@link com.trongus.oom.collector.MxBeanDiagnosticsCollector} uses — so
  * each dashboard request gets current data straight from the JVM, not a
@@ -77,7 +79,7 @@ import java.util.logging.Logger;
  * {@code dashboard.html} can be opened from the local filesystem ({@code file://}).
  * {@code OPTIONS} preflight requests are answered with {@code 204 No Content} and the
  * required {@code Access-Control-Allow-Methods} / {@code Access-Control-Allow-Headers}
- * headers so that browsers do not block the preflight before the actual GET is sent.
+ * headers so that browsers do not block the preflight before the actual GET or POST is sent.
  * Restrict the origin header if you bind to a non-loopback interface.
  *
  * <h2>Data sources</h2>
@@ -97,15 +99,31 @@ import java.util.logging.Logger;
  *       <td>JSON object — self-monitoring JVM metrics</td></tr>
  *   <tr><td>{@code /metrics/all}</td><td>GET</td>
  *       <td>JSON array — one entry per monitored target</td></tr>
+ *   <tr><td>{@code /dump/thread}</td><td>POST</td>
+ *       <td>JSON — triggers a thread dump; returns {@code {"ok":true,"path":"…"}} or
+ *           {@code {"ok":false,"error":"…"}}</td></tr>
+ *   <tr><td>{@code /dump/heap}</td><td>POST</td>
+ *       <td>JSON — triggers a heap dump; returns {@code {"ok":true,"path":"…"}} or
+ *           {@code {"ok":false,"error":"…"}}</td></tr>
+ *   <tr><td>{@code /dump/core}</td><td>POST</td>
+ *       <td>JSON — triggers a core dump; returns {@code {"ok":true,"path":"…"}} or
+ *           {@code {"ok":false,"error":"…"}}</td></tr>
  *   <tr><td>{@code /}</td><td>GET</td>
  *       <td>{@code 302} redirect to {@code /metrics}</td></tr>
  * </table>
+ *
+ * <h2>On-demand dumps</h2>
+ * <p>The {@code POST /dump/*} endpoints invoke {@link OomWatchdog#triggerDump(DumpType)}
+ * on the self-monitoring watchdog.  They are available only when a self-monitoring
+ * watchdog was supplied at construction time; in pure-daemon mode (no self watchdog)
+ * they respond with {@code 503 Service Unavailable}.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
  * @version 1.7.7
  * @since 1.7.3
  * @see TlsConfig
  * @see OomWatchdog#getLastSnapshot()
+ * @see OomWatchdog#triggerDump(DumpType)
  * @see com.trongus.oom.collector.MxBeanDiagnosticsCollector
  */
 public final class MetricsHttpServer {
@@ -317,6 +335,106 @@ public final class MetricsHttpServer {
         send(ex, 302, "text/plain", "Redirecting to /metrics");
     }
 
+    /**
+     * Handles {@code POST /dump/thread?target=<name>}, {@code POST /dump/heap?target=<name>},
+     * and {@code POST /dump/core?target=<name>} requests from the dashboard.
+     *
+     * <p>The optional {@code target} query parameter selects the watchdog to use:
+     * <ul>
+     *   <li><strong>Absent or {@code "self"}</strong> — uses the self-monitoring watchdog.</li>
+     *   <li><strong>Any other value</strong> — looks up the name in {@code remoteWatchdogs};
+     *       the dump runs against that target (via its {@link com.trongus.oom.dump.CompositeDumpService},
+     *       which writes the dump file on the <em>watchdog server's</em> filesystem, not the
+     *       remote JVM's host).</li>
+     * </ul>
+     *
+     * <p>Response JSON:
+     * <pre>
+     * {"ok": true,  "target": "myapp", "path": "/var/dumps/heap_20260918T153000.hprof"}
+     * {"ok": false, "target": "myapp", "error": "All strategies exhausted — no dump produced"}
+     * </pre>
+     *
+     * @param ex       the HTTP exchange
+     * @param dumpType the requested dump type
+     * @throws IOException if the response cannot be written
+     */
+    private void handleDump(HttpExchange ex, DumpType dumpType) throws IOException {
+        if (isOptions(ex)) { sendPreflight(ex); return; }
+        if (!isPost(ex))   { send(ex, 405, "text/plain", "Method Not Allowed"); return; }
+
+        // Resolve target from ?target= query param
+        String targetParam = queryParam(ex, "target");
+        boolean isSelf = targetParam == null || targetParam.isEmpty() || "self".equalsIgnoreCase(targetParam);
+
+        OomWatchdog watchdog;
+        String      targetLabel;
+        if (isSelf) {
+            watchdog    = selfWatchdog;
+            targetLabel = "self";
+        } else {
+            watchdog    = remoteWatchdogs.get(targetParam);
+            targetLabel = targetParam;
+        }
+
+        if (watchdog == null) {
+            String msg = isSelf
+                    ? "No self-monitoring watchdog available"
+                    : "Unknown target: " + escapeJson(targetParam);
+            send(ex, 503, "application/json; charset=UTF-8",
+                    "{\"ok\": false, \"target\": \"" + escapeJson(targetLabel) + "\", \"error\": \"" + msg + "\"}");
+            return;
+        }
+
+        WatchdogLogger.info(LOG, "On-demand {0} dump requested via dashboard for target [{1}]",
+                dumpType, targetLabel);
+        try {
+            String path = watchdog.triggerDump(dumpType);
+            if (path == null || path.isEmpty()) {
+                send(ex, 500, "application/json; charset=UTF-8",
+                        "{\"ok\": false, \"target\": \"" + escapeJson(targetLabel) + "\", " +
+                        "\"error\": \"All strategies exhausted — no dump produced\"}");
+            } else {
+                send(ex, 200, "application/json; charset=UTF-8",
+                        "{\"ok\": true, \"target\": \"" + escapeJson(targetLabel) + "\", " +
+                        "\"path\": \"" + escapeJson(path) + "\"}");
+            }
+        } catch (Exception e) {
+            WatchdogLogger.warning(LOG, e, "On-demand {0} dump failed for target [{1}]: {2}",
+                    dumpType, targetLabel, e.getMessage());
+            send(ex, 500, "application/json; charset=UTF-8",
+                    "{\"ok\": false, \"target\": \"" + escapeJson(targetLabel) + "\", " +
+                    "\"error\": \"" + escapeJson(e.getMessage() != null ? e.getMessage() : e.toString()) + "\"}");
+        }
+    }
+
+    /**
+     * Extracts the value of a named query parameter from the request URI.
+     * Returns {@code null} if the parameter is absent or has no value.
+     *
+     * @param ex   the HTTP exchange
+     * @param name the parameter name
+     * @return the decoded parameter value, or {@code null}
+     */
+    private static String queryParam(HttpExchange ex, String name) {
+        String query = ex.getRequestURI().getRawQuery();
+        if (query == null || query.isEmpty()) return null;
+        for (String pair : query.split("&")) {
+            int eq = pair.indexOf('=');
+            if (eq < 0) continue;
+            String k = decode(pair.substring(0, eq));
+            if (name.equals(k)) return decode(pair.substring(eq + 1));
+        }
+        return null;
+    }
+
+    private static String decode(String s) {
+        try {
+            return java.net.URLDecoder.decode(s, "UTF-8");
+        } catch (Exception e) {
+            return s;
+        }
+    }
+
     // ── helper: HTTP response ─────────────────────────────────────────────────
 
     private static void send(HttpExchange ex, int status, String contentType, String body)
@@ -324,9 +442,9 @@ public final class MetricsHttpServer {
         byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
         ex.getResponseHeaders().set("Content-Type", contentType);
         // CORS + security headers — applied to every response so dashboard.html
-        // can be opened from a file:// URL and still fetch the metrics endpoint.
+        // can be opened from a file:// URL and still fetch/post to the metrics endpoint.
         ex.getResponseHeaders().add("Access-Control-Allow-Origin",  "*");
-        ex.getResponseHeaders().add("Access-Control-Allow-Methods", "GET, OPTIONS");
+        ex.getResponseHeaders().add("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
         ex.getResponseHeaders().add("Access-Control-Allow-Headers", "Content-Type");
         ex.getResponseHeaders().add("X-Content-Type-Options", "nosniff");
         ex.getResponseHeaders().add("Cache-Control", "no-store");
@@ -340,11 +458,11 @@ public final class MetricsHttpServer {
     /**
      * Responds to a CORS preflight OPTIONS request with a 204 No Content and all
      * required preflight headers.  This allows {@code dashboard.html} opened from
-     * a {@code file://} URL to successfully fetch the metrics endpoint.
+     * a {@code file://} URL to successfully fetch or POST to the metrics/dump endpoints.
      */
     private static void sendPreflight(HttpExchange ex) throws IOException {
         ex.getResponseHeaders().add("Access-Control-Allow-Origin",  "*");
-        ex.getResponseHeaders().add("Access-Control-Allow-Methods", "GET, OPTIONS");
+        ex.getResponseHeaders().add("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
         ex.getResponseHeaders().add("Access-Control-Allow-Headers", "Content-Type");
         ex.getResponseHeaders().add("Access-Control-Max-Age",       "86400");
         ex.sendResponseHeaders(204, -1);
@@ -353,6 +471,10 @@ public final class MetricsHttpServer {
 
     private static boolean isGet(HttpExchange ex) {
         return "GET".equalsIgnoreCase(ex.getRequestMethod());
+    }
+
+    private static boolean isPost(HttpExchange ex) {
+        return "POST".equalsIgnoreCase(ex.getRequestMethod());
     }
 
     private static boolean isOptions(HttpExchange ex) {
@@ -595,6 +717,9 @@ public final class MetricsHttpServer {
     private void registerContexts(HttpServer s) {
         s.createContext("/metrics/all", this::handleMetricsAll);
         s.createContext("/metrics",     this::handleMetrics);
+        s.createContext("/dump/thread", ex -> handleDump(ex, DumpType.THREAD));
+        s.createContext("/dump/heap",   ex -> handleDump(ex, DumpType.HEAP));
+        s.createContext("/dump/core",   ex -> handleDump(ex, DumpType.CORE));
         s.createContext("/",            this::handleRoot);
     }
 
