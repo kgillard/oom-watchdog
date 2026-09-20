@@ -2,6 +2,7 @@ package com.trongus.oom.remote;
 
 import com.trongus.oom.collector.JvmDiagnosticsCollector;
 import com.trongus.oom.config.WatchdogConfig;
+import com.trongus.oom.dump.DumpType;
 import com.trongus.oom.i18n.Messages;
 import com.trongus.oom.logging.WatchdogLogger;
 import com.trongus.oom.model.JvmSnapshot;
@@ -13,7 +14,11 @@ import javax.management.remote.JMXConnector;
 import javax.management.remote.JMXConnectorFactory;
 import javax.management.remote.JMXServiceURL;
 import java.io.Closeable;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
 import java.lang.management.GarbageCollectorMXBean;
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
@@ -22,6 +27,7 @@ import java.lang.management.MemoryUsage;
 import java.lang.management.OperatingSystemMXBean;
 import java.lang.management.RuntimeMXBean;
 import java.lang.management.ThreadMXBean;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -409,6 +415,133 @@ public final class JmxDiagnosticsCollector implements JvmDiagnosticsCollector, C
     @Override
     public synchronized void close() {
         disconnect();
+    }
+
+    // ── Remote dump ───────────────────────────────────────────────────────────
+
+    /**
+     * Triggers a diagnostic dump on the <strong>remote</strong> target JVM via JMX.
+     *
+     * <p>The dump mechanism depends on the requested type and the capabilities
+     * exposed by the remote JVM:
+     * <ul>
+     *   <li><strong>HEAP</strong> — invokes {@code com.sun.management:type=HotSpotDiagnostic}
+     *       {@code dumpHeap(file, liveOnly)} over the existing JMX connection.  Supported
+     *       by HotSpot, OpenJDK, GraalVM JVM mode, and IBM J9/OpenJ9 8+.</li>
+     *   <li><strong>THREAD</strong> — invokes {@code com.sun.management:type=DiagnosticCommand}
+     *       {@code threadPrint} over JMX and writes the result to a {@code .txt} file on the
+     *       <em>watchdog server</em>'s configured dump directory.  Falls back to
+     *       {@code com.sun.management:type=DiagnosticCommand threadPrint} with empty args.</li>
+     *   <li><strong>CORE / CLASS_HISTOGRAM</strong> — invokes
+     *       {@code com.sun.management:type=DiagnosticCommand} {@code systemDump} (J9/OpenJ9)
+     *       or signals unsupported for HotSpot (gcore cannot be triggered remotely via JMX).</li>
+     * </ul>
+     *
+     * <p>If the JMX connection is not currently established, this method attempts to connect
+     * before proceeding.  If connection fails, {@code null} is returned.
+     *
+     * <p>This method is {@code synchronized} on the same monitor as {@link #collect()} to
+     * prevent concurrent access to the shared {@link MBeanServerConnection}.
+     *
+     * @param type       the dump type to produce; must not be {@code null}
+     * @param outputPath suggested absolute path for the dump file (used for HEAP and THREAD;
+     *                   may be overridden by the remote JVM for CORE)
+     * @return the absolute path of the file written, or {@code null} if the dump could not
+     *         be triggered
+     */
+    public synchronized String triggerRemoteDump(DumpType type, String outputPath) {
+        if (!ensureConnected()) {
+            WatchdogLogger.warning(LOG, "Cannot trigger remote dump for [{0}]: JMX not connected",
+                    descriptor.getName());
+            return null;
+        }
+        try {
+            switch (type) {
+                case HEAP:            return remoteHeapDump(outputPath);
+                case THREAD:          return remoteThreadDump(outputPath);
+                case CORE:            return remoteCoreOrSystemDump(outputPath);
+                case CLASS_HISTOGRAM: return remoteClassHistogram(outputPath);
+                default:
+                    WatchdogLogger.warning(LOG, "Remote dump type [{0}] not supported", type);
+                    return null;
+            }
+        } catch (Exception e) {
+            WatchdogLogger.warning(LOG, e, "Remote dump [{0}] failed for target [{1}]: {2}",
+                    type, descriptor.getName(), e.getMessage());
+            disconnect();
+            return null;
+        }
+    }
+
+    /** Invokes HotSpotDiagnosticMXBean.dumpHeap on the remote JVM. */
+    private String remoteHeapDump(String outputPath) throws Exception {
+        ObjectName on = new ObjectName("com.sun.management:type=HotSpotDiagnostic");
+        // Delete existing file — dumpHeap throws if file already exists
+        new File(outputPath).delete();
+        mbsc.invoke(on, "dumpHeap",
+                new Object[]{ outputPath, Boolean.TRUE },
+                new String[]{ String.class.getName(), boolean.class.getName() });
+        return new File(outputPath).getAbsolutePath();
+    }
+
+    /**
+     * Invokes DiagnosticCommand.threadPrint on the remote JVM and writes the output
+     * to a file on the watchdog server's filesystem.
+     */
+    private String remoteThreadDump(String outputPath) throws Exception {
+        ObjectName on = new ObjectName("com.sun.management:type=DiagnosticCommand");
+        // threadPrint takes a String[] of options; pass empty array for default output
+        Object result = mbsc.invoke(on, "threadPrint",
+                new Object[]{ new String[0] },
+                new String[]{ String[].class.getName() });
+        String text = result != null ? result.toString() : "(empty thread dump)";
+        try (PrintWriter pw = new PrintWriter(new OutputStreamWriter(
+                new FileOutputStream(outputPath), StandardCharsets.UTF_8))) {
+            pw.print(text);
+        }
+        return new File(outputPath).getAbsolutePath();
+    }
+
+    /**
+     * Attempts a system/core dump on the remote JVM.
+     * Works on J9/OpenJ9 via the {@code systemDump} DiagnosticCommand.
+     * Returns {@code null} with a warning on HotSpot (gcore cannot be invoked remotely via JMX).
+     */
+    private String remoteCoreOrSystemDump(String outputPath) throws Exception {
+        ObjectName on = new ObjectName("com.sun.management:type=DiagnosticCommand");
+        // IBM J9/OpenJ9 exposes "systemDump"; check if it exists first
+        try {
+            Object result = mbsc.invoke(on, "systemDump",
+                    new Object[]{ new String[]{ "file=" + outputPath } },
+                    new String[]{ String[].class.getName() });
+            String text = result != null ? result.toString().trim() : "";
+            // J9 returns the path in the result string; parse it out if present
+            if (!text.isEmpty()) {
+                // e.g. "Dump written to /store/jheap/target.dmp"
+                int idx = text.lastIndexOf(' ');
+                String candidate = idx >= 0 ? text.substring(idx + 1) : text;
+                if (new File(candidate).exists()) return candidate;
+            }
+            return new File(outputPath).exists() ? new File(outputPath).getAbsolutePath() : null;
+        } catch (Exception e) {
+            WatchdogLogger.warning(LOG, "Remote system/core dump not supported by target JVM [{0}]: {1}",
+                    descriptor.getName(), e.getMessage());
+            return null;
+        }
+    }
+
+    /** Invokes DiagnosticCommand.gcClassHistogram on the remote JVM and writes output to file. */
+    private String remoteClassHistogram(String outputPath) throws Exception {
+        ObjectName on = new ObjectName("com.sun.management:type=DiagnosticCommand");
+        Object result = mbsc.invoke(on, "gcClassHistogram",
+                new Object[]{ new String[0] },
+                new String[]{ String[].class.getName() });
+        String text = result != null ? result.toString() : "(empty histogram)";
+        try (PrintWriter pw = new PrintWriter(new OutputStreamWriter(
+                new FileOutputStream(outputPath), StandardCharsets.UTF_8))) {
+            pw.print(text);
+        }
+        return new File(outputPath).getAbsolutePath();
     }
 
     private JvmSnapshot buildUnreachableSnapshot(long timestampMs, String reason) {

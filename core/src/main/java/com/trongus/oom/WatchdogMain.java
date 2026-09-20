@@ -295,7 +295,8 @@ public final class WatchdogMain {
                 try {
                     TlsConfig tls = buildTlsConfig(cli);
                     MetricsHttpServer metricsServer = new MetricsHttpServer(
-                            null, daemon.getActiveWatchdogs(), cli.metricsPort, cli.metricsBindAll, tls);
+                            null, daemon.getActiveWatchdogs(), daemon.getCollectors(),
+                            cli.metricsPort, cli.metricsBindAll, tls);
                     metricsServer.start();
                     Runtime.getRuntime().addShutdownHook(
                             new Thread(metricsServer::stop, "oom-metrics-shutdown"));

@@ -9,6 +9,7 @@ import com.trongus.oom.tests.dump.CompositeDumpServiceTest;
 import com.trongus.oom.tests.dump.DumpTypeTest;
 import com.trongus.oom.tests.integration.OomWatchdogIntegrationTest;
 import com.trongus.oom.tests.integration.QRadarPipelineTest;
+import com.trongus.oom.tests.integration.RemoteDumpRoutingTest;
 import com.trongus.oom.tests.model.JvmSnapshotTest;
 import com.trongus.oom.tests.model.OomRiskLevelTest;
 import com.trongus.oom.tests.monitor.ThresholdRiskAssessorTest;
@@ -43,7 +44,7 @@ import org.junit.runners.Suite;
  *   <li><strong>remote</strong> – {@link TargetDescriptorTest}, {@link TargetRegistryTest},
  *       {@link WatchdogDaemonTest}</li>
  *   <li><strong>integration</strong> – {@link OomWatchdogIntegrationTest},
- *       {@link QRadarPipelineTest}</li>
+ *       {@link QRadarPipelineTest}, {@link RemoteDumpRoutingTest}</li>
  * </ul>
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
@@ -77,6 +78,7 @@ import org.junit.runners.Suite;
     // integration
     OomWatchdogIntegrationTest.class,
     QRadarPipelineTest.class,
+    RemoteDumpRoutingTest.class,
 })
 public class OomWatchdogTestSuite {
     // This class is intentionally empty. It serves only as a JUnit Suite holder.

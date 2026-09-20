@@ -5,11 +5,13 @@ import com.sun.net.httpserver.HttpServer;
 import com.sun.net.httpserver.HttpsConfigurator;
 import com.sun.net.httpserver.HttpsParameters;
 import com.sun.net.httpserver.HttpsServer;
+import com.trongus.oom.dump.CompositeDumpService;
 import com.trongus.oom.dump.DumpType;
 import com.trongus.oom.logging.WatchdogLogger;
 import com.trongus.oom.model.JvmSnapshot;
 import com.trongus.oom.model.OomRiskLevel;
 import com.trongus.oom.platform.JvmPlatform;
+import com.trongus.oom.remote.JmxDiagnosticsCollector;
 
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
@@ -150,11 +152,12 @@ public final class MetricsHttpServer {
         "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256"  // TLS 1.2 ECDHE
     };
 
-    private final OomWatchdog              selfWatchdog;
-    private final Map<String, OomWatchdog> remoteWatchdogs;
-    private final int                      port;
-    private final boolean                  bindAll;
-    private final TlsConfig                tlsConfig;
+    private final OomWatchdog                        selfWatchdog;
+    private final Map<String, OomWatchdog>           remoteWatchdogs;
+    private final Map<String, JmxDiagnosticsCollector> remoteCollectors;
+    private final int                                port;
+    private final boolean                            bindAll;
+    private final TlsConfig                          tlsConfig;
 
     /** Holds the active SSLContext; replaced atomically on certificate renewal. */
     private final AtomicReference<SSLContext> sslContextRef = new AtomicReference<>();
@@ -177,11 +180,12 @@ public final class MetricsHttpServer {
         if (watchdog == null) throw new NullPointerException("watchdog");
         if (tlsConfig == null) throw new NullPointerException("tlsConfig");
         validatePort(port);
-        this.selfWatchdog    = watchdog;
-        this.remoteWatchdogs = Collections.emptyMap();
-        this.port            = port;
-        this.bindAll         = bindAll;
-        this.tlsConfig       = tlsConfig;
+        this.selfWatchdog      = watchdog;
+        this.remoteWatchdogs   = Collections.emptyMap();
+        this.remoteCollectors  = Collections.emptyMap();
+        this.port              = port;
+        this.bindAll           = bindAll;
+        this.tlsConfig         = tlsConfig;
     }
 
     /**
@@ -210,14 +214,35 @@ public final class MetricsHttpServer {
     public MetricsHttpServer(OomWatchdog selfWatchdog,
                              Map<String, OomWatchdog> remoteWatchdogs,
                              int port, boolean bindAll, TlsConfig tlsConfig) {
+        this(selfWatchdog, remoteWatchdogs, Collections.emptyMap(), port, bindAll, tlsConfig);
+    }
+
+    /**
+     * Creates a multi-target metrics server (daemon mode) with TLS and per-target JMX collectors
+     * for remote dump support.
+     *
+     * @param selfWatchdog     the self-monitoring watchdog (may be {@code null} in pure-daemon mode)
+     * @param remoteWatchdogs  named watchdogs for each remote target; must not be {@code null}
+     * @param remoteCollectors JMX collectors keyed by target name, used to trigger remote dumps
+     * @param port             TCP port to listen on (1–65535)
+     * @param bindAll          {@code true} to bind all interfaces; {@code false} for loopback only
+     * @param tlsConfig        TLS configuration; must not be {@code null}
+     */
+    public MetricsHttpServer(OomWatchdog selfWatchdog,
+                             Map<String, OomWatchdog> remoteWatchdogs,
+                             Map<String, JmxDiagnosticsCollector> remoteCollectors,
+                             int port, boolean bindAll, TlsConfig tlsConfig) {
         if (remoteWatchdogs == null) throw new NullPointerException("remoteWatchdogs");
         if (tlsConfig == null) throw new NullPointerException("tlsConfig");
         validatePort(port);
-        this.selfWatchdog    = selfWatchdog;
-        this.remoteWatchdogs = Collections.unmodifiableMap(new LinkedHashMap<>(remoteWatchdogs));
-        this.port            = port;
-        this.bindAll         = bindAll;
-        this.tlsConfig       = tlsConfig;
+        this.selfWatchdog     = selfWatchdog;
+        this.remoteWatchdogs  = Collections.unmodifiableMap(new LinkedHashMap<>(remoteWatchdogs));
+        this.remoteCollectors = remoteCollectors != null
+                ? Collections.unmodifiableMap(new LinkedHashMap<>(remoteCollectors))
+                : Collections.emptyMap();
+        this.port             = port;
+        this.bindAll          = bindAll;
+        this.tlsConfig        = tlsConfig;
     }
 
     /**
@@ -346,11 +371,13 @@ public final class MetricsHttpServer {
      *
      * <p>The optional {@code target} query parameter selects the watchdog to use:
      * <ul>
-     *   <li><strong>Absent or {@code "self"}</strong> — uses the self-monitoring watchdog.</li>
-     *   <li><strong>Any other value</strong> — looks up the name in {@code remoteWatchdogs};
-     *       the dump runs against that target (via its {@link com.trongus.oom.dump.CompositeDumpService},
-     *       which writes the dump file on the <em>watchdog server's</em> filesystem, not the
-     *       remote JVM's host).</li>
+     *   <li><strong>Absent or {@code "self"}</strong> — uses the self-monitoring watchdog;
+     *       the dump runs against the watchdog JVM itself.</li>
+     *   <li><strong>Any other value</strong> — looks up the name in {@code remoteCollectors};
+     *       if a JMX collector is available the dump is triggered <strong>on the remote target
+     *       JVM</strong> via {@link JmxDiagnosticsCollector#triggerRemoteDump}.  The output
+     *       file is written to the target's configured dump directory on the watchdog server's
+     *       filesystem.</li>
      * </ul>
      *
      * <p>Response JSON:
@@ -393,7 +420,16 @@ public final class MetricsHttpServer {
         WatchdogLogger.info(LOG, "On-demand {0} dump requested via dashboard for target [{1}]",
                 dumpType, targetLabel);
         try {
-            String path = watchdog.triggerDump(dumpType);
+            // For remote targets route the dump through the JMX collector so the dump
+            // runs on the target JVM, not the watchdog JVM.
+            JmxDiagnosticsCollector collector = isSelf ? null : remoteCollectors.get(targetParam);
+            String path;
+            if (collector != null) {
+                String outputPath = watchdog.buildDumpPath(dumpType);
+                path = outputPath != null ? collector.triggerRemoteDump(dumpType, outputPath) : null;
+            } else {
+                path = watchdog.triggerDump(dumpType);
+            }
             if (path == null || path.isEmpty()) {
                 send(ex, 500, "application/json; charset=UTF-8",
                         "{\"ok\": false, \"target\": \"" + escapeJson(targetLabel) + "\", " +

@@ -307,4 +307,26 @@ public final class OomWatchdog {
         List<String> paths = dumpService.dump(snap, java.util.Collections.singletonList(type));
         return paths.isEmpty() ? "" : paths.get(0);
     }
+
+    /**
+     * Builds the output file path for a dump of the given type without executing the dump.
+     *
+     * <p>Used by {@link MetricsHttpServer} to obtain the target output path when routing
+     * on-demand dumps to a remote JVM via {@link com.trongus.oom.remote.JmxDiagnosticsCollector}.
+     * The path is built using the same logic as {@link #triggerDump(DumpType)} — from the
+     * configured {@code dumpDirectory}, the current snapshot's process name, and a timestamp.
+     *
+     * @param type the dump type; determines the file extension
+     * @return the suggested absolute output path, or {@code null} if path building fails
+     */
+    public String buildDumpPath(DumpType type) {
+        if (!(dumpService instanceof com.trongus.oom.dump.CompositeDumpService)) {
+            return null;
+        }
+        JvmSnapshot snap = lastSnapshot.get();
+        if (snap == null) {
+            snap = new JvmSnapshot.Builder().targetName("self").build();
+        }
+        return ((com.trongus.oom.dump.CompositeDumpService) dumpService).buildOutputPath(snap, type);
+    }
 }

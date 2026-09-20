@@ -242,6 +242,17 @@ public final class WatchdogDaemon implements Closeable {
         return Collections.unmodifiableMap(new LinkedHashMap<>(activeWatchdogs));
     }
 
+    /**
+     * Returns a snapshot of the active JMX collectors keyed by target name.
+     * Used by {@link com.trongus.oom.monitor.MetricsHttpServer} to trigger
+     * on-demand dumps directly on the remote target JVM.
+     *
+     * @return unmodifiable copy of the collectors map; never {@code null}
+     */
+    public synchronized Map<String, JmxDiagnosticsCollector> getCollectors() {
+        return Collections.unmodifiableMap(new LinkedHashMap<>(collectors));
+    }
+
     @Override
     public void close() {
         stop();

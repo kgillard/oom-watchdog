@@ -138,7 +138,7 @@ public final class CompositeDumpService implements HeapDumpService {
 
         for (DumpType type : types) {
             // Build the target path for this dump type
-            String path = buildPath(snapshot, type);
+            String path = buildOutputPath(snapshot, type);
             List<DumpStrategy> chain = chains.get(type);
             if (chain == null) {
                 WatchdogLogger.warning(LOG, "No strategy chain for type: {0}", type);
@@ -231,7 +231,12 @@ public final class CompositeDumpService implements HeapDumpService {
      * @param type     the dump type being produced; determines the file extension
      * @return suggested absolute file path (the receiving strategy may override it)
      */
-    private String buildPath(JvmSnapshot snapshot, DumpType type) {
+    /**
+     * Builds the suggested output file path for a dump of the given type.
+     * Package-visible so that {@link com.trongus.oom.monitor.OomWatchdog} can obtain
+     * the path for a remote dump without executing the dump locally.
+     */
+    public String buildOutputPath(JvmSnapshot snapshot, DumpType type) {
         // Format timestamp with millisecond precision to avoid name collisions on rapid retriggers.
         // Locale.ROOT prevents locale-sensitive month/day abbreviations in the file name.
         String ts   = new SimpleDateFormat("yyyyMMdd_HHmmss_SSS", java.util.Locale.ROOT)
