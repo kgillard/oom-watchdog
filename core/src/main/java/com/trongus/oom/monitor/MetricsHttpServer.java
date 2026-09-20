@@ -426,7 +426,19 @@ public final class MetricsHttpServer {
             String path;
             if (collector != null) {
                 String outputPath = watchdog.buildDumpPath(dumpType);
-                path = outputPath != null ? collector.triggerRemoteDump(dumpType, outputPath) : null;
+                if (outputPath != null) {
+                    path = collector.triggerRemoteDump(dumpType, outputPath);
+                    if (path == null || path.isEmpty()) {
+                        // JMX remote dump unavailable (MBean not registered or JVM not connected);
+                        // fall back to a local dump via the watchdog's dump service.
+                        WatchdogLogger.warning(LOG,
+                                "Remote JMX dump failed for [{0}] — falling back to local dump service",
+                                targetLabel);
+                        path = watchdog.triggerDump(dumpType);
+                    }
+                } else {
+                    path = watchdog.triggerDump(dumpType);
+                }
             } else {
                 path = watchdog.triggerDump(dumpType);
             }
