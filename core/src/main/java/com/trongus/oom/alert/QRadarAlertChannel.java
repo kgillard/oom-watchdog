@@ -139,8 +139,16 @@ public final class QRadarAlertChannel implements AlertChannel {
      */
     @Override
     public void alert(JvmSnapshot snapshot) {
+        String target = snapshot.getTargetName() != null ? snapshot.getTargetName()
+                      : snapshot.getProcessName() != null ? snapshot.getProcessName() : "unknown";
+        WatchdogLogger.fine(LOG,
+                "Building LEEF event: target=[{0}] riskLevel=[{1}] destination=[{2}:{3}/{4}]",
+                target, snapshot.getRiskLevel(), qradarHost, qradarPort, transport);
+
         String leefMessage = buildLeefMessage(snapshot);
         byte[] payload     = leefMessage.getBytes(StandardCharsets.UTF_8);
+
+        WatchdogLogger.finest(LOG, "LEEF payload ({0} bytes): {1}", payload.length, leefMessage);
 
         try {
             if (transport == Transport.UDP) {
@@ -148,8 +156,13 @@ public final class QRadarAlertChannel implements AlertChannel {
             } else {
                 sendTcp(payload);
             }
+            WatchdogLogger.info(LOG,
+                    "LEEF event sent: target=[{0}] riskLevel=[{1}] destination=[{2}:{3}/{4}] bytes={5}",
+                    target, snapshot.getRiskLevel(), qradarHost, qradarPort, transport, payload.length);
         } catch (IOException e) {
-            WatchdogLogger.warning(LOG, e, "Failed to send LEEF event: {0}", e.getMessage());
+            WatchdogLogger.warning(LOG, e,
+                    "Failed to send LEEF event to [{0}:{1}/{2}] for target [{3}]: {4}",
+                    qradarHost, qradarPort, transport, target, e.getMessage());
         }
     }
 

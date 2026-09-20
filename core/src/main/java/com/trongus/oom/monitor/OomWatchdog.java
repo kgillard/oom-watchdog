@@ -163,6 +163,11 @@ public final class OomWatchdog {
             JvmSnapshot assessed = assessor.assess(raw);
 
             OomRiskLevel level = assessed.getRiskLevel();
+            String targetLabel = assessed.getTargetName() != null ? assessed.getTargetName()
+                               : assessed.getProcessName() != null ? assessed.getProcessName() : "self";
+
+            WatchdogLogger.fine(LOG, "Poll: target=[{0}] riskLevel=[{1}] heap=[{2,number,#.##}%]",
+                    targetLabel, level, assessed.getHeapUsedRatio() * 100);
 
             // 3. Reset episode flag when risk returns to OK
             if (level == OomRiskLevel.OK) {
@@ -172,6 +177,10 @@ public final class OomWatchdog {
             // 4. Alert all channels when risk is elevated
             if (level.ordinal() >= OomRiskLevel.WARNING.ordinal()) {
                 JvmSnapshot toReport = assessed;
+
+                WatchdogLogger.fine(LOG,
+                        "Risk elevated for [{0}]: level=[{1}] — notifying {2} alert channel(s)",
+                        targetLabel, level, alertChannels.size());
 
                 // 5. Trigger selected dump types on the first CRITICAL / OOM_FIRING event
                 //    in this episode.  compareAndSet(false, true) is atomic: only the first
@@ -189,6 +198,8 @@ public final class OomWatchdog {
 
                 for (AlertChannel channel : alertChannels) {
                     try {
+                        WatchdogLogger.fine(LOG, "Alerting channel [{0}] for target [{1}]",
+                                channel.channelName(), targetLabel);
                         channel.alert(toReport);
                     } catch (Exception e) {
                         WatchdogLogger.warning(LOG, e,

@@ -199,6 +199,19 @@ public final class WatchdogLogger {
         log(logger, Level.FINE, null, message, params);
     }
 
+    /**
+     * Logs a {@code FINEST}-level (trace) record on the supplied logger.
+     * Use for verbose output such as full message payloads — only emitted when
+     * the log level is set to {@code FINEST}.
+     *
+     * @param logger  the JUL logger to write to
+     * @param message message text; supports JUL {@code {0}}-style placeholders
+     * @param params  optional message parameters
+     */
+    public static void finest(Logger logger, String message, Object... params) {
+        log(logger, Level.FINEST, null, message, params);
+    }
+
     // =========================================================================
     // Internal
     // =========================================================================
