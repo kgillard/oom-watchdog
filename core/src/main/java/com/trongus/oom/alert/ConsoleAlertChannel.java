@@ -7,7 +7,7 @@ import com.trongus.oom.model.JvmSnapshot;
  * visible to any operator watching the process console.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.11
+ * @version 1.7.11.1
  * @since 1.0.0
  */
 public final class ConsoleAlertChannel implements AlertChannel {

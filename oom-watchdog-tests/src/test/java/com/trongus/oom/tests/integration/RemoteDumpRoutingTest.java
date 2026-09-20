@@ -40,8 +40,8 @@ import static org.junit.Assert.*;
  * without a real remote JMX endpoint.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.11
- * @since 1.7.11
+ * @version 1.7.11.1
+ * @since 1.7.11.1
  */
 public class RemoteDumpRoutingTest {
 
