@@ -712,13 +712,13 @@ netsh advfirewall firewall add rule name="OOM Watchdog Metrics" ^
 Run this **on your laptop / the machine running the browser**, replacing the IP and port:
 
 ```bash
-nc -zv 9.60.246.81 9090
+nc -zv 203.0.113.42 9090
 ```
 
 **Expected output:**
 
 ```
-Connection to 9.60.246.81 9090 port [tcp/*] succeeded!
+Connection to 203.0.113.42 9090 port [tcp/*] succeeded!
 ```
 
 If it says `Connection refused` — the firewall rule was not applied.  If it times out — a network-level firewall (e.g. cloud security group, VPN ACL) is blocking the traffic between your laptop and the server.
@@ -726,7 +726,7 @@ If it says `Connection refused` — the firewall rule was not applied.  If it ti
 **On macOS** (if `nc` is not installed):
 
 ```bash
-/usr/bin/nc -zv 9.60.246.81 9090
+/usr/bin/nc -zv 203.0.113.42 9090
 ```
 
 ---
@@ -737,8 +737,8 @@ If it says `Connection refused` — the firewall rule was not applied.  If it ti
 2. Open `dashboard.html` directly in any modern browser — no web server needed.
 3. In the **Server** field at the top of the page, type the address of the watchdog:
    - Same machine (default): `https://localhost:9090`
-   - Remote machine: `https://9.60.246.81:9090` (replace with your server's IP)
-   - Plain HTTP (if you used `--metrics-no-tls`): `http://9.60.246.81:9090`
+   - Remote machine: `https://203.0.113.42:9090` (replace with your server's IP)
+   - Plain HTTP (if you used `--metrics-no-tls`): `http://203.0.113.42:9090`
 4. Click **Connect**.
 
 The dashboard will start updating live every few seconds.
@@ -765,7 +765,7 @@ If `netstat` shows `127.0.0.1:9090`, the watchdog was started without `--metrics
 
 If `netstat` shows `0.0.0.0:9090` or `:::9090` but `nc -zv <ip> 9090` still fails — the firewall is the problem.  Apply the iptables or firewalld rule from Step 3 above.
 
-If `nc` succeeds but the dashboard still shows the error — your browser's self-signed certificate warning needs to be accepted first.  Navigate directly to `https://9.60.246.81:9090/metrics` in the browser, accept the certificate warning, then reload the dashboard.
+If `nc` succeeds but the dashboard still shows the error — your browser's self-signed certificate warning needs to be accepted first.  Navigate directly to `https://203.0.113.42:9090/metrics` in the browser, accept the certificate warning, then reload the dashboard.
 
 ---
 

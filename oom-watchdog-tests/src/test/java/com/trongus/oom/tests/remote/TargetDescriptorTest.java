@@ -31,7 +31,7 @@ public class TargetDescriptorTest {
         assertEquals(TargetDescriptor.DEFAULT_GC_THRESHOLD, td.getGcThreshold(), 1e-6);
         assertEquals(TargetDescriptor.DEFAULT_POLL_INTERVAL_MS, td.getPollIntervalMs());
         assertTrue(td.getDumpTypes().isEmpty());
-        assertEquals("./dumps/hostcontext", td.getDumpDirectory());
+        assertNull("Default dump directory should be null (inherits from --dump-dir)", td.getDumpDirectory());
     }
 
     @Test

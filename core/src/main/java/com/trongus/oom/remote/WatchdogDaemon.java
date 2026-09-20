@@ -115,16 +115,20 @@ public final class WatchdogDaemon implements Closeable {
                 String logSafeUrl = target.getJmxUrl()
                         .replaceAll("[\r\n\t]", " ").trim();
 
-                // Per-target config derived from base config + target overrides
+                // Per-target config derived from base config + target overrides.
+                // heapDumpDirectory is only overridden when explicitly set in targets.properties;
+                // otherwise the base config value (from --dump-dir) is inherited.
                 WatchdogConfig.Builder targetCfgBuilder = baseConfig.toBuilder()
                         .warningHeapThreshold(target.getWarnThreshold())
                         .criticalHeapThreshold(target.getCritThreshold())
                         .gcOverheadThreshold(target.getGcThreshold())
                         .pollIntervalMs(target.getPollIntervalMs())
-                        .heapDumpDirectory(target.getDumpDirectory())
                         .gcDumpThreshold(target.getGcDumpThreshold())
                         .heapDumpThreshold(target.getHeapDumpThreshold())
                         .nurseryDumpThreshold(target.getNurseryDumpThreshold());
+                if (target.getDumpDirectory() != null) {
+                    targetCfgBuilder.heapDumpDirectory(target.getDumpDirectory());
+                }
 
                 if (!target.getDumpTypes().isEmpty()) {
                     targetCfgBuilder.dumpTypes(target.getDumpTypes());

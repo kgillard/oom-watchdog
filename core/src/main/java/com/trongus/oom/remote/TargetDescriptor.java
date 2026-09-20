@@ -99,7 +99,7 @@ public final class TargetDescriptor {
         this.gcThreshold          = b.gcThreshold;
         this.pollIntervalMs       = b.pollIntervalMs;
         this.dumpTypes            = Collections.unmodifiableSet(EnumSet.copyOf(b.dumpTypes));
-        this.dumpDirectory        = b.dumpDirectory != null ? b.dumpDirectory : "./dumps/" + b.name;
+        this.dumpDirectory        = b.dumpDirectory; // null means "inherit from base config"
         this.leefCategory         = b.leefCategory;
         this.leefTags             = b.leefTags;
         this.gcDumpThreshold      = b.gcDumpThreshold;
@@ -200,9 +200,14 @@ public final class TargetDescriptor {
     }
 
     /**
-     * Returns the filesystem directory where diagnostic dumps for this target are saved.
+     * Returns the filesystem directory where diagnostic dumps for this target are saved,
+     * or {@code null} if not explicitly configured.
      *
-     * @return directory path; never {@code null}
+     * <p>When {@code null}, the watchdog daemon inherits the global dump directory from
+     * the {@code --dump-dir} command-line argument rather than defaulting to a
+     * per-target subdirectory.
+     *
+     * @return explicitly configured directory path, or {@code null} to inherit from base config
      */
     public String getDumpDirectory() {
         return dumpDirectory;
