@@ -3,28 +3,11 @@
 .DS_Store
 test-dumps/
 harness-output/
-core/target/classes/
-core/target/generated-sources/
-core/target/maven-archiver/
-core/target/maven-status/
-core/target/test-classes/
-core/target/surefire-reports/
-core/target/*-1.7.*.jar
-core/target/*-shaded.jar
-test-harness/target/classes/
-test-harness/target/generated-sources/
-test-harness/target/maven-archiver/
-test-harness/target/maven-status/
-test-harness/target/test-classes/
-test-harness/target/surefire-reports/
-test-harness/target/*-1.7.*.jar
-test-harness/target/*-shaded.jar
+core/target/
+test-harness/target/
 oom-watchdog-tests/target/
 
 *.code-workspace
 
-# Built JARs — distributed via GitHub Releases, not git
-core/target/*.jar
-test-harness/target/*.jar
-core/target/original-*.jar
-test-harness/target/original-*.jar
+# Assembled JARs staged for release — distributed via GitHub Releases, not git
+oom-watchdog/*.jar

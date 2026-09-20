@@ -522,7 +522,7 @@ flowchart TD
 ## Module Structure
 
 ```
-oom-watchdog/                  Maven multi-module root (v1.7.10)
+oom-watchdog/                  Maven multi-module root (v1.7.11)
 ├── core/                      oom-watchdog.jar  (fat jar via maven-shade-plugin)
 │   └── src/main/java/com/trongus/oom/
 │       ├── WatchdogMain.java  CLI entry point (local + daemon modes)
@@ -656,6 +656,9 @@ The following table shows exactly where OOM Watchdog alert output appears for ev
 | `TargetRegistry.loadFromFile()` uses `getCanonicalFile()` | Prevents path traversal when loading targets config file |
 | `JmxDiagnosticsCollector` sanitises exception reason in unreachable snapshot | Prevents control-character injection from remote JMX errors into diagnosis notes |
 | `TargetRegistry` null-guards `getProperty()` before `.trim()` | Prevents NPE on malformed properties files with valueless keys |
+| Dashboard dump buttons route through `JmxDiagnosticsCollector.triggerRemoteDump()` | Ensures heap/thread/core dumps are written on the **target JVM**, not the watchdog process; uses `HotSpotDiagnosticMXBean` for heap and `DiagnosticCommand` MBean for thread/core |
+| `TargetDescriptor.dumpDirectory` defaults to `null` | Inherits the global `--dump-dir` CLI value; only overridden when `dump-dir` is explicitly set per-target in `targets.properties`, preventing silent default path override |
+| `QRadarAlertChannel` logs at INFO on success, FINE on build start, FINEST for raw LEEF payload | Keeps high-volume payload bytes off the default log level while preserving full observability at `FINEST`; operators see delivery confirmation at INFO without noise |
 
 ---
 
@@ -691,8 +694,8 @@ Pass 5 identified and fixed 4 issues in the remote JMX monitoring subsystem.
 
 ## Release Artefacts
 
-The v1.7.10 release publishes two executable fat JARs built with `maven-shade-plugin`.
-Both will be attached to the [GitHub release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.10).
+The v1.7.11 release publishes two executable fat JARs built with `maven-shade-plugin`.
+Both will be attached to the [GitHub release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.11).
 
 | Artefact | Main class | Contents | Size (approx) |
 |----------|-----------|----------|---------------|

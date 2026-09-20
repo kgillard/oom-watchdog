@@ -8,7 +8,7 @@
   <parent>
     <groupId>com.trongus.oom</groupId>
     <artifactId>oom-watchdog-parent</artifactId>
-    <version>1.7.10</version>
+    <version>1.7.11</version>
   </parent>
 
   <artifactId>oom-watchdog-tests</artifactId>

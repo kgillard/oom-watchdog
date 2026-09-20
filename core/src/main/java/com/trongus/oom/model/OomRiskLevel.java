@@ -33,7 +33,7 @@ package com.trongus.oom.model;
  * </dl>
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.10
+ * @version 1.7.11
  * @since 1.0.0
  * @see com.trongus.oom.monitor.RiskAssessor
  * @see com.trongus.oom.monitor.ThresholdRiskAssessor

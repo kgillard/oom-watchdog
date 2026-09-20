@@ -3,22 +3,22 @@
 > **Preemptively detect and alert on JVM Out-of-Memory conditions — before the process crashes.**
 
 [![Build](https://img.shields.io/badge/build-passing-brightgreen)]()
-[![Tests](https://img.shields.io/badge/tests-242%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-244%20passing-brightgreen)]()
 [![Security Audit](https://img.shields.io/badge/security%20audit-4%20passes%20clean-brightgreen)]()
 [![JDK](https://img.shields.io/badge/JDK-8%20%E2%80%93%2026%2B-blue)]()
 [![Vendors](https://img.shields.io/badge/JVM-HotSpot%20%7C%20OpenJ9%20%7C%20GraalVM-blue)]()
-[![Release](https://img.shields.io/badge/release-v1.7.10-blue)](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.10)
+[![Release](https://img.shields.io/badge/release-v1.7.11-blue)](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.11)
 
 ---
 
 ## Download
 
-Pre-built JARs are available in the [v1.7.10 release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.10):
+Pre-built JARs are available in the [v1.7.11 release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.11):
 
 | Artefact | Description | Size |
 |----------|-------------|------|
-| [`oom-watchdog.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.7.10/oom-watchdog.jar) | Fat JAR — monitoring agent + CLI entry point | ~157 KB |
-| [`test-harness.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.7.10/test-harness.jar) | Fat JAR — interactive OOM test harness | ~171 KB |
+| [`oom-watchdog.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.7.11/oom-watchdog.jar) | Fat JAR — monitoring agent + CLI entry point | ~157 KB |
+| [`test-harness.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.7.11/test-harness.jar) | Fat JAR — interactive OOM test harness | ~171 KB |
 
 ---
 
@@ -49,7 +49,7 @@ OOM Watchdog provides real-time health monitoring, per-process logging named aft
 ```bash
 # Download the release JAR or self-extracting installer
 curl -L -o oom-watchdog.jar \
-  https://github.com/kgillard/oom-watchdog/releases/download/v1.7.10/oom-watchdog.jar
+  https://github.com/kgillard/oom-watchdog/releases/download/v1.7.11/oom-watchdog.jar
 
 # Run in multi-target daemon mode (monitors external JVMs over JMX)
 java -jar oom-watchdog.jar --daemon --targets-file /etc/oom-watchdog/targets.properties
@@ -117,6 +117,7 @@ chmod +x oom-watchdog-installer.sh
 | `--dump-dir <path>` | `./dumps` | Output directory for dump artefacts |
 | `--dump-types <list>` | _(none)_ | Comma-separated: `HEAP,THREAD,CLASS_HISTOGRAM,CORE` |
 | `--log-file <path>` | `./oom-watchdog.log` | Append structured alerts to this file |
+| `--log-level <level>` | `INFO` | Internal diagnostic log level: `FINEST` (full trace incl. LEEF payloads), `FINE` (debug — per-poll and per-channel events), `CONFIG`, `INFO`, `WARNING`, `SEVERE` |
 | `--qradar-host <host>` | _(disabled)_ | QRadar / syslog target hostname |
 | `--qradar-port <port>` | `514` | QRadar / syslog target port (1–65535) |
 | `--qradar-tcp` | _(off)_ | Use TCP instead of UDP for QRadar |
@@ -315,7 +316,7 @@ A complete example file is provided at
 | `target.<name>.gc` | No | `0.50` | Fraction of uptime spent in GC (0.0–1.0) that contributes to risk escalation |
 | `target.<name>.poll-ms` | No | `5000` | Milliseconds between JMX collections. Minimum: `100` |
 | `target.<name>.dump-types` | No | _(none)_ | Comma-separated list of dump artefacts to capture at CRITICAL. Values: `heap`, `thread`, `class_histogram`, `core` |
-| `target.<name>.dump-dir` | No | `./dumps/<name>` | Filesystem directory where dump files are written |
+| `target.<name>.dump-dir` | No | _(inherits `--dump-dir`)_ | Filesystem directory where dump files are written for this target. When omitted, inherits the global `--dump-dir` value |
 | `target.<name>.username` | No | _(none)_ | JMX authentication username |
 | `target.<name>.password` | No | _(none)_ | JMX authentication password |
 | `target.<name>.gc-dump-threshold` | No | _(disabled)_ | GC overhead ratio (0.0–1.0) that triggers an immediate dump |
@@ -1287,12 +1288,9 @@ Each target tab contains an **On-Demand Diagnostics** section with three buttons
 | **Heap Dump** | `HEAP` | `<dump-dir>/<target>_heap_<timestamp>.hprof` |
 | **Core Dump** | `CORE` | `<dump-dir>/<target>_core_<timestamp>.dmp` (Linux/J9 only) |
 
-Click a button on any tab to trigger the dump **for that specific target** immediately — without waiting for a `CRITICAL` threshold to fire. The dump is written to the watchdog server's configured `--dump-dir` directory. The dashboard shows the full path once the dump completes, or an error message if it fails.
+Click a button on any tab to trigger the dump **for that specific target** immediately — without waiting for a `CRITICAL` threshold to fire. The dump is written to the configured `--dump-dir` directory (or `dump-dir` in `targets.properties` if set). The dashboard shows the full path once the dump completes, or an error message if it fails.
 
-> **Multi-target note:** In daemon mode each tab represents a different remote JVM. Clicking
-> **Heap Dump** on the `tomcat` tab triggers a heap dump for the `tomcat` target; clicking it on
-> the `liberty` tab triggers one for `liberty`. The dump file is written on the **watchdog
-> server's** filesystem (the machine running `oom-watchdog.jar`), not on the remote JVM's host.
+> **Multi-target / remote JVM note:** In daemon mode, dump buttons invoke the dump **on the remote target JVM** via JMX (`HotSpotDiagnosticMXBean.dumpHeap` for heap, `DiagnosticCommand.threadPrint` for thread, `DiagnosticCommand.systemDump` for core on J9/OpenJ9). The resulting file is written on the **watchdog server's** filesystem (the machine running `oom-watchdog.jar`), not on the remote JVM's host, because it is the watchdog process that writes the file after receiving the dump data over JMX.
 
 ### CORS — accessing a remote JVM
 
@@ -1416,7 +1414,7 @@ oom-watchdog/
 │       ├── DynamicOomClassGenerator.java
 │       ├── BuiltInHeapExhauster.java
 │       └── HarnessAlertRecorder.java
-└── oom-watchdog-tests/              JUnit 4 test suite (242 tests)
+└── oom-watchdog-tests/              JUnit 4 test suite (244 tests)
 ```
 
 ---
