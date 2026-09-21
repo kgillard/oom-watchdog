@@ -100,7 +100,7 @@ import java.util.logging.Logger;
  * allow safe use from multiple threads if required.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.11.7
+ * @version 1.7.11.8
  * @since 1.7.0
  * @see TargetDescriptor
  * @see JvmDiagnosticsCollector
@@ -425,16 +425,26 @@ public final class JmxDiagnosticsCollector implements JvmDiagnosticsCollector, C
      * <p>The dump mechanism depends on the requested type and the capabilities
      * exposed by the remote JVM:
      * <ul>
-     *   <li><strong>HEAP</strong> — invokes {@code com.sun.management:type=HotSpotDiagnostic}
-     *       {@code dumpHeap(file, liveOnly)} over the existing JMX connection.  Supported
-     *       by HotSpot, OpenJDK, GraalVM JVM mode, and IBM J9/OpenJ9 8+.</li>
-     *   <li><strong>THREAD</strong> — invokes {@code com.sun.management:type=DiagnosticCommand}
-     *       {@code threadPrint} over JMX and writes the result to a {@code .txt} file on the
-     *       <em>watchdog server</em>'s configured dump directory.  Falls back to
-     *       {@code com.sun.management:type=DiagnosticCommand threadPrint} with empty args.</li>
-     *   <li><strong>CORE / CLASS_HISTOGRAM</strong> — invokes
-     *       {@code com.sun.management:type=DiagnosticCommand} {@code systemDump} (J9/OpenJ9)
-     *       or signals unsupported for HotSpot (gcore cannot be triggered remotely via JMX).</li>
+     *   <li><strong>HEAP</strong> — tried in order:
+     *     <ol>
+     *       <li>{@code com.sun.management:type=HotSpotDiagnostic dumpHeap} (HotSpot / OpenJDK)</li>
+     *       <li>{@code com.ibm.jvm:type=Dump heapDump(String)} (IBM J9 / OpenJ9)</li>
+     *       <li>{@code com.ibm.lang.management:type=JvmMemory createHeapDump()} (IBM J9 fallback)</li>
+     *     </ol>
+     *   </li>
+     *   <li><strong>THREAD</strong> — tried in order:
+     *     <ol>
+     *       <li>{@code com.sun.management:type=DiagnosticCommand threadPrint}</li>
+     *       <li>{@link ThreadMXBean#dumpAllThreads} (universal JMX fallback)</li>
+     *     </ol>
+     *   </li>
+     *   <li><strong>CORE</strong> — tried in order:
+     *     <ol>
+     *       <li>{@code com.ibm.jvm:type=Dump systemDump(String)} (IBM J9 / OpenJ9)</li>
+     *       <li>{@code com.sun.management:type=DiagnosticCommand systemDump} (some J9 builds)</li>
+     *     </ol>
+     *     HotSpot cannot produce a core dump remotely via JMX.
+     *   </li>
      * </ul>
      *
      * <p>If the JMX connection is not currently established, this method attempts to connect
@@ -479,23 +489,66 @@ public final class JmxDiagnosticsCollector implements JvmDiagnosticsCollector, C
     }
 
     /**
-     * Invokes HotSpotDiagnosticMXBean.dumpHeap on the remote JVM.
+     * Invokes a heap dump on the remote JVM.
      *
-     * <p>The {@code outputPath} is the path where the remote JVM will write the
-     * {@code .hprof} file on its own filesystem.  The watchdog server does not need
-     * to access this path — it simply returns the path string as confirmation.
-     * Falls back to a warning and returns {@code null} when the MBean is not registered.
+     * <p>Tries three strategies in order:
+     * <ol>
+     *   <li><strong>HotSpot</strong> — {@code com.sun.management:type=HotSpotDiagnostic}
+     *       {@code dumpHeap(file, liveOnly)}.  Works on HotSpot, OpenJDK, GraalVM JVM mode.</li>
+     *   <li><strong>IBM J9 / OpenJ9 (com.ibm.jvm MBean)</strong> — {@code com.ibm.jvm:type=Dump}
+     *       {@code heapDump(String)} where the argument is the target file path.  Available on
+     *       IBM JDK 8+ and OpenJ9.  Produces a PHD ({@code .phd}) file.</li>
+     *   <li><strong>IBM J9 JvmMemory MBean</strong> — {@code com.ibm.lang.management:type=JvmMemory}
+     *       {@code createHeapDump()}.  Returns the path chosen by the JVM; the supplied
+     *       {@code outputPath} is used as the returned value when the MBean result is blank.</li>
+     * </ol>
      */
     private String remoteHeapDump(String outputPath) {
+        // Strategy 1: HotSpot HotSpotDiagnosticMXBean
         try {
             ObjectName on = new ObjectName("com.sun.management:type=HotSpotDiagnostic");
             mbsc.invoke(on, "dumpHeap",
                     new Object[]{ outputPath, Boolean.TRUE },
                     new String[]{ String.class.getName(), boolean.class.getName() });
+            WatchdogLogger.info(LOG, "Remote heap dump (HotSpot) written to [{0}] for target [{1}]",
+                    outputPath, descriptor.getName());
             return outputPath;
+        } catch (Exception ignored) {
+            WatchdogLogger.fine(LOG,
+                    "HotSpotDiagnosticMXBean not available on [{0}]; trying IBM J9 strategies",
+                    descriptor.getName());
+        }
+
+        // Strategy 2: IBM J9 / OpenJ9 — com.ibm.jvm:type=Dump  heapDump(String)
+        try {
+            ObjectName on = new ObjectName("com.ibm.jvm:type=Dump");
+            Object result = mbsc.invoke(on, "heapDump",
+                    new Object[]{ outputPath },
+                    new String[]{ String.class.getName() });
+            String path = result != null && !result.toString().trim().isEmpty()
+                    ? result.toString().trim() : outputPath;
+            WatchdogLogger.info(LOG, "Remote heap dump (IBM J9 Dump MBean) written to [{0}] " +
+                    "for target [{1}]", path, descriptor.getName());
+            return path;
+        } catch (Exception ignored) {
+            WatchdogLogger.fine(LOG,
+                    "IBM J9 Dump MBean (heapDump) not available on [{0}]; trying JvmMemory MBean",
+                    descriptor.getName());
+        }
+
+        // Strategy 3: IBM J9 — com.ibm.lang.management:type=JvmMemory  createHeapDump()
+        try {
+            ObjectName on = new ObjectName("com.ibm.lang.management:type=JvmMemory");
+            Object result = mbsc.invoke(on, "createHeapDump",
+                    new Object[0], new String[0]);
+            String path = result != null && !result.toString().trim().isEmpty()
+                    ? result.toString().trim() : outputPath;
+            WatchdogLogger.info(LOG, "Remote heap dump (IBM J9 JvmMemory MBean) written to [{0}] " +
+                    "for target [{1}]", path, descriptor.getName());
+            return path;
         } catch (Exception e) {
-            WatchdogLogger.warning(LOG, "Remote heap dump unavailable for [{0}] " +
-                    "(HotSpotDiagnosticMXBean not registered or accessible): {1}",
+            WatchdogLogger.warning(LOG,
+                    "Remote heap dump failed for [{0}] — no supported dump MBean found: {1}",
                     descriptor.getName(), e.getMessage());
             return null;
         }
@@ -550,32 +603,60 @@ public final class JmxDiagnosticsCollector implements JvmDiagnosticsCollector, C
 
     /**
      * Attempts a system/core dump on the remote JVM.
-     * Works on J9/OpenJ9 via the {@code systemDump} DiagnosticCommand.
-     * Returns {@code null} with a warning on HotSpot (gcore cannot be invoked remotely via JMX).
+     *
+     * <p>Tries three strategies in order:
+     * <ol>
+     *   <li><strong>IBM J9 / OpenJ9 Dump MBean</strong> — {@code com.ibm.jvm:type=Dump}
+     *       {@code systemDump(String)}.  Produces a system dump ({@code .dmp}) on the
+     *       remote JVM's filesystem.  This is the preferred path for J9/OpenJ9.</li>
+     *   <li><strong>DiagnosticCommand systemDump</strong> — {@code com.sun.management:type=DiagnosticCommand}
+     *       {@code systemDump(String[])} with {@code file=<path>} argument.  Available on
+     *       some J9/OpenJ9 builds that register the DiagnosticCommand MBean.</li>
+     *   <li>HotSpot cannot produce a core dump via JMX ({@code gcore} requires a local OS
+     *       process call).  A warning is logged and {@code null} is returned.</li>
+     * </ol>
      */
     private String remoteCoreOrSystemDump(String outputPath) {
-        ObjectName on;
+        // Strategy 1: IBM J9 / OpenJ9 — com.ibm.jvm:type=Dump  systemDump(String)
         try {
-            on = new ObjectName("com.sun.management:type=DiagnosticCommand");
-        } catch (Exception e) {
-            return null;
+            ObjectName on = new ObjectName("com.ibm.jvm:type=Dump");
+            Object result = mbsc.invoke(on, "systemDump",
+                    new Object[]{ outputPath },
+                    new String[]{ String.class.getName() });
+            String path = result != null && !result.toString().trim().isEmpty()
+                    ? result.toString().trim() : outputPath;
+            // J9 sometimes returns a decorated message like "Dump written to /path/file.dmp"
+            if (path.contains(" ")) {
+                int idx = path.lastIndexOf(' ');
+                String candidate = path.substring(idx + 1);
+                if (new File(candidate).exists()) path = candidate;
+            }
+            WatchdogLogger.info(LOG,
+                    "Remote system dump (IBM J9 Dump MBean) written to [{0}] for target [{1}]",
+                    path, descriptor.getName());
+            return path;
+        } catch (Exception ignored) {
+            WatchdogLogger.fine(LOG,
+                    "IBM J9 Dump MBean (systemDump) not available on [{0}]; trying DiagnosticCommand",
+                    descriptor.getName());
         }
-        // IBM J9/OpenJ9 exposes "systemDump"; check if it exists first
+
+        // Strategy 2: DiagnosticCommand systemDump (some J9/OpenJ9 builds)
         try {
+            ObjectName on = new ObjectName("com.sun.management:type=DiagnosticCommand");
             Object result = mbsc.invoke(on, "systemDump",
                     new Object[]{ new String[]{ "file=" + outputPath } },
                     new String[]{ String[].class.getName() });
             String text = result != null ? result.toString().trim() : "";
-            // J9 returns the path in the result string; parse it out if present
             if (!text.isEmpty()) {
-                // e.g. "Dump written to /store/jheap/target.dmp"
                 int idx = text.lastIndexOf(' ');
                 String candidate = idx >= 0 ? text.substring(idx + 1) : text;
                 if (new File(candidate).exists()) return candidate;
             }
             return outputPath;
         } catch (Exception e) {
-            WatchdogLogger.warning(LOG, "Remote system/core dump not supported by target JVM [{0}]: {1}",
+            WatchdogLogger.warning(LOG,
+                    "Remote system/core dump not supported by target JVM [{0}]: {1}",
                     descriptor.getName(), e.getMessage());
             return null;
         }

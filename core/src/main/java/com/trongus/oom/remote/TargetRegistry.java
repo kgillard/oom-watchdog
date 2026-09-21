@@ -95,7 +95,7 @@ import java.util.logging.Logger;
  * <p>This utility class is stateless and thread-safe.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.11.7
+ * @version 1.7.11.8
  * @since 1.7.0
  * @see TargetDescriptor
  * @see WatchdogDaemon
