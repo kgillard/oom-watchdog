@@ -7,18 +7,18 @@
 [![Security Audit](https://img.shields.io/badge/security%20audit-4%20passes%20clean-brightgreen)]()
 [![JDK](https://img.shields.io/badge/JDK-8%20%E2%80%93%2026%2B-blue)]()
 [![Vendors](https://img.shields.io/badge/JVM-HotSpot%20%7C%20OpenJ9%20%7C%20GraalVM-blue)]()
-[![Release](https://img.shields.io/badge/release-v1.7.13.3-blue)](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.13.3)
+[![Release](https://img.shields.io/badge/release-v1.7.13.4-blue)](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.13.4)
 
 ---
 
 ## Download
 
-Pre-built JARs are available in the [v1.7.11.5 release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.13.3):
+Pre-built JARs are available in the [v1.7.11.5 release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.13.4):
 
 | Artefact | Description | Size |
 |----------|-------------|------|
-| [`oom-watchdog.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.7.13.3/oom-watchdog.jar) | Fat JAR — monitoring agent + CLI entry point | ~157 KB |
-| [`test-harness.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.7.13.3/test-harness.jar) | Fat JAR — interactive OOM test harness | ~171 KB |
+| [`oom-watchdog.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.7.13.4/oom-watchdog.jar) | Fat JAR — monitoring agent + CLI entry point | ~157 KB |
+| [`test-harness.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.7.13.4/test-harness.jar) | Fat JAR — interactive OOM test harness | ~171 KB |
 
 ---
 
@@ -49,7 +49,7 @@ OOM Watchdog provides real-time health monitoring, per-process logging named aft
 ```bash
 # Download the release JAR or self-extracting installer
 curl -L -o oom-watchdog.jar \
-  https://github.com/kgillard/oom-watchdog/releases/download/v1.7.13.3/oom-watchdog.jar
+  https://github.com/kgillard/oom-watchdog/releases/download/v1.7.13.4/oom-watchdog.jar
 
 # Run in multi-target daemon mode (monitors external JVMs over JMX)
 java -jar oom-watchdog.jar --daemon --targets-file /etc/oom-watchdog/targets.properties

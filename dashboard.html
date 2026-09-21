@@ -538,6 +538,79 @@
     footer { text-align: left; padding: 7px 20px; color: var(--muted); font-size: 11px;
              border-top: 1px solid var(--border); background: var(--surface); }
     footer a { color: var(--accent); text-decoration: none; }
+
+    /* ── Chart-type picker menu ──────────────────────────────────────────────── */
+    .chart-menu-wrap {
+      position: relative;
+      display: inline-block;
+      flex-shrink: 0;
+    }
+    .chart-menu-btn {
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1;
+      cursor: pointer;
+      padding: 0 2px;
+      border-radius: 4px;
+      font-family: inherit;
+      transition: color 0.12s;
+    }
+    .chart-menu-btn:hover { color: var(--text); }
+    .chart-menu-dropdown {
+      display: none;
+      position: absolute;
+      top: calc(100% + 4px);
+      right: 0;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      min-width: 120px;
+      z-index: 500;
+      padding: 4px 0;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+    }
+    .chart-menu-dropdown.open { display: block; }
+    .chart-menu-item {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 6px 12px;
+      font-size: 12px;
+      color: var(--muted);
+      cursor: pointer;
+      white-space: nowrap;
+      border-radius: 0;
+      transition: background 0.1s, color 0.1s;
+    }
+    .chart-menu-item:hover { background: var(--surface); color: var(--text); }
+    .chart-menu-item.active { color: var(--accent); font-weight: 600; }
+    .chart-menu-icon { font-size: 13px; width: 16px; text-align: center; flex-shrink: 0; }
+    /* Table view inside a chart card */
+    .chart-table-wrap {
+      overflow-x: auto;
+      max-height: 140px;
+      overflow-y: auto;
+    }
+    .chart-table-wrap table {
+      width: 100%; min-width: 0;
+      font-size: 11px;
+      border-collapse: collapse;
+    }
+    .chart-table-wrap th {
+      font-size: 10px; font-weight: 600;
+      color: var(--muted); padding: 3px 6px;
+      border-bottom: 1px solid var(--border);
+      text-align: left; position: sticky; top: 0;
+      background: var(--surface2);
+    }
+    .chart-table-wrap td {
+      padding: 2px 6px;
+      border-bottom: 1px solid rgba(255,255,255,0.03);
+      color: var(--text);
+    }
+    .chart-table-wrap tr:last-child td { border-bottom: none; }
   </style>
 </head>
 <body>
@@ -983,20 +1056,29 @@ function riskCardHtml(s) {
 }
 
 function chartCardHtml(id, title, curId) {
-  return '<div class="chart-card">' +
-    '<div class="chart-title"><span>' + title + '</span><span class="chart-cur" id="' + curId + '">—</span></div>' +
-    '<svg class="spark" id="' + id + '" viewBox="0 0 300 65" preserveAspectRatio="none">' +
-      '<defs><linearGradient id="grad-' + id + '" x1="0" y1="0" x2="0" y2="1">' +
-        '<stop offset="0%" stop-color="#3b82f6" stop-opacity="0.35"/>' +
-        '<stop offset="100%" stop-color="#3b82f6" stop-opacity="0.02"/>' +
-      '</linearGradient></defs>' +
-      '<path id="' + id + '-area" fill="url(#grad-' + id + ')" d=""/>' +
-      '<path id="' + id + '-line" fill="none" stroke="#3b82f6" stroke-width="1.5" d=""/>' +
-      '<line id="' + id + '-thresh" x1="0" x2="300" y1="0" y2="0" stroke="#ef4444" stroke-width="1" stroke-dasharray="4 3" opacity="0.5"/>' +
-      '<line id="' + id + '-xhair" x1="0" x2="0" y1="0" y2="65" stroke="#ffffff" stroke-width="1" opacity="0.25" display="none"/>' +
-      '<circle id="' + id + '-dot" cx="0" cy="0" r="3" fill="#ffffff" stroke="#3b82f6" stroke-width="1.5" display="none"/>' +
-      '<rect id="' + id + '-hover" x="0" y="0" width="300" height="65" fill="transparent"/>' +
-    '</svg></div>';
+  return '<div class="chart-card" style="position:relative">' +
+    '<div class="chart-title">' +
+      '<span>' + title + '</span>' +
+      '<span style="display:flex;align-items:center;gap:6px">' +
+        '<span class="chart-cur" id="' + curId + '">—</span>' +
+        chartMenuHtml(id, 'spark') +
+      '</span>' +
+    '</div>' +
+    '<div id="' + id + '-chart-body">' +
+      '<svg class="spark" id="' + id + '" viewBox="0 0 300 65" preserveAspectRatio="none">' +
+        '<defs><linearGradient id="grad-' + id + '" x1="0" y1="0" x2="0" y2="1">' +
+          '<stop offset="0%" stop-color="#3b82f6" stop-opacity="0.35"/>' +
+          '<stop offset="100%" stop-color="#3b82f6" stop-opacity="0.02"/>' +
+        '</linearGradient></defs>' +
+        '<path id="' + id + '-area" fill="url(#grad-' + id + ')" d=""/>' +
+        '<path id="' + id + '-line" fill="none" stroke="#3b82f6" stroke-width="1.5" d=""/>' +
+        '<line id="' + id + '-thresh" x1="0" x2="300" y1="0" y2="0" stroke="#ef4444" stroke-width="1" stroke-dasharray="4 3" opacity="0.5"/>' +
+        '<line id="' + id + '-xhair" x1="0" x2="0" y1="0" y2="65" stroke="#ffffff" stroke-width="1" opacity="0.25" display="none"/>' +
+        '<circle id="' + id + '-dot" cx="0" cy="0" r="3" fill="#ffffff" stroke="#3b82f6" stroke-width="1.5" display="none"/>' +
+        '<rect id="' + id + '-hover" x="0" y="0" width="300" height="65" fill="transparent"/>' +
+      '</svg>' +
+    '</div>' +
+  '</div>';
 }
 
 function jvmDetailCardHtml(s) {
@@ -1101,13 +1183,18 @@ function gcAnalysisSectionHtml(s, name) {
         '<div class="gc-no-data">Waiting for first poll…</div>',
       '</div>',
       // Leak trend summary
-      '<div class="gc-chart-card" style="margin-bottom:0">',
+      '<div class="gc-chart-card" style="margin-bottom:0;position:relative">',
         '<div class="gc-chart-title">',
-          'Post-GC Heap Leak Trend',
-          '<span class="gc-chart-cur" id="' + s + '-gc-leak-cur">—</span>',
+          '<span>Post-GC Heap Leak Trend</span>',
+          '<span style="display:flex;align-items:center;gap:6px">',
+            '<span class="gc-chart-cur" id="' + s + '-gc-leak-cur">—</span>',
+            chartMenuHtml(s + '-gc-leak-canvas', 'canvas'),
+          '</span>',
         '</div>',
-        '<div class="gc-canvas-wrap">',
-          '<canvas id="' + s + '-gc-leak-canvas" height="80"></canvas>',
+        '<div id="' + s + '-gc-leak-canvas-chart-body">',
+          '<div class="gc-canvas-wrap">',
+            '<canvas id="' + s + '-gc-leak-canvas" height="80"></canvas>',
+          '</div>',
         '</div>',
         '<div style="font-size:10px;color:var(--muted);margin-top:6px" id="' + s + '-gc-leak-detail">',
           'Records post-GC heap size after each GC cycle to detect memory leaks.',
@@ -1169,13 +1256,18 @@ function gcAnalysisSectionHtml(s, name) {
 
 function gcHistChartHtml(id, title, curId) {
   return [
-    '<div class="gc-chart-card">',
+    '<div class="gc-chart-card" style="position:relative">',
       '<div class="gc-chart-title">',
         '<span>' + title + '</span>',
-        '<span class="gc-chart-cur" id="' + curId + '">—</span>',
+        '<span style="display:flex;align-items:center;gap:6px">',
+          '<span class="gc-chart-cur" id="' + curId + '">—</span>',
+          chartMenuHtml(id + '-canvas', 'canvas'),
+        '</span>',
       '</div>',
-      '<div class="gc-canvas-wrap">',
-        '<canvas id="' + id + '-canvas" height="80"></canvas>',
+      '<div id="' + id + '-canvas-chart-body">',
+        '<div class="gc-canvas-wrap">',
+          '<canvas id="' + id + '-canvas" height="80"></canvas>',
+        '</div>',
       '</div>',
     '</div>',
   ].join('');
@@ -1295,14 +1387,96 @@ function renderPane(name) {
 var _sparkState = {};
 
 function drawSparkline(svgId, data, maxVal, threshPct, curId, curText, lineColor) {
+  var chartType = chartTypeFor(svgId);
+  var bodyId    = svgId + '-chart-body';
+
+  // ── Update current-value label (all types) ──────────────────────────────
+  var curEl = document.getElementById(curId);
+  if (curEl) { curEl.textContent = curText; curEl.style.color = lineColor; }
+
+  // ── TABLE mode ──────────────────────────────────────────────────────────
+  if (chartType === 'table') {
+    var body = document.getElementById(bodyId);
+    if (body) {
+      // Build rows from rolling history (no timestamps stored — use index as label)
+      var html = '<div class="chart-table-wrap"><table>' +
+        '<thead><tr><th>#</th><th>Value</th></tr></thead><tbody>';
+      var start = Math.max(0, data.length - 60);
+      for (var ti = data.length - 1; ti >= start; ti--) {
+        html += '<tr><td>' + (ti + 1) + '</td><td>' + data[ti].toFixed(2) + '</td></tr>';
+      }
+      html += '</tbody></table></div>';
+      body.innerHTML = html;
+    }
+    return;
+  }
+
+  // ── BAR mode (canvas overlay inside the body div) ───────────────────────
+  if (chartType === 'bar') {
+    var body2 = document.getElementById(bodyId);
+    if (body2) {
+      // Replace body content with a canvas if needed
+      var barCanvasId = svgId + '-bar-canvas';
+      if (!document.getElementById(barCanvasId)) {
+        body2.innerHTML = '<canvas id="' + barCanvasId + '" height="65" style="width:100%;display:block"></canvas>';
+      }
+      var bc = document.getElementById(barCanvasId);
+      if (bc) {
+        var dpr2 = window.devicePixelRatio || 1;
+        var W2   = bc.clientWidth || 300;
+        var H2   = 65;
+        bc.width  = W2 * dpr2; bc.height = H2 * dpr2;
+        var ctx2  = bc.getContext('2d');
+        ctx2.scale(dpr2, dpr2);
+        ctx2.clearRect(0, 0, W2, H2);
+        var n2    = data.length;
+        var maxV2 = Math.max.apply(null, data) || 1;
+        var barW  = Math.max(1, W2 / n2 - 1);
+        for (var bi = 0; bi < n2; bi++) {
+          var bh = (data[bi] / maxV2) * (H2 - 2);
+          ctx2.fillStyle = lineColor.replace('var(--crit)','#ef4444').replace('var(--warn)','#f59e0b')
+                                     .replace('var(--accent)','#3b82f6').replace('var(--ok)','#22c55e')
+                                     .replace('var(--muted)','#7a7e96');
+          ctx2.fillRect(bi * (W2 / n2), H2 - bh, barW, bh);
+        }
+        // Threshold line
+        if (maxVal > 0) {
+          var ty2 = H2 - (threshPct / maxVal) * H2;
+          ctx2.strokeStyle = '#ef4444'; ctx2.lineWidth = 1;
+          ctx2.setLineDash([4, 3]);
+          ctx2.beginPath(); ctx2.moveTo(0, ty2); ctx2.lineTo(W2, ty2); ctx2.stroke();
+          ctx2.setLineDash([]);
+        }
+      }
+    }
+    return;
+  }
+
+  // ── LINE / AREA mode (SVG sparkline — default) ──────────────────────────
+  // Restore SVG if a bar canvas replaced it
+  var bodyEl = document.getElementById(bodyId);
+  if (bodyEl && !document.getElementById(svgId)) {
+    bodyEl.innerHTML =
+      '<svg class="spark" id="' + svgId + '" viewBox="0 0 300 65" preserveAspectRatio="none">' +
+        '<defs><linearGradient id="grad-' + svgId + '" x1="0" y1="0" x2="0" y2="1">' +
+          '<stop offset="0%" stop-color="#3b82f6" stop-opacity="0.35"/>' +
+          '<stop offset="100%" stop-color="#3b82f6" stop-opacity="0.02"/>' +
+        '</linearGradient></defs>' +
+        '<path id="' + svgId + '-area" fill="url(#grad-' + svgId + ')" d=""/>' +
+        '<path id="' + svgId + '-line" fill="none" stroke="#3b82f6" stroke-width="1.5" d=""/>' +
+        '<line id="' + svgId + '-thresh" x1="0" x2="300" y1="0" y2="0" stroke="#ef4444" stroke-width="1" stroke-dasharray="4 3" opacity="0.5"/>' +
+        '<line id="' + svgId + '-xhair" x1="0" x2="0" y1="0" y2="65" stroke="#ffffff" stroke-width="1" opacity="0.25" display="none"/>' +
+        '<circle id="' + svgId + '-dot" cx="0" cy="0" r="3" fill="#ffffff" stroke="#3b82f6" stroke-width="1.5" display="none"/>' +
+        '<rect id="' + svgId + '-hover" x="0" y="0" width="300" height="65" fill="transparent"/>' +
+      '</svg>';
+  }
+
   var svg      = document.getElementById(svgId);
   var lineEl   = document.getElementById(svgId + '-line');
   var areaEl   = document.getElementById(svgId + '-area');
   var threshEl = document.getElementById(svgId + '-thresh');
   if (!svg || !lineEl) return;
   var W = 300, H = 65, n = data.length;
-  var curEl = document.getElementById(curId);
-  if (curEl) { curEl.textContent = curText; curEl.style.color = lineColor; }
   if (threshEl) {
     var ty = H - (threshPct / maxVal) * H;
     threshEl.setAttribute('y1', ty); threshEl.setAttribute('y2', ty);
@@ -1325,8 +1499,15 @@ function drawSparkline(svgId, data, maxVal, threshPct, curId, curText, lineColor
     linePath += ' C ' + cx + ' ' + pts[j-1][1] + ' ' + cx + ' ' + pts[j][1] + ' ' + pts[j][0] + ' ' + pts[j][1];
   }
   lineEl.setAttribute('d', linePath);
-  var areaPath = linePath + ' L ' + pts[pts.length-1][0] + ' ' + H + ' L ' + pts[0][0] + ' ' + H + ' Z';
-  if (areaEl) areaEl.setAttribute('d', areaPath);
+  // Area: show fill for 'area' type; hide for 'line' type
+  if (areaEl) {
+    if (chartType === 'area') {
+      var areaPath = linePath + ' L ' + pts[pts.length-1][0] + ' ' + H + ' L ' + pts[0][0] + ' ' + H + ' Z';
+      areaEl.setAttribute('d', areaPath);
+    } else {
+      areaEl.setAttribute('d', '');   // hide fill for plain line
+    }
+  }
 
   // Store state for hover lookup
   _sparkState[svgId] = { data: data, maxVal: maxVal, threshPct: threshPct, pts: pts, W: W, H: H, lineColor: lineColor };
@@ -1572,8 +1753,57 @@ function gcUpdateLive(s, d, t) {
         : 'No GC events yet — post-GC heap data will appear after the first GC cycle.';
     }
     if (t.postGcHistory.length >= 2) {
-      gcDrawCanvas(leakCanvas, t.postGcHistory.map(function(p){ return p.v; }),
-        null, 'var(--accent)', false, false);
+      var leakCanvasId  = s + '-gc-leak-canvas';
+      var leakChartType = chartTypeFor(leakCanvasId);
+      var leakBodyId    = leakCanvasId + '-chart-body';
+      var leakVals      = t.postGcHistory.map(function(p){ return p.v; });
+      if (leakChartType === 'table') {
+        var leakBody = document.getElementById(leakBodyId);
+        if (leakBody) {
+          var lhtml = '<div class="chart-table-wrap"><table>' +
+            '<thead><tr><th>Time</th><th>Post-GC Heap (MB)</th></tr></thead><tbody>';
+          var leakRows = t.postGcHistory.slice().reverse();
+          leakRows.forEach(function(p) {
+            lhtml += '<tr><td>' + new Date(p.ts).toLocaleTimeString() + '</td><td>' + p.v.toFixed(1) + '</td></tr>';
+          });
+          lhtml += '</tbody></table></div>';
+          leakBody.innerHTML = lhtml;
+        }
+      } else if (leakChartType === 'bar') {
+        var leakBody2 = document.getElementById(leakBodyId);
+        if (leakBody2) {
+          var lbcId = leakCanvasId + '-bar';
+          if (!document.getElementById(lbcId)) {
+            leakBody2.innerHTML = '<div class="gc-canvas-wrap"><canvas id="' + lbcId + '" height="80" style="width:100%;display:block"></canvas></div>';
+          }
+          var lbc = document.getElementById(lbcId);
+          if (lbc) {
+            var ldpr = window.devicePixelRatio || 1, lW = lbc.clientWidth || 320, lH = 80;
+            lbc.width = lW * ldpr; lbc.height = lH * ldpr;
+            var lctx = lbc.getContext('2d');
+            lctx.scale(ldpr, ldpr);
+            lctx.clearRect(0, 0, lW, lH);
+            var lmax = Math.max.apply(null, leakVals) || 1;
+            var lbw  = Math.max(1, lW / leakVals.length - 0.5);
+            leakVals.forEach(function(v, li) {
+              var lbh = (v / lmax) * (lH - 2);
+              lctx.fillStyle = '#3b82f6';
+              lctx.fillRect(li * (lW / leakVals.length), lH - lbh, lbw, lbh);
+            });
+          }
+        }
+      } else {
+        // Restore canvas if needed
+        var leakBody3 = document.getElementById(leakBodyId);
+        if (leakBody3 && !document.getElementById(leakCanvasId)) {
+          leakBody3.innerHTML = '<div class="gc-canvas-wrap"><canvas id="' + leakCanvasId + '" height="80"></canvas></div>';
+          leakCanvas = document.getElementById(leakCanvasId);
+        }
+        if (leakCanvas) {
+          gcDrawCanvas(leakCanvas, leakVals, null, 'var(--accent)',
+            leakChartType === 'area', false);
+        }
+      }
     }
   }
 }
@@ -1737,7 +1967,78 @@ function setElText(id, v) {
 function gcDrawToCanvas(canvasId, data, unit, lineColor, curId, curText, cursorIdx) {
   var canvas = document.getElementById(canvasId);
   if (!canvas) return;
-  gcDrawCanvas(canvas, data, cursorIdx !== undefined ? cursorIdx : null, lineColor, true, true, curId, curText, unit);
+
+  // Update current-value label regardless of chart type
+  if (curId) {
+    var curEl2 = document.getElementById(curId);
+    if (curEl2) curEl2.textContent = curText || '';
+  }
+
+  var ctype   = chartTypeFor(canvasId);
+  var bodyId2 = canvasId + '-chart-body';
+
+  if (ctype === 'table') {
+    // Build timestamp-keyed table from data array (timestamps not directly available here,
+    // so we use index labels; gcRenderHistory calls renderHistoryTable separately for rich data)
+    var bodyEl2 = document.getElementById(bodyId2);
+    if (bodyEl2) {
+      var thtml = '<div class="chart-table-wrap"><table>' +
+        '<thead><tr><th>#</th><th>Value (' + (unit || '') + ')</th></tr></thead><tbody>';
+      for (var tci = data.length - 1; tci >= Math.max(0, data.length - 100); tci--) {
+        thtml += '<tr><td>' + (tci + 1) + '</td><td>' + (data[tci] !== null ? Number(data[tci]).toFixed(2) : '—') + '</td></tr>';
+      }
+      thtml += '</tbody></table></div>';
+      bodyEl2.innerHTML = thtml;
+    }
+    return;
+  }
+
+  if (ctype === 'bar') {
+    var bodyEl3 = document.getElementById(bodyId2);
+    if (bodyEl3) {
+      var bCanvasId2 = canvasId + '-bar';
+      if (!document.getElementById(bCanvasId2)) {
+        bodyEl3.innerHTML = '<div class="gc-canvas-wrap"><canvas id="' + bCanvasId2 + '" height="80" style="width:100%;display:block"></canvas></div>';
+      }
+      var bc2 = document.getElementById(bCanvasId2);
+      if (bc2) {
+        var dprB = window.devicePixelRatio || 1;
+        var WB = bc2.clientWidth || 320, HB = 80;
+        bc2.width  = WB * dprB; bc2.height = HB * dprB;
+        var ctxB = bc2.getContext('2d');
+        ctxB.scale(dprB, dprB);
+        ctxB.clearRect(0, 0, WB, HB);
+        var nB    = data.length;
+        var maxVB = Math.max.apply(null, data.filter(function(v){ return v !== null && v > 0; })) || 1;
+        var barW2 = Math.max(1, WB / nB - 0.5);
+        var resolvedColor = lineColor.replace('var(--crit)','#ef4444').replace('var(--warn)','#f59e0b')
+          .replace('var(--accent)','#3b82f6').replace('var(--ok)','#22c55e').replace('var(--muted)','#7a7e96');
+        for (var bci = 0; bci < nB; bci++) {
+          var bvB = data[bci] !== null ? data[bci] : 0;
+          var bhB = (bvB / maxVB) * (HB - 4);
+          if (cursorIdx !== null && cursorIdx !== undefined && bci === cursorIdx) {
+            ctxB.fillStyle = '#ffffff';
+          } else {
+            ctxB.fillStyle = resolvedColor;
+          }
+          ctxB.fillRect(bci * (WB / nB), HB - bhB, barW2, bhB);
+        }
+      }
+    }
+    return;
+  }
+
+  // Line / Area — restore canvas element if it was replaced
+  var bodyEl4 = document.getElementById(bodyId2);
+  if (bodyEl4 && !document.getElementById(canvasId)) {
+    bodyEl4.innerHTML = '<div class="gc-canvas-wrap"><canvas id="' + canvasId + '" height="80"></canvas></div>';
+    canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+  }
+
+  gcDrawCanvas(canvas, data, cursorIdx !== undefined ? cursorIdx : null, lineColor,
+    ctype !== 'line' /* fillArea = true for area, false for line */,
+    true, null, null, unit);
 }
 
 /**
@@ -1971,6 +2272,198 @@ function gcDrawCollectorHistory(canvasId, records, cursorIdx) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// CHART-TYPE PICKER
+// Three-dot (⋯) button on every chart card lets the user switch between:
+//   Line | Area | Bar | Table
+// The chosen type is persisted per-chart in localStorage so it survives refresh.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+var CHART_TYPE_KEY = 'oom-chart-types'; // localStorage key → JSON object
+var _chartTypes = {};   // in-memory cache: chartId → 'line'|'area'|'bar'|'table'
+
+// ── persistence ────────────────────────────────────────────────────────────────
+
+function _loadChartTypes() {
+  try {
+    var raw = localStorage.getItem(CHART_TYPE_KEY);
+    _chartTypes = raw ? JSON.parse(raw) : {};
+  } catch(e) { _chartTypes = {}; }
+}
+
+function _saveChartTypes() {
+  try { localStorage.setItem(CHART_TYPE_KEY, JSON.stringify(_chartTypes)); } catch(e) {}
+}
+
+function chartTypeFor(id) {
+  if (!_chartTypes) _loadChartTypes();
+  return _chartTypes[id] || 'line';
+}
+
+// ── HTML builder ───────────────────────────────────────────────────────────────
+
+// kind: 'spark' (SVG live) or 'canvas' (history canvas)
+function chartMenuHtml(id, kind) {
+  var types = [
+    { key: 'line',  icon: '╱', label: 'Line'  },
+    { key: 'area',  icon: '▲', label: 'Area'  },
+    { key: 'bar',   icon: '▐', label: 'Bar'   },
+    { key: 'table', icon: '☰', label: 'Table' }
+  ];
+  var items = types.map(function(t) {
+    return '<div class="chart-menu-item" id="mi-' + id + '-' + t.key + '"' +
+      ' onclick="applyChartType(\'' + id + '\',\'' + kind + '\',\'' + t.key + '\')">' +
+      '<span class="chart-menu-icon">' + t.icon + '</span>' + t.label +
+      '</div>';
+  }).join('');
+  return '<div class="chart-menu-wrap">' +
+    '<button class="chart-menu-btn" title="Chart type"' +
+      ' onclick="toggleChartMenu(event,\'' + id + '\')" type="button">&#8943;</button>' +
+    '<div class="chart-menu-dropdown" id="cmenu-' + id + '">' +
+      items +
+    '</div>' +
+  '</div>';
+}
+
+// ── open / close ───────────────────────────────────────────────────────────────
+
+function toggleChartMenu(e, id) {
+  e.stopPropagation();
+  var menu = document.getElementById('cmenu-' + id);
+  if (!menu) return;
+  var wasOpen = menu.classList.contains('open');
+  // Close all open menus first
+  document.querySelectorAll('.chart-menu-dropdown.open').forEach(function(m) {
+    m.classList.remove('open');
+  });
+  if (!wasOpen) {
+    menu.classList.add('open');
+    // Mark the active item
+    var cur = chartTypeFor(id);
+    ['line','area','bar','table'].forEach(function(k) {
+      var mi = document.getElementById('mi-' + id + '-' + k);
+      if (mi) mi.classList.toggle('active', k === cur);
+    });
+  }
+}
+
+// Close any open chart menu when clicking elsewhere
+document.addEventListener('click', function(e) {
+  if (!e.target.closest || !e.target.closest('.chart-menu-wrap')) {
+    document.querySelectorAll('.chart-menu-dropdown.open').forEach(function(m) {
+      m.classList.remove('open');
+    });
+  }
+});
+
+// ── apply a type choice ────────────────────────────────────────────────────────
+
+function applyChartType(id, kind, type) {
+  _loadChartTypes();
+  _chartTypes[id] = type;
+  _saveChartTypes();
+
+  // Close the menu
+  var menu = document.getElementById('cmenu-' + id);
+  if (menu) menu.classList.remove('open');
+
+  if (kind === 'spark') {
+    // Live sparkline: find which target+metric owns this id and redraw
+    var name = Object.keys(targets).find(function(n) {
+      var s = slugify(n);
+      return (id === s + '-chart-heap' || id === s + '-chart-gc' || id === s + '-chart-nursery');
+    });
+    if (name) renderPane(name);
+  } else {
+    // Canvas chart: find slug from id prefix and trigger a redraw
+    // id pattern: <slug>-hchart-<metric>-canvas  OR  <slug>-gc-leak-canvas
+    var s2 = _slugFromCanvasId(id);
+    if (s2) {
+      var h = _gcHistory[s2];
+      if (h && h.records && h.records.length > 0) {
+        gcRenderHistory(s2);
+        gcScrub(s2, h.cursor !== undefined ? h.cursor : h.records.length - 1);
+      } else {
+        // Live leak canvas — redraw if we have post-GC history
+        var tName = Object.keys(targets).find(function(n){ return slugify(n) === s2; });
+        if (tName && targets[tName] && targets[tName].postGcHistory) {
+          var t2 = targets[tName];
+          var leakCanvas = document.getElementById(s2 + '-gc-leak-canvas');
+          if (leakCanvas && t2.postGcHistory.length >= 2) {
+            gcDrawCanvas(leakCanvas,
+              t2.postGcHistory.map(function(p){ return p.v; }),
+              null, 'var(--accent)', true, false);
+          }
+        }
+      }
+    }
+  }
+}
+
+// Extract slug from a canvas chart id.
+// Handles:  <slug>-hchart-heap-canvas   <slug>-hchart-gc-canvas  ...
+//           <slug>-gc-leak-canvas
+function _slugFromCanvasId(id) {
+  var suffixes = [
+    '-hchart-heap-canvas', '-hchart-gc-canvas', '-hchart-nursery-canvas',
+    '-hchart-nonheap-canvas', '-hchart-postGc-canvas', '-gc-leak-canvas'
+  ];
+  for (var i = 0; i < suffixes.length; i++) {
+    if (id.endsWith(suffixes[i])) {
+      return id.slice(0, id.length - suffixes[i].length);
+    }
+  }
+  return null;
+}
+
+// ── Table rendering helpers ────────────────────────────────────────────────────
+
+// Renders a small scrollable table inside bodyId, replacing any chart canvas/svg.
+// rows: [{ts, v}]  unit: string   (time column + value column)
+function renderChartTable(bodyId, rows, unit, valLabel) {
+  var body = document.getElementById(bodyId);
+  if (!body) return;
+  if (!rows || rows.length === 0) {
+    body.innerHTML = '<div style="color:var(--muted);font-size:11px;padding:8px 0">No data</div>';
+    return;
+  }
+  var html = '<div class="chart-table-wrap"><table>' +
+    '<thead><tr><th>Time</th><th>' + (valLabel || 'Value') + (unit ? ' (' + unit + ')' : '') + '</th></tr></thead>' +
+    '<tbody>';
+  // Show newest first
+  var reversed = rows.slice().reverse();
+  reversed.forEach(function(row) {
+    html += '<tr><td>' + (row.ts ? new Date(row.ts).toLocaleTimeString() : '—') + '</td>' +
+            '<td>' + (typeof row.v === 'number' ? row.v.toFixed(2) : row.v) + '</td></tr>';
+  });
+  html += '</tbody></table></div>';
+  body.innerHTML = html;
+}
+
+// Renders a table for history canvas charts from the records array.
+// field: key in each record object  (e.g. 'heap', 'gc', 'nonHeapMB')
+function renderHistoryTable(bodyId, records, field, unit, valLabel) {
+  var body = document.getElementById(bodyId);
+  if (!body) return;
+  if (!records || records.length === 0) {
+    body.innerHTML = '<div style="color:var(--muted);font-size:11px;padding:8px 0">No data</div>';
+    return;
+  }
+  var html = '<div class="chart-table-wrap"><table>' +
+    '<thead><tr><th>Time</th><th>' + (valLabel || field) + (unit ? ' (' + unit + ')' : '') + '</th></tr></thead>' +
+    '<tbody>';
+  var reversed = records.slice().reverse();
+  reversed.forEach(function(rec) {
+    var v = rec[field];
+    html += '<tr><td>' + (rec.ts ? new Date(rec.ts).toLocaleTimeString() : '—') + '</td>' +
+            '<td>' + (typeof v === 'number' ? v.toFixed(2) : (v !== undefined ? v : '—')) + '</td></tr>';
+  });
+  html += '</tbody></table></div>';
+  body.innerHTML = html;
+}
+
+// Initialise from localStorage on load
+_loadChartTypes();
 
 // ── card drag-and-drop + localStorage order persistence ───────────────────────
 // Works on any grid whose direct children have [draggable][data-card-id].
