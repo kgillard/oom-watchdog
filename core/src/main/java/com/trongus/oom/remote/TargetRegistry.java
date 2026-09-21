@@ -33,6 +33,7 @@ import java.util.logging.Logger;
  * target.hostcontext.gc                   = 0.40
  * target.hostcontext.dump-types           = heap,thread
  * target.hostcontext.dump-dir             = /var/log/qradar/dumps/hostcontext
+ * target.hostcontext.dump-api-url         = http://localhost:19777
  * target.hostcontext.poll-ms              = 3000
  * target.hostcontext.username             = admin
  * target.hostcontext.password             = secret
@@ -81,6 +82,15 @@ import java.util.logging.Logger;
  *   <tr><td>{@code leef-tags}</td><td>(omitted)</td>
  *       <td>Optional LEEF {@code tags} attribute for environment labels or topology context
  *           (e.g. {@code "env=prod,team=platform,region=us-east-1"}).</td></tr>
+ *   <tr><td>{@code dump-api-url} (or {@code dump-api})</td><td>(none)</td>
+ *       <td>Base URL of the target JVM's embedded
+ *           {@link com.trongus.oom.remote.DumpApiServer} (e.g.
+ *           {@code "http://localhost:19777"}).  When set, the watchdog forwards
+ *           {@code POST /dump/heap}, {@code /dump/thread} and {@code /dump/core}
+ *           directly to the target process instead of using JMX RMI.  The target
+ *           calls its own local MXBeans so heap and core dumps succeed without
+ *           requiring {@code com.sun.management.jmxremote} flags on the target JVM.
+ *           Falls back to JMX if not configured.</td></tr>
  * </table>
  *
  * <h2>Validation Rules</h2>
@@ -95,7 +105,7 @@ import java.util.logging.Logger;
  * <p>This utility class is stateless and thread-safe.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.12.7
+ * @version 1.7.12.8
  * @since 1.7.0
  * @see TargetDescriptor
  * @see WatchdogDaemon
@@ -297,6 +307,13 @@ public final class TargetRegistry {
             String leefTags = p.get("leef-tags");
             if (leefTags != null && !leefTags.isEmpty()) {
                 b.leefTags(leefTags);
+            }
+
+            // Optional direct dump API URL (bypasses JMX for same-host deployments)
+            String dumpApiUrl = p.get("dump-api-url");
+            if (dumpApiUrl == null) dumpApiUrl = p.get("dump-api");
+            if (dumpApiUrl != null && !dumpApiUrl.isEmpty()) {
+                b.dumpApiUrl(dumpApiUrl);
             }
 
             // Optional dump thresholds

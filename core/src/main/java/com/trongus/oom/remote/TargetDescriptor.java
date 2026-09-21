@@ -23,7 +23,7 @@ import java.util.Set;
  * to prevent accidental exposure in log files or console transcripts.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.12.7
+ * @version 1.7.12.8
  * @since 1.7.0
  * @see TargetRegistry
  * @see JmxDiagnosticsCollector
@@ -70,6 +70,14 @@ public final class TargetDescriptor {
      * {@code null} when not configured.
      */
     private final String        leefTags;
+    /**
+     * Optional base URL of the target JVM's embedded {@link DumpApiServer}
+     * (e.g. {@code http://localhost:19999}).  When set, the watchdog forwards
+     * {@code POST /dump/*} requests directly to this URL instead of using JMX,
+     * which is more reliable for heap and core dumps on the same host.
+     * {@code null} when not configured (JMX-based dump is used as fallback).
+     */
+    private final String        dumpApiUrl;
 
     /**
      * GC overhead ratio (0.0–1.0) that triggers an immediate dump, or
@@ -102,6 +110,7 @@ public final class TargetDescriptor {
         this.dumpDirectory        = b.dumpDirectory; // null means "inherit from base config"
         this.leefCategory         = b.leefCategory;
         this.leefTags             = b.leefTags;
+        this.dumpApiUrl           = b.dumpApiUrl;
         this.gcDumpThreshold      = b.gcDumpThreshold;
         this.heapDumpThreshold    = b.heapDumpThreshold;
         this.nurseryDumpThreshold = b.nurseryDumpThreshold;
@@ -235,6 +244,17 @@ public final class TargetDescriptor {
     }
 
     /**
+     * Returns the base URL of the target JVM's embedded {@link DumpApiServer}, or
+     * {@code null} if not configured.  When non-null, the watchdog will forward dump
+     * requests to {@code <dumpApiUrl>/dump/<type>} directly instead of using JMX.
+     *
+     * @return dump API base URL (e.g. {@code "http://localhost:19999"}), or {@code null}
+     */
+    public String getDumpApiUrl() {
+        return dumpApiUrl;
+    }
+
+    /**
      * Returns the GC overhead ratio threshold (0.0–1.0) that triggers an immediate dump,
      * or {@link #DUMP_THRESHOLD_DISABLED} ({@code -1}) when disabled.
      *
@@ -283,14 +303,15 @@ public final class TargetDescriptor {
                Objects.equals(dumpTypes, that.dumpTypes) &&
                Objects.equals(dumpDirectory, that.dumpDirectory) &&
                Objects.equals(leefCategory, that.leefCategory) &&
-               Objects.equals(leefTags, that.leefTags);
+               Objects.equals(leefTags, that.leefTags) &&
+               Objects.equals(dumpApiUrl, that.dumpApiUrl);
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(name, jmxUrl, username, password, warnThreshold,
                             critThreshold, gcThreshold, pollIntervalMs, dumpTypes,
-                            dumpDirectory, leefCategory, leefTags,
+                            dumpDirectory, leefCategory, leefTags, dumpApiUrl,
                             gcDumpThreshold, heapDumpThreshold, nurseryDumpThreshold);
     }
 
@@ -309,6 +330,7 @@ public final class TargetDescriptor {
                 ", dumpDirectory='" + dumpDirectory + '\'' +
                 ", leefCategory=" + (leefCategory != null ? "'" + leefCategory + "'" : "null") +
                 ", leefTags=" + (leefTags != null ? "'" + leefTags + "'" : "null") +
+                ", dumpApiUrl=" + (dumpApiUrl != null ? "'" + dumpApiUrl + "'" : "null") +
                 ", gcDumpThreshold=" + gcDumpThreshold +
                 ", heapDumpThreshold=" + heapDumpThreshold +
                 ", nurseryDumpThreshold=" + nurseryDumpThreshold +
@@ -332,6 +354,7 @@ public final class TargetDescriptor {
         private String        dumpDirectory;
         private String        leefCategory;
         private String        leefTags;
+        private String        dumpApiUrl;
         private double        gcDumpThreshold      = DUMP_THRESHOLD_DISABLED;
         private double        heapDumpThreshold    = DUMP_THRESHOLD_DISABLED;
         private double        nurseryDumpThreshold = DUMP_THRESHOLD_DISABLED;
@@ -479,6 +502,21 @@ public final class TargetDescriptor {
          */
         public Builder leefTags(String tags) {
             this.leefTags = (tags != null && !tags.trim().isEmpty()) ? tags.trim() : null;
+            return this;
+        }
+
+        /**
+         * Sets the base URL of the target JVM's embedded {@link DumpApiServer}.
+         * When configured, dump requests from the watchdog are forwarded to
+         * {@code <url>/dump/<type>} via HTTP instead of going through JMX.
+         *
+         * <p>Example: {@code dumpApiUrl("http://localhost:19999")}
+         *
+         * @param url base URL; {@code null} or blank = use JMX (default)
+         * @return {@code this}
+         */
+        public Builder dumpApiUrl(String url) {
+            this.dumpApiUrl = (url != null && !url.trim().isEmpty()) ? url.trim() : null;
             return this;
         }
 

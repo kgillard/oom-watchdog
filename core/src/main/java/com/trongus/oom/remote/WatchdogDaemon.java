@@ -44,7 +44,7 @@ import java.util.logging.Logger;
  * <p>All lifecycle operations ({@link #start()} and {@link #stop()}) are thread-safe and guarded.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.12.7
+ * @version 1.7.12.8
  * @since 1.7.0
  * @see TargetDescriptor
  * @see TargetRegistry
@@ -67,8 +67,9 @@ public final class WatchdogDaemon implements Closeable {
      */
     private final boolean overrideThresholds;
 
-    private final Map<String, OomWatchdog>           activeWatchdogs = new LinkedHashMap<>();
-    private final Map<String, JmxDiagnosticsCollector> collectors    = new LinkedHashMap<>();
+    private final Map<String, OomWatchdog>             activeWatchdogs = new LinkedHashMap<>();
+    private final Map<String, JmxDiagnosticsCollector> collectors      = new LinkedHashMap<>();
+    private final Map<String, String>                  dumpApiUrls     = new LinkedHashMap<>();
 
     private volatile boolean running = false;
 
@@ -199,6 +200,9 @@ public final class WatchdogDaemon implements Closeable {
 
                 collectors.put(target.getName(), collector);
                 activeWatchdogs.put(target.getName(), watchdog);
+                if (target.getDumpApiUrl() != null) {
+                    dumpApiUrls.put(target.getName(), target.getDumpApiUrl());
+                }
 
                 watchdog.start();
                 WatchdogLogger.info(LOG, "Started watchdog for target [{0}] (JMX: {1})",
@@ -298,6 +302,18 @@ public final class WatchdogDaemon implements Closeable {
      */
     public synchronized Map<String, JmxDiagnosticsCollector> getCollectors() {
         return Collections.unmodifiableMap(new LinkedHashMap<>(collectors));
+    }
+
+    /**
+     * Returns a map of target name → base URL for targets that have an embedded
+     * {@link DumpApiServer} configured via {@code dump-api-url} in targets.properties.
+     * Used by {@link com.trongus.oom.monitor.MetricsHttpServer} to forward dump requests
+     * directly to the target JVM instead of routing them through JMX.
+     *
+     * @return unmodifiable copy of the dump API URL map; never {@code null}
+     */
+    public synchronized Map<String, String> getDumpApiUrls() {
+        return Collections.unmodifiableMap(new LinkedHashMap<>(dumpApiUrls));
     }
 
     @Override

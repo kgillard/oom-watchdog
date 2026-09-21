@@ -56,7 +56,7 @@ import java.util.List;
  * }</pre>
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.12.7
+ * @version 1.7.12.8
  * @since 1.0.0
  * @see com.trongus.oom.monitor.OomWatchdog
  * @see com.trongus.oom.harness.HarnessAlertRecorder

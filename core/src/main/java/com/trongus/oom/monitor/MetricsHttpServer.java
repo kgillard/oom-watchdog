@@ -17,8 +17,10 @@ import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLParameters;
 import javax.net.ssl.TrustManagerFactory;
+import java.io.BufferedReader;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.lang.management.GarbageCollectorMXBean;
 import java.lang.management.ManagementFactory;
@@ -29,8 +31,10 @@ import java.lang.management.OperatingSystemMXBean;
 import java.lang.management.RuntimeMXBean;
 import java.lang.management.ThreadMXBean;
 import java.math.BigInteger;
+import java.net.HttpURLConnection;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.URL;
 import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
@@ -145,7 +149,7 @@ import java.util.logging.Logger;
  * they respond with {@code 503 Service Unavailable}.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.12.7
+ * @version 1.7.12.8
  * @since 1.7.3
  * @see TlsConfig
  * @see OomWatchdog#getLastSnapshot()
@@ -173,12 +177,14 @@ public final class MetricsHttpServer {
         "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256"  // TLS 1.2 ECDHE
     };
 
-    private final OomWatchdog                        selfWatchdog;
-    private final Map<String, OomWatchdog>           remoteWatchdogs;
+    private final OomWatchdog                          selfWatchdog;
+    private final Map<String, OomWatchdog>             remoteWatchdogs;
     private final Map<String, JmxDiagnosticsCollector> remoteCollectors;
-    private final int                                port;
-    private final boolean                            bindAll;
-    private final TlsConfig                          tlsConfig;
+    /** Base URL of each target's embedded DumpApiServer, keyed by target name. */
+    private final Map<String, String>                  remoteDumpApiUrls;
+    private final int                                  port;
+    private final boolean                              bindAll;
+    private final TlsConfig                            tlsConfig;
 
     /** Holds the active SSLContext; replaced atomically on certificate renewal. */
     private final AtomicReference<SSLContext> sslContextRef = new AtomicReference<>();
@@ -204,6 +210,7 @@ public final class MetricsHttpServer {
         this.selfWatchdog      = watchdog;
         this.remoteWatchdogs   = Collections.emptyMap();
         this.remoteCollectors  = Collections.emptyMap();
+        this.remoteDumpApiUrls = Collections.emptyMap();
         this.port              = port;
         this.bindAll           = bindAll;
         this.tlsConfig         = tlsConfig;
@@ -253,17 +260,40 @@ public final class MetricsHttpServer {
                              Map<String, OomWatchdog> remoteWatchdogs,
                              Map<String, JmxDiagnosticsCollector> remoteCollectors,
                              int port, boolean bindAll, TlsConfig tlsConfig) {
+        this(selfWatchdog, remoteWatchdogs, remoteCollectors, Collections.emptyMap(), port, bindAll, tlsConfig);
+    }
+
+    /**
+     * Creates a multi-target metrics server (daemon mode) with TLS, per-target JMX collectors,
+     * and per-target direct dump API URLs for same-host dump support.
+     *
+     * @param selfWatchdog      the self-monitoring watchdog (may be {@code null} in pure-daemon mode)
+     * @param remoteWatchdogs   named watchdogs for each remote target; must not be {@code null}
+     * @param remoteCollectors  JMX collectors keyed by target name, used to trigger remote dumps
+     * @param remoteDumpApiUrls base URLs of embedded DumpApiServer per target (may be empty)
+     * @param port              TCP port to listen on (1–65535)
+     * @param bindAll           {@code true} to bind all interfaces; {@code false} for loopback only
+     * @param tlsConfig         TLS configuration; must not be {@code null}
+     */
+    public MetricsHttpServer(OomWatchdog selfWatchdog,
+                             Map<String, OomWatchdog> remoteWatchdogs,
+                             Map<String, JmxDiagnosticsCollector> remoteCollectors,
+                             Map<String, String> remoteDumpApiUrls,
+                             int port, boolean bindAll, TlsConfig tlsConfig) {
         if (remoteWatchdogs == null) throw new NullPointerException("remoteWatchdogs");
         if (tlsConfig == null) throw new NullPointerException("tlsConfig");
         validatePort(port);
-        this.selfWatchdog     = selfWatchdog;
-        this.remoteWatchdogs  = Collections.unmodifiableMap(new LinkedHashMap<>(remoteWatchdogs));
-        this.remoteCollectors = remoteCollectors != null
+        this.selfWatchdog      = selfWatchdog;
+        this.remoteWatchdogs   = Collections.unmodifiableMap(new LinkedHashMap<>(remoteWatchdogs));
+        this.remoteCollectors  = remoteCollectors != null
                 ? Collections.unmodifiableMap(new LinkedHashMap<>(remoteCollectors))
                 : Collections.emptyMap();
-        this.port             = port;
-        this.bindAll          = bindAll;
-        this.tlsConfig        = tlsConfig;
+        this.remoteDumpApiUrls = remoteDumpApiUrls != null
+                ? Collections.unmodifiableMap(new LinkedHashMap<>(remoteDumpApiUrls))
+                : Collections.emptyMap();
+        this.port              = port;
+        this.bindAll           = bindAll;
+        this.tlsConfig         = tlsConfig;
     }
 
     /**
@@ -406,7 +436,9 @@ public final class MetricsHttpServer {
 
         for (Map.Entry<String, OomWatchdog> entry : remoteWatchdogs.entrySet()) {
             if (!first) sb.append(",\n");
-            sb.append(buildSnapshotJson(entry.getValue().getLastSnapshot(), entry.getKey()));
+            String dumpApiUrl = remoteDumpApiUrls.get(entry.getKey());
+            sb.append(buildSnapshotJsonWithDumpApi(
+                    entry.getValue().getLastSnapshot(), entry.getKey(), dumpApiUrl));
             first = false;
         }
 
@@ -474,11 +506,16 @@ public final class MetricsHttpServer {
         WatchdogLogger.info(LOG, "On-demand {0} dump requested via dashboard for target [{1}]",
                 dumpType, targetLabel);
         try {
-            // For remote targets route the dump through the JMX collector so the dump
-            // runs on the target JVM, not the watchdog JVM.
-            JmxDiagnosticsCollector collector = isSelf ? null : remoteCollectors.get(targetParam);
             String path;
-            if (collector != null) {
+            // Priority 1: Direct Dump API — target JVM has an embedded DumpApiServer on the same host.
+            // This is always preferred over JMX for heap and core dumps because it calls the MXBeans
+            // locally inside the target process rather than through an RMI round-trip.
+            String dumpApiBase = isSelf ? null : remoteDumpApiUrls.get(targetParam);
+            if (dumpApiBase != null) {
+                path = forwardToDumpApi(dumpApiBase, dumpType, watchdog, targetLabel);
+            // Priority 2: JMX remote dump — requires JMX RMI to be open on the target.
+            } else if (!isSelf && remoteCollectors.containsKey(targetParam)) {
+                JmxDiagnosticsCollector collector = remoteCollectors.get(targetParam);
                 String outputPath = watchdog.buildDumpPath(dumpType);
                 if (outputPath == null) {
                     send(ex, 500, "application/json; charset=UTF-8",
@@ -487,6 +524,7 @@ public final class MetricsHttpServer {
                     return;
                 }
                 path = collector.triggerRemoteDump(dumpType, outputPath);
+            // Priority 3: Self dump — watchdog's own JVM.
             } else {
                 path = watchdog.triggerDump(dumpType);
             }
@@ -540,6 +578,83 @@ public final class MetricsHttpServer {
         } catch (Exception e) {
             return s;
         }
+    }
+
+    // ── helper: forward dump request to target's embedded DumpApiServer ───────
+
+    /**
+     * Forwards a dump POST to the target JVM's embedded {@link com.trongus.oom.remote.DumpApiServer}.
+     * The target calls its own local MXBeans — no JMX RMI required.
+     *
+     * @param baseUrl     e.g. {@code "http://localhost:19999"}
+     * @param dumpType    dump type to request
+     * @param watchdog    the target's OomWatchdog (used only to build the output dir hint)
+     * @param targetLabel target name for logging
+     * @return file path reported by the target, or an {@code "ERROR: ..."} string on failure
+     */
+    private String forwardToDumpApi(String baseUrl, DumpType dumpType,
+                                    OomWatchdog watchdog, String targetLabel) {
+        String typePath;
+        switch (dumpType) {
+            case HEAP:            typePath = "heap";      break;
+            case THREAD:          typePath = "thread";    break;
+            case CORE:            typePath = "core";      break;
+            case CLASS_HISTOGRAM: typePath = "histogram"; break;
+            default:
+                return "ERROR: Dump type " + dumpType + " not supported via Dump API";
+        }
+        // Optionally pass the configured dump directory as a hint
+        String urlStr = baseUrl.replaceAll("/+$", "") + "/dump/" + typePath;
+        WatchdogLogger.info(LOG, "Forwarding {0} dump for [{1}] to DumpApiServer: {2}",
+                dumpType, targetLabel, urlStr);
+        try {
+            HttpURLConnection conn = (HttpURLConnection) new URL(urlStr).openConnection();
+            conn.setRequestMethod("POST");
+            conn.setDoOutput(false);
+            conn.setConnectTimeout(5_000);
+            conn.setReadTimeout(60_000);    // heap/core dumps can take time
+            conn.connect();
+            int status = conn.getResponseCode();
+            StringBuilder sb = new StringBuilder();
+            try (BufferedReader br = new BufferedReader(new InputStreamReader(
+                    status < 400 ? conn.getInputStream() : conn.getErrorStream(),
+                    StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = br.readLine()) != null) sb.append(line);
+            }
+            conn.disconnect();
+            String body = sb.toString();
+            // Parse {"ok":true,"path":"..."} or {"ok":false,"error":"..."}
+            if (status == 200 && body.contains("\"ok\":true")) {
+                String path = extractJsonString(body, "path");
+                WatchdogLogger.info(LOG, "DumpApiServer returned path [{0}] for [{1}]",
+                        path, targetLabel);
+                return path != null ? path : body;
+            } else {
+                String err = extractJsonString(body, "error");
+                String msg = err != null ? err : ("HTTP " + status + ": " + body);
+                WatchdogLogger.warning(LOG, "DumpApiServer [{0}] returned error for [{1}]: {2}",
+                        baseUrl, targetLabel, msg);
+                return "ERROR: " + msg;
+            }
+        } catch (Exception e) {
+            WatchdogLogger.warning(LOG, e, "DumpApiServer request failed for [{0}]: {1}",
+                    targetLabel, e.getMessage());
+            return "ERROR: DumpApiServer unreachable at " + baseUrl + " — " + e.getMessage();
+        }
+    }
+
+    /** Extracts a JSON string value for a given key from a simple flat JSON object. */
+    private static String extractJsonString(String json, String key) {
+        String search = "\"" + key + "\":\"";
+        int start = json.indexOf(search);
+        if (start < 0) return null;
+        start += search.length();
+        int end = json.indexOf('"', start);
+        if (end < 0) return null;
+        return json.substring(start, end)
+                .replace("\\\"", "\"").replace("\\\\", "\\")
+                .replace("\\n", "\n").replace("\\r", "").replace("\\t", "\t");
     }
 
     // ── helper: HTTP response ─────────────────────────────────────────────────
@@ -1043,6 +1158,19 @@ public final class MetricsHttpServer {
         appendPoolsLast(sb, snap.getPoolUsedBytes(), MB);
         sb.append("}");
         return sb.toString();
+    }
+
+    /**
+     * Builds a JSON object from a remote snapshot augmented with the target's dump API URL.
+     * Delegates to {@link #buildSnapshotJson(JvmSnapshot, String)} and injects the extra field.
+     */
+    private static String buildSnapshotJsonWithDumpApi(JvmSnapshot snap, String targetKey,
+                                                       String dumpApiUrl) {
+        String base = buildSnapshotJson(snap, targetKey);
+        if (dumpApiUrl == null || dumpApiUrl.isEmpty()) return base;
+        // Inject "dumpApiUrl":"..." before the closing brace
+        return base.substring(0, base.lastIndexOf('}'))
+                + ",\n\"dumpApiUrl\": \"" + escapeJson(dumpApiUrl) + "\"\n}";
     }
 
     // ── JSON helpers ──────────────────────────────────────────────────────────
