@@ -103,7 +103,7 @@ import java.util.logging.Logger;
  * allow safe use from multiple threads if required.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.13.0
+ * @version 1.7.13.1
  * @since 1.7.0
  * @see TargetDescriptor
  * @see JvmDiagnosticsCollector
@@ -146,6 +146,14 @@ public final class JmxDiagnosticsCollector implements JvmDiagnosticsCollector, C
      * property during the first successful collection.
      */
     private volatile boolean remoteIsJ9 = false;
+
+    /**
+     * The {@code java.home} of the remote JVM, collected via
+     * {@link RuntimeMXBean#getSystemProperties()} and displayed on the dashboard.
+     * Used to locate {@code jcmd}/{@code jmap} from the correct JDK installation.
+     * Empty string until the first successful collection.
+     */
+    private volatile String remoteJavaHome = "";
 
     /**
      * Constructs a remote JMX collector for the specified target and watchdog configuration.
@@ -321,11 +329,14 @@ public final class JmxDiagnosticsCollector implements JvmDiagnosticsCollector, C
                 growthRate = computeSlope(new ArrayList<>(postGcWindow));
             }
 
-            // Cache remote PID and J9 flag for use by triggerRemoteDump()
+            // Cache remote PID, J9 flag, and java.home for use by triggerRemoteDump()
             long parsedPid = parsePid(remoteProcessName);
             if (parsedPid > 0) remotePid = parsedPid;
             if (jvmName != null && (jvmName.contains("J9") || jvmName.contains("OpenJ9"))) {
                 remoteIsJ9 = true;
+            }
+            if (javaHome != null && !javaHome.isEmpty()) {
+                remoteJavaHome = javaHome;
             }
 
             String processDisplay = descriptor.getName() + " (" + remoteProcessName + ")";
@@ -943,9 +954,10 @@ public final class JmxDiagnosticsCollector implements JvmDiagnosticsCollector, C
         }
         String signalDumpLog = descriptor.getSignalDumpLog();
         WatchdogLogger.info(LOG,
-                "Same-host dump: type={0} pid={1} j9={2} target=[{3}]",
-                type, remotePid, remoteIsJ9, descriptor.getName());
-        String result = ProcessSignalDumper.dump(type, remotePid, outputPath, remoteIsJ9, signalDumpLog);
+                "Same-host dump: type={0} pid={1} j9={2} javaHome=[{3}] target=[{4}]",
+                type, remotePid, remoteIsJ9, remoteJavaHome, descriptor.getName());
+        String result = ProcessSignalDumper.dump(type, remotePid, outputPath, remoteIsJ9,
+                signalDumpLog, remoteJavaHome);
         if (result != null) {
             WatchdogLogger.info(LOG,
                     "Same-host {0} dump succeeded for [{1}]: {2}", type, descriptor.getName(), result);

@@ -47,8 +47,12 @@ import java.util.logging.Logger;
  *   <li>Target process must be on the <strong>same host</strong> as the watchdog.
  *       Use {@link #isSameHost(String)} to verify before calling.</li>
  *   <li>Watchdog must run as the <strong>same OS user</strong> as the target, or as root.</li>
- *   <li>{@code jcmd} must be on {@code PATH} for heap dumps and histograms on HotSpot.</li>
- *   <li>{@code gcore} must be on {@code PATH} for core dumps via gcore fallback.</li>
+ *   <li>{@code jcmd} and {@code jmap} are located from the target JVM's {@code java.home}
+ *       (collected via JMX and shown on the dashboard).  This means the correct JDK tools
+ *       for that specific JVM are always used, regardless of what is on {@code PATH}.
+ *       Falls back to bare {@code jcmd}/{@code jmap} on {@code PATH} if {@code java.home}
+ *       is unavailable or the tool is not present there.</li>
+ *   <li>{@code gcore} must be on {@code PATH} for core dumps on HotSpot.</li>
  *   <li>For {@code kill -3} (thread dump), the target's stdout must be redirected
  *       to a known log file; set {@code signal-dump-log} in targets.properties to
  *       make the path available in the result.</li>
@@ -58,7 +62,7 @@ import java.util.logging.Logger;
  * <p>All methods are stateless and safe for concurrent calls.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.13.0
+ * @version 1.7.13.1
  * @since 1.7.12.9
  */
 public final class ProcessSignalDumper {
@@ -130,32 +134,83 @@ public final class ProcessSignalDumper {
      * <p>Returns the absolute path of the written file, or {@code null} if the
      * dump could not be produced (caller should then fall back to JMX).
      *
-     * @param type        the dump type
-     * @param pid         the OS PID of the target JVM
-     * @param outputPath  desired output file path (used for heap, histogram, core)
-     * @param isJ9        {@code true} if the target JVM is IBM J9/OpenJ9
+     * @param type          the dump type
+     * @param pid           the OS PID of the target JVM
+     * @param outputPath    desired output file path (used for heap, histogram, core)
+     * @param isJ9          {@code true} if the target JVM is IBM J9/OpenJ9
      * @param signalDumpLog optional path to the target's stdout log file;
      *                      used to record where the {@code kill -3} output landed
      *                      (may be {@code null})
+     * @param javaHome      the target JVM's {@code java.home} as reported by
+     *                      {@code RuntimeMXBean} and shown on the dashboard
+     *                      (e.g. {@code /opt/ibm/ibm-semeru-certified-11-jdk}).
+     *                      Used to locate {@code jcmd}/{@code jmap} from that
+     *                      specific JDK installation rather than relying on {@code PATH}.
+     *                      {@code null} or blank falls back to searching {@code PATH}.
      * @return absolute path of the produced file, or {@code null} on failure
      */
     public static String dump(DumpType type, long pid, String outputPath,
-                               boolean isJ9, String signalDumpLog) {
+                               boolean isJ9, String signalDumpLog, String javaHome) {
         if (pid <= 0) {
             WatchdogLogger.warning(LOG, "ProcessSignalDumper: invalid PID {0} for {1}", pid, type);
             return null;
         }
+        String jcmd = resolveJdkTool("jcmd", javaHome);
+        String jmap = resolveJdkTool("jmap", javaHome);
         switch (type) {
             case THREAD:          return threadDump(pid, outputPath, signalDumpLog);
-            case HEAP:            return isJ9 ? heapDumpJ9(pid, outputPath)
-                                               : heapDumpHotSpot(pid, outputPath);
+            case HEAP:            return isJ9 ? heapDumpJ9(pid, outputPath, jcmd)
+                                               : heapDumpHotSpot(pid, outputPath, jcmd, jmap);
             case CORE:            return isJ9 ? coreDumpJ9(pid, outputPath)
                                                : coreDumpGcore(pid, outputPath);
-            case CLASS_HISTOGRAM: return classHistogram(pid, outputPath);
+            case CLASS_HISTOGRAM: return classHistogram(pid, outputPath, jcmd);
             default:
                 WatchdogLogger.warning(LOG, "ProcessSignalDumper: unsupported type {0}", type);
                 return null;
         }
+    }
+
+    /**
+     * Resolves the absolute path of a JDK command-line tool ({@code jcmd}, {@code jmap}, etc.)
+     * from the target JVM's {@code java.home} directory.
+     *
+     * <p>The {@code java.home} property points to the JRE root:
+     * <ul>
+     *   <li>JDK 9+: {@code /path/to/jdk} — tools are in {@code <java.home>/bin/}</li>
+     *   <li>JDK 8:  {@code /path/to/jdk/jre} — tools are in {@code <java.home>/../bin/}</li>
+     * </ul>
+     * Both locations are probed; the first that contains an executable wins.
+     * Falls back to the bare tool name (PATH lookup) if neither is found.
+     *
+     * @param toolName  the executable name without extension (e.g. {@code "jcmd"})
+     * @param javaHome  the {@code java.home} value from the target JVM (may be {@code null})
+     * @return absolute path if found in the JDK installation, otherwise just {@code toolName}
+     */
+    static String resolveJdkTool(String toolName, String javaHome) {
+        if (javaHome == null || javaHome.trim().isEmpty()) return toolName;
+        String exe = isWindows() ? toolName + ".exe" : toolName;
+
+        // JDK 9+ layout: java.home/bin/jcmd
+        File direct = new File(javaHome, "bin" + File.separator + exe);
+        if (direct.canExecute()) {
+            WatchdogLogger.fine(LOG, "Resolved {0} → [{1}]", toolName, direct.getAbsolutePath());
+            return direct.getAbsolutePath();
+        }
+
+        // JDK 8 layout: java.home is .../jre, tools are in ../bin/jcmd
+        File parent = new File(javaHome).getParentFile();
+        if (parent != null) {
+            File viaParent = new File(parent, "bin" + File.separator + exe);
+            if (viaParent.canExecute()) {
+                WatchdogLogger.fine(LOG, "Resolved {0} → [{1}] (JDK8 parent)", toolName, viaParent.getAbsolutePath());
+                return viaParent.getAbsolutePath();
+            }
+        }
+
+        // Not found in java.home — rely on PATH
+        WatchdogLogger.fine(LOG,
+                "{0} not found under java.home [{1}] — will search PATH", toolName, javaHome);
+        return toolName;
     }
 
     // ── thread dump ───────────────────────────────────────────────────────────
@@ -222,14 +277,13 @@ public final class ProcessSignalDumper {
      * Writes an HPROF heap dump using {@code jcmd <pid> GC.heap_dump <path>},
      * falling back to {@code jmap -dump:format=b,file=<path> <pid>}.
      *
-     * <p>Both tools ship with the JDK and use the Java Attach API — no JMX port needed,
-     * no extra flags on the target, same OS user (or root) required.
-     *
      * @param pid        OS PID of the target JVM
      * @param outputPath desired .hprof output path
+     * @param jcmd       resolved path to jcmd (absolute or bare name for PATH lookup)
+     * @param jmap       resolved path to jmap (absolute or bare name for PATH lookup)
      * @return absolute path of the written file, or {@code null} on failure
      */
-    private static String heapDumpHotSpot(long pid, String outputPath) {
+    private static String heapDumpHotSpot(long pid, String outputPath, String jcmd, String jmap) {
         String path = outputPath.endsWith(".hprof") ? outputPath : outputPath + ".hprof";
         File out = new File(path);
         // Delete existing file — HotSpot refuses to overwrite
@@ -238,7 +292,7 @@ public final class ProcessSignalDumper {
         // Strategy 1: jcmd (JDK 7u40+, ships with all modern JDKs)
         try {
             int exit = runAndWait(new String[]{
-                    "jcmd", String.valueOf(pid), "GC.heap_dump", out.getAbsolutePath()
+                    jcmd, String.valueOf(pid), "GC.heap_dump", out.getAbsolutePath()
             }, SUBPROCESS_TIMEOUT_SEC);
             if (exit == 0 && out.exists() && out.length() > 0) {
                 WatchdogLogger.info(LOG,
@@ -246,17 +300,17 @@ public final class ProcessSignalDumper {
                 return out.getAbsolutePath();
             }
             WatchdogLogger.fine(LOG,
-                    "HEAP: jcmd exited {0}, trying jmap fallback for PID {1}", exit, pid);
+                    "HEAP: jcmd [{0}] exited {1}, trying jmap for PID {2}", jcmd, exit, pid);
         } catch (IOException e) {
             WatchdogLogger.fine(LOG,
-                    "HEAP: jcmd not on PATH ({0}), trying jmap for PID {1}",
-                    e.getMessage(), pid);
+                    "HEAP: jcmd [{0}] failed ({1}), trying jmap for PID {2}",
+                    jcmd, e.getMessage(), pid);
         }
 
         // Strategy 2: jmap (JDK 5+, available on all JDK installations)
         try {
             int exit = runAndWait(new String[]{
-                    "jmap", "-dump:format=b,file=" + out.getAbsolutePath(), String.valueOf(pid)
+                    jmap, "-dump:format=b,file=" + out.getAbsolutePath(), String.valueOf(pid)
             }, SUBPROCESS_TIMEOUT_SEC);
             if (exit == 0 && out.exists() && out.length() > 0) {
                 WatchdogLogger.info(LOG,
@@ -264,10 +318,10 @@ public final class ProcessSignalDumper {
                 return out.getAbsolutePath();
             }
             WatchdogLogger.warning(LOG,
-                    "HEAP: jmap exited {0} for PID {1}", exit, pid);
+                    "HEAP: jmap [{0}] exited {1} for PID {2}", jmap, exit, pid);
         } catch (IOException e) {
             WatchdogLogger.warning(LOG,
-                    "HEAP: jmap not on PATH ({0}) for PID {1}", e.getMessage(), pid);
+                    "HEAP: jmap [{0}] failed ({1}) for PID {2}", jmap, e.getMessage(), pid);
         }
         return null;
     }
@@ -276,24 +330,20 @@ public final class ProcessSignalDumper {
 
     /**
      * Triggers a heap dump on an IBM J9/OpenJ9 JVM by sending {@code SIGUSR1}.
-     * J9 writes a {@code .phd} heap dump to its working directory when it receives
-     * this signal (configurable via {@code -Xdump:heap:events=user}).
-     *
-     * <p>Also tries {@code jcmd} first in case the target is running a modern
-     * OpenJ9 build that supports it.
      *
      * @param pid        OS PID of the target JVM
      * @param outputPath desired output path (used for jcmd; J9 may write elsewhere)
+     * @param jcmd       resolved path to jcmd
      * @return absolute path if determinable, or the configured path as hint
      */
-    private static String heapDumpJ9(long pid, String outputPath) {
+    private static String heapDumpJ9(long pid, String outputPath, String jcmd) {
         if (isWindows()) return null;
 
         // Try jcmd first (some OpenJ9 builds support it)
         String path = outputPath.endsWith(".phd") ? outputPath : outputPath + ".phd";
         try {
             int exit = runAndWait(new String[]{
-                    "jcmd", String.valueOf(pid), "GC.heap_dump", path
+                    jcmd, String.valueOf(pid), "GC.heap_dump", path
             }, SUBPROCESS_TIMEOUT_SEC);
             if (exit == 0 && new File(path).exists()) {
                 WatchdogLogger.info(LOG, "HEAP (jcmd J9): written [{0}]", path);
@@ -400,25 +450,25 @@ public final class ProcessSignalDumper {
      * @param outputPath desired output text file path
      * @return absolute path of the written file, or {@code null} on failure
      */
-    private static String classHistogram(long pid, String outputPath) {
+    private static String classHistogram(long pid, String outputPath, String jcmd) {
         String path = outputPath.endsWith("_histogram.txt")
                 ? outputPath : outputPath + "_histogram.txt";
         try {
             StringBuilder out = new StringBuilder();
             int exit = runCapture(
-                    new String[]{ "jcmd", String.valueOf(pid), "GC.class_histogram" },
+                    new String[]{ jcmd, String.valueOf(pid), "GC.class_histogram" },
                     SUBPROCESS_TIMEOUT_SEC,
                     out);
             if (exit == 0 && out.length() > 0) {
                 writeText(path, out.toString());
-                WatchdogLogger.info(LOG, "HISTOGRAM (jcmd): written [{0}]", path);
+                WatchdogLogger.info(LOG, "HISTOGRAM (jcmd [{0}]): written [{1}]", jcmd, path);
                 return path;
             }
             WatchdogLogger.warning(LOG,
-                    "HISTOGRAM (jcmd): exit {0} for PID {1}", exit, pid);
+                    "HISTOGRAM (jcmd [{0}]): exit {1} for PID {2}", jcmd, exit, pid);
         } catch (IOException e) {
             WatchdogLogger.warning(LOG,
-                    "HISTOGRAM (jcmd): not on PATH ({0}) for PID {1}", e.getMessage(), pid);
+                    "HISTOGRAM (jcmd [{0}]): failed ({1}) for PID {2}", jcmd, e.getMessage(), pid);
         }
         return null;
     }

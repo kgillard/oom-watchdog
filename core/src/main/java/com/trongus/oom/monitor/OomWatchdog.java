@@ -55,7 +55,7 @@ import java.util.logging.Logger;
  * {@link #lastLevel} is an {@link AtomicReference} for consistent memory visibility.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.13.0
+ * @version 1.7.13.1
  * @since 1.0.0
  * @see JvmDiagnosticsCollector
  * @see RiskAssessor

@@ -12,7 +12,7 @@ import static org.junit.Assert.*;
  * Unit tests for {@link TargetDescriptor}.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.13.0
+ * @version 1.7.13.1
  * @since 1.7.0
  */
 public class TargetDescriptorTest {
