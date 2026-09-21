@@ -77,7 +77,7 @@ import java.util.logging.Logger;
  * (guaranteed delivery) via the constructor.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.11.3
+ * @version 1.7.11.5
  * @since 1.0.0
  * @see AlertChannel
  * @see com.trongus.oom.model.JvmSnapshot
@@ -273,17 +273,26 @@ public final class QRadarAlertChannel implements AlertChannel {
         byte[] safe = payload.length > MAX_UDP_PAYLOAD
                 ? Arrays.copyOf(payload, MAX_UDP_PAYLOAD)
                 : payload;
-        InetAddress addr = InetAddress.getByName(qradarHost);
-        // Open an IPv6 socket when the destination is an IPv6 address (e.g. ::1 on QRadar
-        // hosts where the event collector binds to :::514 rather than 0.0.0.0:514).
-        // A plain DatagramSocket() opens an IPv4 socket and cannot send to Inet6Address targets.
-        DatagramSocket socket = (addr instanceof java.net.Inet6Address)
-                ? new DatagramSocket(new InetSocketAddress("::", 0))
-                : new DatagramSocket();
-        try (DatagramSocket s = socket) {
-            DatagramPacket pkt = new DatagramPacket(safe, safe.length, addr, qradarPort);
-            s.send(pkt);
+        // Resolve all addresses for the host — the hostname may have both A and AAAA records,
+        // or the user may pass a literal IPv4 or IPv6 address.
+        InetAddress[] addrs = InetAddress.getAllByName(qradarHost);
+        IOException lastEx = null;
+        for (InetAddress addr : addrs) {
+            // Open a socket whose address family matches the destination.
+            // DatagramSocket() defaults to IPv4; an IPv6 destination needs an IPv6 socket.
+            DatagramSocket socket = (addr instanceof java.net.Inet6Address)
+                    ? new DatagramSocket(new InetSocketAddress("::", 0))
+                    : new DatagramSocket();
+            try (DatagramSocket s = socket) {
+                DatagramPacket pkt = new DatagramPacket(safe, safe.length, addr, qradarPort);
+                s.send(pkt);
+                return; // first successful send wins
+            } catch (IOException e) {
+                lastEx = e;
+            }
         }
+        // All addresses failed — rethrow the last exception so the caller can log it.
+        if (lastEx != null) throw lastEx;
     }
 
     /**

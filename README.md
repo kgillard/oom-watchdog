@@ -7,18 +7,18 @@
 [![Security Audit](https://img.shields.io/badge/security%20audit-4%20passes%20clean-brightgreen)]()
 [![JDK](https://img.shields.io/badge/JDK-8%20%E2%80%93%2026%2B-blue)]()
 [![Vendors](https://img.shields.io/badge/JVM-HotSpot%20%7C%20OpenJ9%20%7C%20GraalVM-blue)]()
-[![Release](https://img.shields.io/badge/release-v1.7.11.3-blue)](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.11.3)
+[![Release](https://img.shields.io/badge/release-v1.7.11.5-blue)](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.11.5)
 
 ---
 
 ## Download
 
-Pre-built JARs are available in the [v1.7.11.3 release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.11.3):
+Pre-built JARs are available in the [v1.7.11.5 release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.11.5):
 
 | Artefact | Description | Size |
 |----------|-------------|------|
-| [`oom-watchdog.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.7.11.3/oom-watchdog.jar) | Fat JAR — monitoring agent + CLI entry point | ~157 KB |
-| [`test-harness.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.7.11.3/test-harness.jar) | Fat JAR — interactive OOM test harness | ~171 KB |
+| [`oom-watchdog.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.7.11.5/oom-watchdog.jar) | Fat JAR — monitoring agent + CLI entry point | ~157 KB |
+| [`test-harness.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.7.11.5/test-harness.jar) | Fat JAR — interactive OOM test harness | ~171 KB |
 
 ---
 
@@ -49,7 +49,7 @@ OOM Watchdog provides real-time health monitoring, per-process logging named aft
 ```bash
 # Download the release JAR or self-extracting installer
 curl -L -o oom-watchdog.jar \
-  https://github.com/kgillard/oom-watchdog/releases/download/v1.7.11.3/oom-watchdog.jar
+  https://github.com/kgillard/oom-watchdog/releases/download/v1.7.11.5/oom-watchdog.jar
 
 # Run in multi-target daemon mode (monitors external JVMs over JMX)
 java -jar oom-watchdog.jar --daemon --targets-file /etc/oom-watchdog/targets.properties
@@ -1182,7 +1182,34 @@ watchdog. The server exposes these endpoints:
 | `/dump/core?target=<name>` | POST | Trigger core dump; JSON `{"ok":true,"path":"…"}` |
 | `/` | GET | 302 redirect to `/metrics` |
 
-The server binds to **loopback only** (`127.0.0.1`) by default.
+The server uses **dual-stack binding** by default:
+
+| `--metrics-bind-all` | Preferred bind address | IPv4 fallback |
+|---|---|---|
+| _(absent — loopback)_ | `::1` (IPv6 loopback) | `127.0.0.1` |
+| `--metrics-bind-all` | `::` (all IPv6 interfaces) | `0.0.0.0` |
+
+On Linux a `::` socket also accepts IPv4 connections via IPv4-mapped addresses, so a
+single socket serves both families. On macOS/BSD only one address family is served per
+bind address.
+
+**JVM flags for address-family control:**
+
+```bash
+# Force IPv4-only (disables IPv6 socket selection entirely)
+-Djava.net.preferIPv4Stack=true
+
+# Prefer IPv6 when both families are available
+-Djava.net.preferIPv6Addresses=true
+```
+
+**IPv6 literal address examples** — use bracket notation in the Server field of the dashboard:
+
+| Scenario | URL |
+|---|---|
+| IPv6 loopback | `https://[::1]:9090` |
+| Specific IPv6 interface | `https://[2001:db8::1]:9090` |
+| IPv6 all-interfaces (bind) | `::` |
 
 #### TLS / HTTPS
 
@@ -1230,9 +1257,14 @@ python3 -m http.server 8080
 
 ### Using the dashboard
 
+On first open, enter the server URL and click **Connect**. On every subsequent page refresh
+the dashboard automatically reconnects to the last-used server and restores the previously
+active target tab and polling interval — no manual steps required.
+
 1. In the **Server** field at the top, enter `https://localhost:9090` (or your host/port).
+   For IPv6, use bracket notation: `https://[::1]:9090`.
 2. Select a polling interval (1 s / 2 s / 5 s / 10 s).
-3. Click **Connect**.
+3. Click **Connect** (automatic on refresh once a URL has been saved).
 4. The dashboard displays real-time data per monitored target on separate tabs:
 
 | Panel | What it shows |

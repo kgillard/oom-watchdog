@@ -29,7 +29,9 @@ import java.lang.management.OperatingSystemMXBean;
 import java.lang.management.RuntimeMXBean;
 import java.lang.management.ThreadMXBean;
 import java.math.BigInteger;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
@@ -87,6 +89,25 @@ import java.util.logging.Logger;
  * headers so that browsers do not block the preflight before the actual GET or POST is sent.
  * Restrict the origin header if you bind to a non-loopback interface.
  *
+ * <h2>IPv4 / IPv6 dual-stack binding</h2>
+ * <p>The server performs <em>dual-stack</em> binding automatically:
+ * <ul>
+ *   <li>{@code bindAll=true} — tries to bind to {@code ::} (all IPv6 interfaces, which
+ *       also covers IPv4 on dual-stack kernels via IPv4-mapped addresses).  If the JVM
+ *       reports that IPv6 is unavailable the fallback address is {@code 0.0.0.0}
+ *       (all IPv4 interfaces).</li>
+ *   <li>{@code bindAll=false} — tries to bind to {@code ::1} (IPv6 loopback).  Falls
+ *       back to {@code 127.0.0.1} (IPv4 loopback) when IPv6 is unavailable.</li>
+ * </ul>
+ * <p>On Linux a single {@code ::} socket covers both address families by default.
+ * On macOS / BSD, IPv4 and IPv6 are independent sockets, so only one family is served
+ * per bind address — use {@code ::} for IPv6-only or {@code 0.0.0.0} for IPv4-only as
+ * needed, or set the JVM flag {@code -Djava.net.preferIPv4Stack=true} to force IPv4.
+ * <p>To force IPv4 regardless of platform, start the JVM with:
+ * <pre>  -Djava.net.preferIPv4Stack=true</pre>
+ * To prefer IPv6 when both are available:
+ * <pre>  -Djava.net.preferIPv6Addresses=true</pre>
+ *
  * <h2>Data sources</h2>
  * <ul>
  *   <li><strong>Heap, non-heap, memory pools, GC counts/times, uptime</strong> — read live
@@ -124,7 +145,7 @@ import java.util.logging.Logger;
  * they respond with {@code 503 Service Unavailable}.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.11.3
+ * @version 1.7.11.5
  * @since 1.7.3
  * @see TlsConfig
  * @see OomWatchdog#getLastSnapshot()
@@ -266,6 +287,15 @@ public final class MetricsHttpServer {
      * Starts the HTTP(S) server and registers the {@code /metrics}, {@code /metrics/all}
      * and {@code /} handlers.
      *
+     * <p>The bind address is chosen automatically based on address-family availability:
+     * <ul>
+     *   <li>{@code bindAll=true} — binds to {@code ::} (all IPv6 interfaces, covering IPv4
+     *       via IPv4-mapped addresses on dual-stack kernels), falling back to {@code 0.0.0.0}
+     *       on IPv4-only stacks.</li>
+     *   <li>{@code bindAll=false} — binds to {@code ::1} (IPv6 loopback), falling back to
+     *       {@code 127.0.0.1} on IPv4-only stacks.</li>
+     * </ul>
+     *
      * <p>When TLS is enabled the server first builds (or loads) an {@link SSLContext},
      * then creates an {@link HttpsServer} bound to the configured address.
      *
@@ -274,8 +304,8 @@ public final class MetricsHttpServer {
      *                     bad password, etc.)
      */
     public void start() throws Exception {
-        String host = bindAll ? "0.0.0.0" : "127.0.0.1";
-        InetSocketAddress addr = new InetSocketAddress(host, port);
+        InetSocketAddress addr = resolveBindAddress(bindAll, port);
+        String host = addr.getAddress().getHostAddress();
 
         if (tlsConfig.getMode() == TlsConfig.Mode.DISABLED) {
             // ── Plain HTTP ────────────────────────────────────────────────────
@@ -314,6 +344,30 @@ public final class MetricsHttpServer {
             WatchdogLogger.info(LOG,
                     "Metrics HTTPS server listening on https://{0}:{1}/metrics  [{2}]",
                     host, port, tlsConfig);
+        }
+    }
+
+    /**
+     * Resolves the {@link InetSocketAddress} to bind the metrics server to.
+     *
+     * <p>Prefers IPv6 ({@code ::} / {@code ::1}) so that dual-stack kernels serve both
+     * address families from a single socket.  Falls back to the IPv4 wildcard
+     * ({@code 0.0.0.0} / {@code 127.0.0.1}) when the JVM reports IPv6 is unavailable
+     * (e.g. when started with {@code -Djava.net.preferIPv4Stack=true}).
+     *
+     * @param bindAll {@code true} to bind all interfaces; {@code false} for loopback only
+     * @param port    TCP port to listen on
+     * @return a resolved {@link InetSocketAddress}
+     */
+    static InetSocketAddress resolveBindAddress(boolean bindAll, int port) {
+        String ipv6Host = bindAll ? "::"   : "::1";
+        String ipv4Host = bindAll ? "0.0.0.0" : "127.0.0.1";
+        try {
+            InetAddress addr = InetAddress.getByName(ipv6Host);
+            return new InetSocketAddress(addr, port);
+        } catch (UnknownHostException e) {
+            // IPv6 not available on this stack — use IPv4
+            return new InetSocketAddress(ipv4Host, port);
         }
     }
 
@@ -615,10 +669,15 @@ public final class MetricsHttpServer {
                 new Certificate[]{ cert });
 
         int days = tlsConfig.getSelfSignedValidDays();
+        InetSocketAddress bindAddr = resolveBindAddress(bindAll, port);
+        String bindHost = bindAddr.getAddress().getHostAddress();
+        String displayHost = bindAll
+                ? (bindHost.contains(":") ? "[" + bindHost + "]" : bindHost)
+                : (bindHost.contains(":") ? "[" + bindHost + "]" : bindHost);
         WatchdogLogger.info(LOG,
                 "Generated self-signed TLS certificate (RSA-2048, valid {0} days, " +
                 "expires {1}). Dashboard URL: https://{2}:{3}/metrics",
-                days, notAfter, bindAll ? "0.0.0.0" : "127.0.0.1", port);
+                days, notAfter, displayHost, port);
         WatchdogLogger.info(LOG,
                 "NOTE: Browsers will show a certificate warning because this cert is " +
                 "self-signed. Supply --metrics-cert to use a trusted certificate.");

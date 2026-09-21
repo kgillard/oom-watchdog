@@ -116,6 +116,7 @@ classDiagram
         +MetricsHttpServer(OomWatchdog, Map, int, boolean, TlsConfig)
         +start()
         +stop()
+        ~resolveBindAddress(boolean, int) InetSocketAddress
         -buildSslContext() SSLContext
         -generateSelfSignedKeystore(char[]) KeyStore
         -buildLiveJson(JvmSnapshot, String) String
@@ -522,7 +523,7 @@ flowchart TD
 ## Module Structure
 
 ```
-oom-watchdog/                  Maven multi-module root (v1.7.11.3)
+oom-watchdog/                  Maven multi-module root (v1.7.11.5)
 ├── core/                      oom-watchdog.jar  (fat jar via maven-shade-plugin)
 │   └── src/main/java/com/trongus/oom/
 │       ├── WatchdogMain.java  CLI entry point (local + daemon modes)
@@ -659,6 +660,9 @@ The following table shows exactly where OOM Watchdog alert output appears for ev
 | Dashboard dump buttons route through `JmxDiagnosticsCollector.triggerRemoteDump()` | Ensures heap/thread/core dumps are written on the **target JVM**, not the watchdog process; uses `HotSpotDiagnosticMXBean` for heap and `DiagnosticCommand` MBean for thread/core |
 | `TargetDescriptor.dumpDirectory` defaults to `null` | Inherits the global `--dump-dir` CLI value; only overridden when `dump-dir` is explicitly set per-target in `targets.properties`, preventing silent default path override |
 | `QRadarAlertChannel` logs at INFO on success, FINE on build start, FINEST for raw LEEF payload | Keeps high-volume payload bytes off the default log level while preserving full observability at `FINEST`; operators see delivery confirmation at INFO without noise |
+| `MetricsHttpServer.resolveBindAddress()` prefers IPv6 (`::` / `::1`) with IPv4 fallback | Single `::` socket serves both address families on dual-stack Linux kernels; automatic `0.0.0.0`/`127.0.0.1` fallback on IPv4-only stacks; respects `-Djava.net.preferIPv4Stack=true` |
+| `QRadarAlertChannel.sendUdp()` matches socket family to destination via `instanceof Inet6Address` | Opens a `::` datagram socket for IPv6 destinations and a default `DatagramSocket` for IPv4; resolves all A+AAAA records for the host with `InetAddress.getAllByName()` |
+| Dashboard auto-reconnects on page refresh | Last-used server URL, polling interval, and active target tab are persisted to `localStorage`; `startPolling()` is called automatically on `window.load` when a saved URL exists |
 
 ---
 
@@ -694,8 +698,8 @@ Pass 5 identified and fixed 4 issues in the remote JMX monitoring subsystem.
 
 ## Release Artefacts
 
-The v1.7.11.3 release publishes two executable fat JARs built with `maven-shade-plugin`.
-Both will be attached to the [GitHub release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.11.3).
+The v1.7.11.5 release publishes two executable fat JARs built with `maven-shade-plugin`.
+Both will be attached to the [GitHub release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.11.5).
 
 | Artefact | Main class | Contents | Size (approx) |
 |----------|-----------|----------|---------------|

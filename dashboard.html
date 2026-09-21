@@ -542,10 +542,27 @@ document.addEventListener('click', function(e) {
     toggleHistory(false);
   }
 });
-// Populate input from history on page load
+// Populate input from history on page load, then auto-connect
 (function() {
+  var INTERVAL_KEY = 'oom-poll-interval';
+  var savedInterval = localStorage.getItem(INTERVAL_KEY);
+  if (savedInterval) {
+    var sel = document.getElementById('poll-interval');
+    for (var i = 0; i < sel.options.length; i++) {
+      if (sel.options[i].value === savedInterval) { sel.selectedIndex = i; break; }
+    }
+  }
+  // Persist interval changes so they survive a refresh
+  document.getElementById('poll-interval').addEventListener('change', function() {
+    try { localStorage.setItem(INTERVAL_KEY, this.value); } catch(e) {}
+  });
+
   var list = loadHistory();
-  if (list.length > 0) document.getElementById('server-url').value = list[0];
+  if (list.length > 0) {
+    document.getElementById('server-url').value = list[0];
+    // Auto-connect after the browser has finished rendering the page
+    window.addEventListener('load', function() { startPolling(); });
+  }
 })();
 
 // ── polling ───────────────────────────────────────────────────────────────────
@@ -666,6 +683,13 @@ function renderGlobalAlerts() {
 function ensureTabs() {
   var bar   = document.getElementById('tabs-bar');
   var names = Object.keys(targets);
+  // On first call after a refresh, restore the previously active tab from storage
+  if (activeTab === null && names.length > 0) {
+    try {
+      var saved = localStorage.getItem(ACTIVE_TAB_KEY);
+      activeTab = (saved && names.indexOf(saved) !== -1) ? saved : names[0];
+    } catch(e) { activeTab = names[0]; }
+  }
   names.forEach(function(name) {
     if (!document.getElementById('tab-btn-' + slugify(name))) {
       var btn = document.createElement('button');
@@ -687,8 +711,10 @@ function ensureTabs() {
   });
 }
 
+var ACTIVE_TAB_KEY = 'oom-active-tab';
 function switchTab(name) {
   activeTab = name;
+  try { localStorage.setItem(ACTIVE_TAB_KEY, name); } catch(e) {}
   document.querySelectorAll('.tab-btn').forEach(function(b) {
     b.classList.toggle('active', b.id === 'tab-btn-' + slugify(name));
   });

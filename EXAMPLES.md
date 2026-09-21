@@ -96,7 +96,7 @@ java -cp oom-watchdog.jar com.trongus.oom.examples.Example11CauseAnalysisAndI18n
 
 ```bash
 curl -L -o oom-watchdog.jar \
-  https://github.com/kgillard/oom-watchdog/releases/download/v1.7.11.3/oom-watchdog.jar
+  https://github.com/kgillard/oom-watchdog/releases/download/v1.7.11.5/oom-watchdog.jar
 ```
 
 No installation, no classpath setup — the JAR is a self-contained fat JAR with no
@@ -1439,7 +1439,7 @@ For Liberty 8.5.5.x (older feature names):
 
 ## 16. Multi-Target Daemon Mode and Remote JMX Monitoring
 
-### 15.1 Overview (v1.7.11.3)
+### 15.1 Overview (v1.7.11.5)
 
 In enterprise deployments such as IBM QRadar or multi-tier WebSphere clusters, multiple JVMs run concurrently on a single appliance or host. `WatchdogDaemon` allows a single lightweight watchdog process to monitor all target JVMs simultaneously over standard JMX (JSR-160 RMI).
 
@@ -1482,7 +1482,75 @@ java -jar oom-watchdog.jar \
     --qradar-port 514
 ```
 
-### 15.4 LEEF 2.0 Output with targetJvm Tag
+### 15.4 IPv6 and Dual-Stack Configuration
+
+OOM Watchdog supports IPv4, IPv6, and dual-stack environments throughout the stack.
+
+#### Metrics server binding
+
+The metrics HTTP/HTTPS server automatically prefers IPv6 and falls back to IPv4:
+
+```bash
+# Default loopback — binds to ::1 (falls back to 127.0.0.1 on IPv4-only stacks)
+java -jar oom-watchdog.jar --metrics-port 9090
+
+# Bind to all interfaces — binds to :: (falls back to 0.0.0.0 on IPv4-only stacks)
+java -jar oom-watchdog.jar --metrics-port 9090 --metrics-bind-all
+
+# Force IPv4-only (useful on systems where IPv6 is present but misconfigured)
+java -Djava.net.preferIPv4Stack=true -jar oom-watchdog.jar --metrics-port 9090
+
+# Prefer IPv6 when both families are available
+java -Djava.net.preferIPv6Addresses=true -jar oom-watchdog.jar --metrics-port 9090
+```
+
+#### Dashboard URL examples for IPv6
+
+Use RFC 3986 bracket notation in the dashboard **Server** field:
+
+| Environment | Server URL |
+|---|---|
+| IPv6 loopback (same host) | `https://[::1]:9090` |
+| Specific IPv6 address | `https://[2001:db8::1]:9090` |
+| IPv4 explicit | `https://127.0.0.1:9090` |
+| Hostname (DNS resolves either) | `https://localhost:9090` |
+
+#### JMX URLs with IPv6 targets
+
+When a remote JVM is on an IPv6-only host, use RFC 3986 bracket notation in the JMX URL:
+
+```properties
+# IPv6 literal address in JMX URL (brackets required by the RMI connector)
+target.myapp.jmx-url = service:jmx:rmi:///jndi/rmi://[::1]:7777/jmxrmi
+target.myapp.jmx-url = service:jmx:rmi:///jndi/rmi://[2001:db8::1]:7777/jmxrmi
+
+# On the monitored JVM, also set the RMI hostname to the IPv6 address:
+# -Djava.rmi.server.hostname=2001:db8::1
+```
+
+#### QRadar / syslog IPv6 forwarding
+
+The `--qradar-host` value accepts hostnames, IPv4 literals, and IPv6 literals. The
+`QRadarAlertChannel` resolves all A and AAAA records for the hostname and automatically
+opens a dual-stack UDP or TCP socket matching the destination address family:
+
+```bash
+# Send LEEF events to a QRadar appliance on an IPv6 network
+java -jar oom-watchdog.jar \
+    --daemon \
+    --targets-file /etc/oom-watchdog/targets.properties \
+    --qradar-host 2001:db8::10 \
+    --qradar-port 514
+
+# Or use the DNS name — both A and AAAA records are tried automatically
+java -jar oom-watchdog.jar \
+    --daemon \
+    --targets-file /etc/oom-watchdog/targets.properties \
+    --qradar-host qradar.example.com \
+    --qradar-port 514
+```
+
+### 15.5 LEEF 2.0 Output with targetJvm Tag
 
 When forwarded to QRadar SIEM, events produced in daemon mode automatically include the `targetJvm` attribute:
 

@@ -7,7 +7,7 @@
 
   <groupId>com.trongus.oom</groupId>
   <artifactId>oom-watchdog-parent</artifactId>
-  <version>1.7.11.3</version>
+  <version>1.7.11.5</version>
   <packaging>pom</packaging>
   <name>OOM Watchdog – Parent</name>
 

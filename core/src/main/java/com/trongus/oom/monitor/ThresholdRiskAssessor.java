@@ -37,7 +37,7 @@ import com.trongus.oom.model.OomRiskLevel;
  * so that every alert channel has full context.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.11.3
+ * @version 1.7.11.5
  * @since 1.0.0
  * @see RiskAssessor
  * @see OomCauseAnalyser
