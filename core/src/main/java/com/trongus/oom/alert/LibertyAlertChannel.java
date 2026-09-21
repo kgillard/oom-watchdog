@@ -82,7 +82,7 @@ import java.util.logging.Logger;
  * standard {@code java.util.logging}, which Liberty intercepts at runtime.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.11.5
+ * @version 1.7.11.6
  * @since 1.2.0
  * @see AlertChannel
  * @see WasAlertChannel

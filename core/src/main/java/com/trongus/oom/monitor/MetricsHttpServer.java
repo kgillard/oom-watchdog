@@ -145,7 +145,7 @@ import java.util.logging.Logger;
  * they respond with {@code 503 Service Unavailable}.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.11.5
+ * @version 1.7.11.6
  * @since 1.7.3
  * @see TlsConfig
  * @see OomWatchdog#getLastSnapshot()

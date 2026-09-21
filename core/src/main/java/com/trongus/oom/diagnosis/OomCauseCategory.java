@@ -14,7 +14,7 @@ package com.trongus.oom.diagnosis;
  * they need to merge multiple signals.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.11.5
+ * @version 1.7.11.6
  * @since 1.3.0
  * @see OomCause
  * @see OomCauseAnalyser

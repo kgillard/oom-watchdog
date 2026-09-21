@@ -54,13 +54,21 @@ import java.util.logging.Logger;
  *     <td>{@code --warn-threshold}</td>
  *     <td>Double (0.0 &ndash; 1.0)</td>
  *     <td>{@code 0.80} (80%)</td>
- *     <td>Heap usage ratio required to trigger a {@code WARNING} alert level.</td>
+ *     <td>Heap usage ratio required to trigger a {@code WARNING} alert level.
+ *         In daemon mode, supplying this flag overrides the thresholds on
+ *         <em>every</em> target (ignoring per-target values in
+ *         {@code targets.properties}). Intended only for verifying LEEF syslog
+ *         delivery — not for production use.</td>
  *   </tr>
  *   <tr>
  *     <td>{@code --crit-threshold}</td>
  *     <td>Double (0.0 &ndash; 1.0)</td>
  *     <td>{@code 0.90} (90%)</td>
- *     <td>Heap usage ratio required to trigger a {@code CRITICAL} alert and diagnostic dumps.</td>
+ *     <td>Heap usage ratio required to trigger a {@code CRITICAL} alert and diagnostic dumps.
+ *         In daemon mode, supplying this flag overrides the thresholds on
+ *         <em>every</em> target (ignoring per-target values in
+ *         {@code targets.properties}). Intended only for verifying LEEF syslog
+ *         delivery — not for production use.</td>
  *   </tr>
  *   <tr>
  *     <td>{@code --gc-dump-threshold}</td>
@@ -182,7 +190,7 @@ import java.util.logging.Logger;
  * }</pre>
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.11.5
+ * @version 1.7.11.6
  * @since 1.0.0
  * @see com.trongus.oom.config.WatchdogConfig
  * @see com.trongus.oom.monitor.OomWatchdog
@@ -265,6 +273,20 @@ public final class WatchdogMain {
         // ── Daemon Mode (Multi-Target JVM Monitoring) ─────────────────────────
         if (cli.daemon) {
             WatchdogLogger.info(LOG, "Launching in DAEMON mode using targets file: {0}", cli.targetsFile);
+
+            // ── Threshold override guard ───────────────────────────────────────
+            // When --warn-threshold or --crit-threshold is given on the CLI in daemon mode,
+            // those values override EVERY target's per-target thresholds from targets.properties.
+            // This exists solely to force an immediate alert/LEEF event for syslog testing
+            // and must never be used in production.
+            if (cli.thresholdsOverridden) {
+                WatchdogLogger.warning(LOG,
+                        "⚠ TEST OVERRIDE ACTIVE: --warn-threshold ({0,number,0.##}) and/or " +
+                        "--crit-threshold ({1,number,0.##}) will override ALL target thresholds " +
+                        "from {2}. Use this only to verify LEEF syslog delivery — not in production.",
+                        cli.warnThreshold, cli.critThreshold, cli.targetsFile);
+            }
+
             List<TargetDescriptor> targets;
             try {
                 targets = TargetRegistry.loadFromFile(cli.targetsFile);
@@ -283,7 +305,7 @@ public final class WatchdogMain {
                 return;
             }
 
-            WatchdogDaemon daemon = new WatchdogDaemon(targets, config, sharedChannels);
+            WatchdogDaemon daemon = new WatchdogDaemon(targets, config, sharedChannels, cli.thresholdsOverridden);
             Runtime.getRuntime().addShutdownHook(
                     new Thread(daemon::stop, "oom-daemon-shutdown"));
 
@@ -429,9 +451,23 @@ public final class WatchdogMain {
         System.out.println("╠══════════════════════════════════════════════════════════╣");
         System.out.printf( "║  Targets file            : %s%n",      cli.targetsFile);
         System.out.printf( "║  Monitored targets count : %d%n",      targets.size());
-        for (TargetDescriptor t : targets) {
-            System.out.printf( "║    \u2022 %-18s (warn=%.0f%% crit=%.0f%%)%n",
-                    t.getName(), t.getWarnThreshold() * 100, t.getCritThreshold() * 100);
+        if (cli.thresholdsOverridden) {
+            System.out.printf( "║  ⚠ TEST OVERRIDE          : warn=%.0f%% crit=%.0f%% applied to ALL targets%n",
+                    config.getWarningHeapThreshold()  * 100,
+                    config.getCriticalHeapThreshold() * 100);
+            System.out.println("║    (per-target thresholds from targets.properties are ignored)  ║");
+            System.out.println("║    Use only to verify LEEF syslog delivery — NOT for production ║");
+            for (TargetDescriptor t : targets) {
+                System.out.printf( "║    \u2022 %-18s (warn=%.0f%% crit=%.0f%% OVERRIDDEN)%n",
+                        t.getName(),
+                        config.getWarningHeapThreshold()  * 100,
+                        config.getCriticalHeapThreshold() * 100);
+            }
+        } else {
+            for (TargetDescriptor t : targets) {
+                System.out.printf( "║    \u2022 %-18s (warn=%.0f%% crit=%.0f%%)%n",
+                        t.getName(), t.getWarnThreshold() * 100, t.getCritThreshold() * 100);
+            }
         }
         System.out.printf( "║  Log level               : %s%n",      config.getLogLevel().getName());
         if (!config.getQradarHost().isEmpty()) {
@@ -440,6 +476,11 @@ public final class WatchdogMain {
         }
         System.out.println("╚══════════════════════════════════════════════════════════╝");
         System.out.println();
+        if (cli.thresholdsOverridden) {
+            System.out.println("⚠  WARNING: Threshold override is active — for LEEF syslog testing only.");
+            System.out.println("   Remove --warn-threshold and --crit-threshold for normal monitoring.");
+            System.out.println();
+        }
         System.out.println("Press Ctrl-C to stop.");
     }
 
@@ -494,7 +535,11 @@ public final class WatchdogMain {
           + "\n"
           + "Options:\n"
           + "  --warn-threshold <0.0-1.0>   Heap-usage ratio for WARNING  (default: 0.80)\n"
+          + "                                In --daemon mode: overrides ALL targets, bypassing\n"
+          + "                                per-target thresholds. Use only to test LEEF syslog.\n"
           + "  --crit-threshold <0.0-1.0>   Heap-usage ratio for CRITICAL (default: 0.90)\n"
+          + "                                In --daemon mode: overrides ALL targets, bypassing\n"
+          + "                                per-target thresholds. Use only to test LEEF syslog.\n"
           + "  --gc-threshold   <0.0-1.0>   GC-overhead ratio for WARNING (default: 0.50)\n"
           + "  --gc-dump-threshold <0.0-1.0> GC-overhead ratio that triggers an immediate dump (default: disabled)\n"
           + "  --heap-dump-threshold <0.0-1.0> Heap ratio that triggers an immediate dump (default: disabled)\n"
@@ -536,6 +581,16 @@ public final class WatchdogMain {
           + "       --poll-ms 1000 \\\n"
           + "       --test-leak-secs 10\n"
           + "\n"
+          + "Verify LEEF syslog delivery (daemon mode — forces WARNING/CRITICAL on all targets):\n"
+          + "  java -jar oom-watchdog.jar \\\n"
+          + "       --daemon \\\n"
+          + "       --targets-file /etc/oom-watchdog/targets.properties \\\n"
+          + "       --qradar-host <syslog-host> \\\n"
+          + "       --warn-threshold 0.01 \\\n"
+          + "       --crit-threshold 0.02 \\\n"
+          + "       --poll-ms 2000\n"
+          + "  ⚠  This overrides ALL per-target thresholds. Remove these flags for normal monitoring.\n"
+          + "\n"
           + "Dashboard (real-time browser UI — local):\n"
           + "  java -Xmx256m -jar oom-watchdog.jar --metrics-port 9090 --poll-ms 2000\n"
           + "  Then open dashboard.html and set server URL to https://localhost:9090\n"
@@ -556,7 +611,7 @@ public final class WatchdogMain {
      * applying defaults and basic range validation.
      *
      * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
-     * @version 1.7.11.5
+     * @version 1.7.11.6
      * @since 1.0.0
      * @see WatchdogMain
      */
@@ -645,6 +700,14 @@ public final class WatchdogMain {
         boolean help = false;
 
         /**
+         * {@code true} when {@code --warn-threshold} or {@code --crit-threshold} was explicitly
+         * supplied on the command line.  In daemon mode this forces the CLI values onto
+         * <em>every</em> target, overriding per-target thresholds from {@code targets.properties}.
+         * Intended solely for testing LEEF syslog delivery — not for production use.
+         */
+        boolean thresholdsOverridden = false;
+
+        /**
          * Parses command-line arguments into a populated {@code CliArgs} instance.
          *
          * @param args array of command-line argument strings
@@ -663,8 +726,14 @@ public final class WatchdogMain {
                     case "--test-mode":     c.testMode = true;                                break;
                     case "--qradar-tcp":    c.qradarTcp = true;                               break;
                     case "--targets-file":  c.targetsFile    = nextStr(list, i++, arg);      break;
-                    case "--warn-threshold":    c.warnThreshold    = nextDouble(list, i++, arg); break;
-                    case "--crit-threshold":    c.critThreshold    = nextDouble(list, i++, arg); break;
+                    case "--warn-threshold":
+                        c.warnThreshold = nextDouble(list, i++, arg);
+                        c.thresholdsOverridden = true;
+                        break;
+                    case "--crit-threshold":
+                        c.critThreshold = nextDouble(list, i++, arg);
+                        c.thresholdsOverridden = true;
+                        break;
                     case "--gc-threshold":      c.gcThreshold      = nextDouble(list, i++, arg); break;
                     case "--gc-dump-threshold": c.gcDumpThreshold  = nextDouble(list, i++, arg); break;
                     case "--heap-dump-threshold": c.heapDumpThreshold = nextDouble(list, i++, arg); break;

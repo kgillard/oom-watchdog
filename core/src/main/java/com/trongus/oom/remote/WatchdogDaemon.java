@@ -44,7 +44,7 @@ import java.util.logging.Logger;
  * <p>All lifecycle operations ({@link #start()} and {@link #stop()}) are thread-safe and guarded.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.11.5
+ * @version 1.7.11.6
  * @since 1.7.0
  * @see TargetDescriptor
  * @see TargetRegistry
@@ -59,10 +59,44 @@ public final class WatchdogDaemon implements Closeable {
     private final WatchdogConfig         baseConfig;
     private final List<AlertChannel>     sharedAlertChannels;
 
+    /**
+     * When {@code true}, the base-config warning and critical heap thresholds
+     * (supplied via {@code --warn-threshold} / {@code --crit-threshold} on the CLI)
+     * override every target's per-target thresholds.  Intended only for testing
+     * LEEF syslog delivery; must not be set in production.
+     */
+    private final boolean overrideThresholds;
+
     private final Map<String, OomWatchdog>           activeWatchdogs = new LinkedHashMap<>();
     private final Map<String, JmxDiagnosticsCollector> collectors    = new LinkedHashMap<>();
 
     private volatile boolean running = false;
+
+    /**
+     * Constructs a daemon instance with specified targets, base configuration, shared alert channels,
+     * and an optional threshold-override flag for syslog testing.
+     *
+     * @param targets             list of targets to monitor; must not be null or empty
+     * @param baseConfig          base watchdog configuration; must not be null
+     * @param sharedAlertChannels shared alert channels (e.g. QRadar); nullable or empty
+     * @param overrideThresholds  when {@code true}, the base-config thresholds override
+     *                            every target's per-target thresholds — for testing only
+     */
+    public WatchdogDaemon(List<TargetDescriptor> targets,
+                          WatchdogConfig baseConfig,
+                          List<AlertChannel> sharedAlertChannels,
+                          boolean overrideThresholds) {
+        Objects.requireNonNull(targets, "targets must not be null");
+        if (targets.isEmpty()) {
+            throw new IllegalArgumentException("targets list must not be empty");
+        }
+        this.targets             = Collections.unmodifiableList(new ArrayList<>(targets));
+        this.baseConfig          = Objects.requireNonNull(baseConfig, "baseConfig must not be null");
+        this.sharedAlertChannels = sharedAlertChannels != null
+                ? Collections.unmodifiableList(new ArrayList<>(sharedAlertChannels))
+                : Collections.emptyList();
+        this.overrideThresholds  = overrideThresholds;
+    }
 
     /**
      * Constructs a daemon instance with specified targets, base configuration, and shared alert channels.
@@ -74,15 +108,7 @@ public final class WatchdogDaemon implements Closeable {
     public WatchdogDaemon(List<TargetDescriptor> targets,
                           WatchdogConfig baseConfig,
                           List<AlertChannel> sharedAlertChannels) {
-        Objects.requireNonNull(targets, "targets must not be null");
-        if (targets.isEmpty()) {
-            throw new IllegalArgumentException("targets list must not be empty");
-        }
-        this.targets             = Collections.unmodifiableList(new ArrayList<>(targets));
-        this.baseConfig          = Objects.requireNonNull(baseConfig, "baseConfig must not be null");
-        this.sharedAlertChannels = sharedAlertChannels != null
-                ? Collections.unmodifiableList(new ArrayList<>(sharedAlertChannels))
-                : Collections.emptyList();
+        this(targets, baseConfig, sharedAlertChannels, false);
     }
 
     /**
@@ -92,7 +118,7 @@ public final class WatchdogDaemon implements Closeable {
      * @param baseConfig base configuration
      */
     public WatchdogDaemon(List<TargetDescriptor> targets, WatchdogConfig baseConfig) {
-        this(targets, baseConfig, Collections.emptyList());
+        this(targets, baseConfig, Collections.emptyList(), false);
     }
 
     /**
@@ -118,14 +144,31 @@ public final class WatchdogDaemon implements Closeable {
                 // Per-target config derived from base config + target overrides.
                 // heapDumpDirectory is only overridden when explicitly set in targets.properties;
                 // otherwise the base config value (from --dump-dir) is inherited.
+                //
+                // When overrideThresholds is true (--warn-threshold / --crit-threshold supplied
+                // on the CLI), the base-config thresholds are used for every target instead of
+                // the per-target values from targets.properties.  This mode is intended only for
+                // verifying LEEF syslog delivery and must never be used in production.
                 WatchdogConfig.Builder targetCfgBuilder = baseConfig.toBuilder()
-                        .warningHeapThreshold(target.getWarnThreshold())
-                        .criticalHeapThreshold(target.getCritThreshold())
-                        .gcOverheadThreshold(target.getGcThreshold())
                         .pollIntervalMs(target.getPollIntervalMs())
                         .gcDumpThreshold(target.getGcDumpThreshold())
                         .heapDumpThreshold(target.getHeapDumpThreshold())
                         .nurseryDumpThreshold(target.getNurseryDumpThreshold());
+
+                if (overrideThresholds) {
+                    // Keep base-config warn/crit/gc thresholds — log the active values once.
+                    WatchdogLogger.warning(LOG,
+                            "Target [{0}]: threshold override active — using warn={1,number,0.##} " +
+                            "crit={2,number,0.##} (per-target values ignored)",
+                            logSafeName,
+                            baseConfig.getWarningHeapThreshold(),
+                            baseConfig.getCriticalHeapThreshold());
+                } else {
+                    targetCfgBuilder
+                            .warningHeapThreshold(target.getWarnThreshold())
+                            .criticalHeapThreshold(target.getCritThreshold())
+                            .gcOverheadThreshold(target.getGcThreshold());
+                }
                 if (target.getDumpDirectory() != null) {
                     targetCfgBuilder.heapDumpDirectory(target.getDumpDirectory());
                 }
