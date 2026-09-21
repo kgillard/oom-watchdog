@@ -62,7 +62,7 @@ import java.util.logging.Logger;
  * prior sanitisation.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.11.1
+ * @version 1.7.11.2
  * @since 1.2.0
  * @see AlertChannel
  * @see FileLogAlertChannel

@@ -21,7 +21,7 @@ import static org.junit.Assert.*;
  * then asserts that the LEEF string contains the expected attributes.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.11.1
+ * @version 1.7.11.2
  * @since 1.7.1
  */
 public class QRadarAlertChannelTest {

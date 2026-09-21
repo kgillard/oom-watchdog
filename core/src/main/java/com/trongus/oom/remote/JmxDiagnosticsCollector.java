@@ -100,7 +100,7 @@ import java.util.logging.Logger;
  * allow safe use from multiple threads if required.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.11.1
+ * @version 1.7.11.2
  * @since 1.7.0
  * @see TargetDescriptor
  * @see JvmDiagnosticsCollector
@@ -453,6 +453,16 @@ public final class JmxDiagnosticsCollector implements JvmDiagnosticsCollector, C
         if (!ensureConnected()) {
             WatchdogLogger.warning(LOG, "Cannot trigger remote dump for [{0}]: JMX not connected",
                     descriptor.getName());
+            return null;
+        }
+        // Ensure the output directory exists before any strategy tries to write a file.
+        // This mirrors what CompositeDumpService.dump() does for local dumps.
+        try {
+            java.nio.file.Files.createDirectories(
+                    java.nio.file.Paths.get(outputPath).getParent());
+        } catch (Exception e) {
+            WatchdogLogger.warning(LOG, "Cannot create dump directory for [{0}]: {1}",
+                    descriptor.getName(), e.getMessage());
             return null;
         }
         // Do NOT disconnect on dump failure — the JMX connection is shared with the
