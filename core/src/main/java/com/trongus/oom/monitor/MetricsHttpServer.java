@@ -145,7 +145,7 @@ import java.util.logging.Logger;
  * they respond with {@code 503 Service Unavailable}.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.12.0
+ * @version 1.7.12.2
  * @since 1.7.3
  * @see TlsConfig
  * @see OomWatchdog#getLastSnapshot()
@@ -480,14 +480,26 @@ public final class MetricsHttpServer {
             String path;
             if (collector != null) {
                 String outputPath = watchdog.buildDumpPath(dumpType);
-                path = outputPath != null ? collector.triggerRemoteDump(dumpType, outputPath) : null;
+                if (outputPath == null) {
+                    send(ex, 500, "application/json; charset=UTF-8",
+                            "{\"ok\": false, \"target\": \"" + escapeJson(targetLabel) + "\", " +
+                            "\"error\": \"Cannot build dump output path for target\"}");
+                    return;
+                }
+                path = collector.triggerRemoteDump(dumpType, outputPath);
             } else {
                 path = watchdog.triggerDump(dumpType);
             }
+            // triggerRemoteDump returns "ERROR: ..." strings on failure so the
+            // real exception is surfaced to the dashboard rather than a generic message.
             if (path == null || path.isEmpty()) {
                 send(ex, 500, "application/json; charset=UTF-8",
                         "{\"ok\": false, \"target\": \"" + escapeJson(targetLabel) + "\", " +
-                        "\"error\": \"All strategies exhausted — no dump produced\"}");
+                        "\"error\": \"Dump returned no path — check watchdog log for details\"}");
+            } else if (path.startsWith("ERROR:")) {
+                send(ex, 500, "application/json; charset=UTF-8",
+                        "{\"ok\": false, \"target\": \"" + escapeJson(targetLabel) + "\", " +
+                        "\"error\": \"" + escapeJson(path.substring(6).trim()) + "\"}");
             } else {
                 send(ex, 200, "application/json; charset=UTF-8",
                         "{\"ok\": true, \"target\": \"" + escapeJson(targetLabel) + "\", " +

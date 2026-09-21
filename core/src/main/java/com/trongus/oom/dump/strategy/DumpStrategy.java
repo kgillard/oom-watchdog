@@ -27,7 +27,7 @@ import com.trongus.oom.model.JvmSnapshot;
  * </ul>
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.12.0
+ * @version 1.7.12.2
  * @since 1.0.0
  * @see com.trongus.oom.dump.CompositeDumpService
  * @see HotSpotHeapDumpStrategy
