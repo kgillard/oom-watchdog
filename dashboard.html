@@ -699,14 +699,10 @@ function renderAll() {
   }
   names.forEach(function(name) { renderPane(name); });
 
-  var worst = 'OK';
-  names.forEach(function(name) {
-    var r = (targets[name].latest || {}).riskLevel || 'OK';
-    if (riskOrd(r) > riskOrd(worst)) worst = r;
-  });
+  var activeRisk = ((targets[activeTab] && targets[activeTab].latest) || {}).riskLevel || 'OK';
   var badge = document.getElementById('risk-badge');
-  badge.textContent = worst;
-  badge.className   = 'risk-badge risk-' + worst;
+  badge.textContent = activeRisk;
+  badge.className   = 'risk-badge risk-' + activeRisk;
 
   renderGlobalAlerts();
 }
@@ -749,7 +745,6 @@ function ensureTabs() {
       pane.className = 'tab-pane' + (name === activeTab ? ' active' : '');
       pane.id        = paneId;
       pane.innerHTML = buildPaneHtml(name);
-      document.getElementById('main-content').innerHTML = '';
       document.getElementById('main-content').appendChild(pane);
     }
   });
@@ -765,6 +760,10 @@ function switchTab(name) {
   document.querySelectorAll('.tab-pane').forEach(function(p) {
     p.classList.toggle('active', p.id === 'pane-' + slugify(name));
   });
+  var activeRisk = ((targets[name] && targets[name].latest) || {}).riskLevel || 'OK';
+  var badge = document.getElementById('risk-badge');
+  badge.textContent = activeRisk;
+  badge.className   = 'risk-badge risk-' + activeRisk;
 }
 
 // ── pane HTML builder ─────────────────────────────────────────────────────────

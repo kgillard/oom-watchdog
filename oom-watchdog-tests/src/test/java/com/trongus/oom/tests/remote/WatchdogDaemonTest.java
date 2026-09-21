@@ -18,7 +18,7 @@ import static org.junit.Assert.*;
  * Unit tests for {@link WatchdogDaemon}.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.12.6
+ * @version 1.7.12.7
  * @since 1.7.0
  */
 public class WatchdogDaemonTest {

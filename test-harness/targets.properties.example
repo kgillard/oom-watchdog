@@ -1,0 +1,143 @@
+# --------------------------------------------------
+# Target configuration for: accumulator (/etc/default/accumulator.env)
+# --------------------------------------------------
+target.accumulator.jmx-url          = service:jmx:rmi:///jndi/rmi://localhost:7791/jmxrmi
+target.accumulator.warn             = 0.10
+target.accumulator.crit             = 0.85
+target.accumulator.dump-types       = heap,thread
+target.accumulator.dump-dir         = /var/log
+target.accumulator.leef-category    = JVM_OOM_QRadar_accumulator
+target.accumulator.leef-tags        = env=prod,component=accumulator
+
+# --------------------------------------------------
+# Target configuration for: accumulator_rollup (/etc/default/accumulator_rollup.env)
+# --------------------------------------------------
+target.accumulator_rollup.jmx-url          = service:jmx:rmi:///jndi/rmi://localhost:7795/jmxrmi
+target.accumulator_rollup.warn             = 0.10
+target.accumulator_rollup.crit             = 0.85
+target.accumulator_rollup.dump-types       = heap,thread
+target.accumulator_rollup.dump-dir         = /var/log
+target.accumulator_rollup.leef-category    = JVM_OOM_QRadar_accumulator_rollup
+target.accumulator_rollup.leef-tags        = env=prod,component=accumulator_rollup
+
+# --------------------------------------------------
+# Target configuration for: arc_builder (/etc/default/arc_builder.env)
+# --------------------------------------------------
+target.arc_builder.jmx-url          = service:jmx:rmi:///jndi/rmi://localhost:7792/jmxrmi
+target.arc_builder.warn             = 0.10
+target.arc_builder.crit             = 0.85
+target.arc_builder.dump-types       = heap,thread
+target.arc_builder.dump-dir         = /var/log
+target.arc_builder.leef-category    = JVM_OOM_QRadar_arc_builder
+target.arc_builder.leef-tags        = env=prod,component=arc_builder
+
+# --------------------------------------------------
+# Target configuration for: ariel_proxy_server.ariel_proxy (/etc/default/ariel_proxy_server.ariel_proxy.env)
+# --------------------------------------------------
+target.ariel_proxy_server.jmx-url          = service:jmx:rmi:///jndi/rmi://localhost:7782/jmxrmi
+target.ariel_proxy_server.warn             = 0.10
+target.ariel_proxy_server.crit             = 0.85
+target.ariel_proxy_server.dump-types       = heap,thread
+target.ariel_proxy_server.dump-dir         = /var/log
+target.ariel_proxy_server.leef-category    = JVM_OOM_QRadar_ariel_proxy_server.ariel_proxy
+target.ariel_proxy_server.leef-tags        = env=prod,component=ariel_proxy_server.ariel_proxy
+
+# --------------------------------------------------
+# Target configuration for: assetprofiler (/etc/default/assetprofiler.env)
+# --------------------------------------------------
+target.assetprofiler.jmx-url          = service:jmx:rmi:///jndi/rmi://localhost:7780/jmxrmi
+target.assetprofiler.warn             = 0.10
+target.assetprofiler.crit             = 0.85
+target.assetprofiler.dump-types       = heap,thread
+target.assetprofiler.dump-dir         = /var/log
+target.assetprofiler.leef-category    = JVM_OOM_QRadar_assetprofiler
+target.assetprofiler.leef-tags        = env=prod,component=assetprofiler
+
+# --------------------------------------------------
+# Target configuration for: ecs-ec (/etc/default/ecs-ec.env)
+# --------------------------------------------------
+target.ecs-ec.jmx-url          = service:jmx:rmi:///jndi/rmi://localhost:7777/jmxrmi
+target.ecs-ec.warn             = 0.10
+target.ecs-ec.crit             = 0.85
+target.ecs-ec.dump-types       = heap,thread
+target.ecs-ec.dump-dir         = /var/log
+target.ecs-ec.leef-category    = JVM_OOM_QRadar_ecs-ec
+target.ecs-ec.leef-tags        = env=prod,component=ecs-ec
+
+# --------------------------------------------------
+# Target configuration for: ecs-ep (/etc/default/ecs-ep.env)
+# --------------------------------------------------
+target.ecs-ep.jmx-url          = service:jmx:rmi:///jndi/rmi://localhost:7799/jmxrmi
+target.ecs-ep.warn             = 0.10
+target.ecs-ep.crit             = 0.85
+target.ecs-ep.dump-types       = heap,thread
+target.ecs-ep.dump-dir         = /var/log
+target.ecs-ep.leef-category    = JVM_OOM_QRadar_ecs-ep
+target.ecs-ep.leef-tags        = env=prod,component=ecs-ep
+
+# --------------------------------------------------
+# Target configuration for: historical_correlation_server (/etc/default/historical_correlation_server.env)
+# --------------------------------------------------
+target.historical_correlation_server.jmx-url          = service:jmx:rmi:///jndi/rmi://localhost:7783/jmxrmi
+target.historical_correlation_server.warn             = 0.10
+target.historical_correlation_server.crit             = 0.85
+target.historical_correlation_server.dump-types       = heap,thread
+target.historical_correlation_server.dump-dir         = /var/log
+target.historical_correlation_server.leef-category    = JVM_OOM_QRadar_historical_correlation_server
+target.historical_correlation_server.leef-tags        = env=prod,component=historical_correlation_server
+
+# --------------------------------------------------
+# Target configuration for: hostcontext (/etc/default/hostcontext.env)
+# --------------------------------------------------
+target.hostcontext.jmx-url          = service:jmx:rmi:///jndi/rmi://localhost:7778/jmxrmi
+target.hostcontext.warn             = 0.10
+target.hostcontext.crit             = 0.85
+target.hostcontext.dump-types       = heap,thread
+target.hostcontext.dump-dir         = /var/log
+target.hostcontext.leef-category    = JVM_OOM_QRadar_hostcontext
+target.hostcontext.leef-tags        = env=prod,component=hostcontext
+
+# --------------------------------------------------
+# Target configuration for: offline_forwarder (/etc/default/offline_forwarder.env)
+# --------------------------------------------------
+target.offline_forwarder.jmx-url          = service:jmx:rmi:///jndi/rmi://localhost:7793/jmxrmi
+target.offline_forwarder.warn             = 0.10
+target.offline_forwarder.crit             = 0.85
+target.offline_forwarder.dump-types       = heap,thread
+target.offline_forwarder.dump-dir         = /var/log
+target.offline_forwarder.leef-category    = JVM_OOM_QRadar_offline_forwarder
+target.offline_forwarder.leef-tags        = env=prod,component=offline_forwarder
+
+# --------------------------------------------------
+# Target configuration for: reporting_executor (/etc/default/reporting_executor.env)
+# --------------------------------------------------
+target.reporting_executor.jmx-url          = service:jmx:rmi:///jndi/rmi://localhost:7781/jmxrmi
+target.reporting_executor.warn             = 0.10
+target.reporting_executor.crit             = 0.85
+target.reporting_executor.dump-types       = heap,thread
+target.reporting_executor.dump-dir         = /var/log
+target.reporting_executor.leef-category    = JVM_OOM_QRadar_reporting_executor
+target.reporting_executor.leef-tags        = env=prod,component=reporting_executor
+
+# --------------------------------------------------
+# Target configuration for: tomcat (/etc/default/tomcat.env)
+# --------------------------------------------------
+target.tomcat.jmx-url          = service:jmx:rmi:///jndi/rmi://localhost:7779/jmxrmi
+target.tomcat.warn             = 0.10
+target.tomcat.crit             = 0.85
+target.tomcat.dump-types       = heap,thread
+target.tomcat.dump-dir         = /var/log
+target.tomcat.leef-category    = JVM_OOM_QRadar_tomcat
+target.tomcat.leef-tags        = env=prod,component=tomcat
+
+# --------------------------------------------------
+# Target configuration for: vis.vis0 (/etc/default/vis.vis0.env)
+# --------------------------------------------------
+target.vis.jmx-url          = service:jmx:rmi:///jndi/rmi://localhost:7790/jmxrmi
+target.vis.warn             = 0.10
+target.vis.crit             = 0.85
+target.vis.dump-types       = heap,thread
+target.vis.dump-dir         = /var/log
+target.vis.leef-category    = JVM_OOM_QRadar_vis.vis0
+target.vis.leef-tags        = env=prod,component=vis.vis0
+
