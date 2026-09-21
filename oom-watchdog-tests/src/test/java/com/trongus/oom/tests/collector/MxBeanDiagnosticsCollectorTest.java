@@ -18,7 +18,7 @@ import static org.junit.Assert.*;
  * differ across JVM vendors, heap settings, and GC activity.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.11.6
+ * @version 1.7.11.7
  * @since 1.0.0
  * @see MxBeanDiagnosticsCollector
  */

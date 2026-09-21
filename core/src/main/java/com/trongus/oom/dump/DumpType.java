@@ -52,7 +52,7 @@ package com.trongus.oom.dump;
  * </table>
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.11.6
+ * @version 1.7.11.7
  * @since 1.0.0
  * @see com.trongus.oom.dump.strategy.DumpStrategy
  * @see com.trongus.oom.dump.CompositeDumpService

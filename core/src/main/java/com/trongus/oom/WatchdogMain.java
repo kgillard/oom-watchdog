@@ -190,7 +190,7 @@ import java.util.logging.Logger;
  * }</pre>
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.11.6
+ * @version 1.7.11.7
  * @since 1.0.0
  * @see com.trongus.oom.config.WatchdogConfig
  * @see com.trongus.oom.monitor.OomWatchdog
@@ -455,7 +455,7 @@ public final class WatchdogMain {
             System.out.printf( "║  ⚠ TEST OVERRIDE          : warn=%.0f%% crit=%.0f%% applied to ALL targets%n",
                     config.getWarningHeapThreshold()  * 100,
                     config.getCriticalHeapThreshold() * 100);
-            System.out.println("║    (per-target thresholds from targets.properties are ignored)  ║");
+            System.out.println("║    (per-target thresholds ignored; dumps suppressed)            ║");
             System.out.println("║    Use only to verify LEEF syslog delivery — NOT for production ║");
             for (TargetDescriptor t : targets) {
                 System.out.printf( "║    \u2022 %-18s (warn=%.0f%% crit=%.0f%% OVERRIDDEN)%n",
@@ -611,7 +611,7 @@ public final class WatchdogMain {
      * applying defaults and basic range validation.
      *
      * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
-     * @version 1.7.11.6
+     * @version 1.7.11.7
      * @since 1.0.0
      * @see WatchdogMain
      */

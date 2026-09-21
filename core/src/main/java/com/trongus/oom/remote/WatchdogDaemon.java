@@ -44,7 +44,7 @@ import java.util.logging.Logger;
  * <p>All lifecycle operations ({@link #start()} and {@link #stop()}) are thread-safe and guarded.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.11.6
+ * @version 1.7.11.7
  * @since 1.7.0
  * @see TargetDescriptor
  * @see TargetRegistry
@@ -157,24 +157,28 @@ public final class WatchdogDaemon implements Closeable {
 
                 if (overrideThresholds) {
                     // Keep base-config warn/crit/gc thresholds — log the active values once.
+                    // Disable ALL dump types so no heap/thread/core dumps fire during the
+                    // syslog test.  Only LEEF alert events are sent; no files are written.
                     WatchdogLogger.warning(LOG,
                             "Target [{0}]: threshold override active — using warn={1,number,0.##} " +
-                            "crit={2,number,0.##} (per-target values ignored)",
+                            "crit={2,number,0.##} (per-target values ignored); dumps suppressed for " +
+                            "syslog test",
                             logSafeName,
                             baseConfig.getWarningHeapThreshold(),
                             baseConfig.getCriticalHeapThreshold());
+                    targetCfgBuilder.dumpTypes(java.util.EnumSet.noneOf(
+                            com.trongus.oom.dump.DumpType.class));
                 } else {
                     targetCfgBuilder
                             .warningHeapThreshold(target.getWarnThreshold())
                             .criticalHeapThreshold(target.getCritThreshold())
                             .gcOverheadThreshold(target.getGcThreshold());
-                }
-                if (target.getDumpDirectory() != null) {
-                    targetCfgBuilder.heapDumpDirectory(target.getDumpDirectory());
-                }
-
-                if (!target.getDumpTypes().isEmpty()) {
-                    targetCfgBuilder.dumpTypes(target.getDumpTypes());
+                    if (target.getDumpDirectory() != null) {
+                        targetCfgBuilder.heapDumpDirectory(target.getDumpDirectory());
+                    }
+                    if (!target.getDumpTypes().isEmpty()) {
+                        targetCfgBuilder.dumpTypes(target.getDumpTypes());
+                    }
                 }
 
                 WatchdogConfig targetConfig = targetCfgBuilder.build();

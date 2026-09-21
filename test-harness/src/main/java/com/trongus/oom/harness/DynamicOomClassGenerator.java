@@ -43,7 +43,7 @@ import java.util.Locale;
  * In such cases, this generator gracefully falls back to the pre-compiled {@link BuiltInHeapExhauster}.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.11.6
+ * @version 1.7.11.7
  * @since 1.0.0
  * @see com.trongus.oom.harness.BuiltInHeapExhauster
  * @see com.trongus.oom.harness.TestHarnessMain
