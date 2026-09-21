@@ -15,7 +15,7 @@ import java.lang.management.OperatingSystemMXBean;
  * time to avoid repeated string/reflection overhead in the poll loop.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.12.5
+ * @version 1.7.12.6
  * @since 1.0.0
  */
 public final class JvmPlatform {

@@ -23,7 +23,7 @@ import java.util.Set;
  * to prevent accidental exposure in log files or console transcripts.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.12.5
+ * @version 1.7.12.6
  * @since 1.7.0
  * @see TargetRegistry
  * @see JmxDiagnosticsCollector

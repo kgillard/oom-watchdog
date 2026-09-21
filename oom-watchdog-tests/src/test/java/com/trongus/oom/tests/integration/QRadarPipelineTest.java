@@ -34,7 +34,7 @@ import static org.junit.Assert.*;
  * or QRadar installation is required.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.12.5
+ * @version 1.7.12.6
  * @since 1.7.10
  */
 public class QRadarPipelineTest {

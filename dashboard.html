@@ -231,6 +231,38 @@
     .tab-pane        { display: none; }
     .tab-pane.active { display: block; }
 
+    /* ── Dashboard section grid (outer — every section is a draggable row) ───── */
+    .dashboard-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+    /* A draggable section card wrapping one logical dashboard section */
+    .dcard {
+      position: relative;
+      cursor: grab;
+      user-select: none;
+      transition: box-shadow 0.15s, opacity 0.15s;
+      border-radius: var(--radius);
+    }
+    .dcard:active     { cursor: grabbing; }
+    .dcard.drag-over  { box-shadow: 0 0 0 2px var(--accent); }
+    .dcard.dragging   { opacity: 0.4; }
+    /* Drag handle — six-dot grip shown top-right on hover */
+    .dcard::before {
+      content: '⠿';
+      position: absolute;
+      top: 6px; right: 8px;
+      font-size: 14px;
+      color: var(--muted);
+      opacity: 0;
+      transition: opacity 0.15s;
+      pointer-events: none;
+      z-index: 1;
+      line-height: 1;
+    }
+    .dcard:hover::before { opacity: 0.55; }
+
     /* ── Metric cards grid ───────────────────────────────────────────────────── */
     .metric-grid {
       display: grid;
@@ -736,37 +768,73 @@ function switchTab(name) {
 }
 
 // ── pane HTML builder ─────────────────────────────────────────────────────────
+// Every major section is wrapped in a .dcard [draggable] so the whole
+// dashboard layout can be rearranged by the user.  The metric-grid inside
+// the first .dcard retains its own independent inner drag-and-drop.
 function buildPaneHtml(name) {
   var s = slugify(name);
   return [
-    '<div class="metric-grid" id="mgrid-' + s + '">',
-      mcardHtml(s + '-heap-pct',    'Heap Usage',  '—', '— MB / — MB',    true),
-      mcardHtml(s + '-gc-pct',      'GC Overhead', '—', 'Total GC: — ms', true),
-      mcardHtml(s + '-nursery-pct', 'Young Gen',   '—', '— MB used',      true),
-      mcardHtml(s + '-nonheap-mb',  'Non-Heap',    '—', 'MB used',        false),
-      processCardHtml(s),
-      riskCardHtml(s),
+    '<div class="dashboard-grid" id="dgrid-' + s + '">',
+
+    // ── Section: metric cards ────────────────────────────────────────────────
+    '<div class="dcard" draggable="true" data-card-id="' + s + '-sec-metrics">',
+      '<div class="metric-grid" id="mgrid-' + s + '">',
+        mcardHtml(s + '-heap-pct',    'Heap Usage',  '—', '— MB / — MB',    true),
+        mcardHtml(s + '-gc-pct',      'GC Overhead', '—', 'Total GC: — ms', true),
+        mcardHtml(s + '-nursery-pct', 'Young Gen',   '—', '— MB used',      true),
+        mcardHtml(s + '-nonheap-mb',  'Non-Heap',    '—', 'MB used',        false),
+        processCardHtml(s),
+        riskCardHtml(s),
+      '</div>',
     '</div>',
-    '<div class="charts-grid">',
-      chartCardHtml(s + '-chart-heap',    'Heap Usage %',  s + '-chart-heap-cur'),
-      chartCardHtml(s + '-chart-gc',      'GC Overhead %', s + '-chart-gc-cur'),
-      chartCardHtml(s + '-chart-nursery', 'Young Gen %',   s + '-chart-nursery-cur'),
+
+    // ── Section: sparkline charts ────────────────────────────────────────────
+    '<div class="dcard" draggable="true" data-card-id="' + s + '-sec-charts">',
+      '<div class="charts-grid">',
+        chartCardHtml(s + '-chart-heap',    'Heap Usage %',  s + '-chart-heap-cur'),
+        chartCardHtml(s + '-chart-gc',      'GC Overhead %', s + '-chart-gc-cur'),
+        chartCardHtml(s + '-chart-nursery', 'Young Gen %',   s + '-chart-nursery-cur'),
+      '</div>',
     '</div>',
-    '<div class="sec-title">Diagnosis</div>',
-    '<div class="diag-box"><span id="' + s + '-diag">Waiting for first poll…</span></div>',
-    jvmDetailCardHtml(s),
-    '<div class="table-card">',
-      '<div class="table-card-hdr"><span class="sec-title" style="margin:0">Memory Pools</span></div>',
-      '<table><thead><tr><th>Pool</th><th>Used (MB)</th></tr></thead>',
-      '<tbody id="' + s + '-pools"><tr><td colspan="2" style="color:var(--muted)">No data yet</td></tr></tbody>',
-      '</table></div>',
-    '<div class="table-card">',
-      '<div class="table-card-hdr"><span class="sec-title" style="margin:0">GC Collections</span></div>',
-      '<table><thead><tr><th>Collector</th><th>Count</th></tr></thead>',
-      '<tbody id="' + s + '-gctable"><tr><td colspan="2" style="color:var(--muted)">No data yet</td></tr></tbody>',
-      '</table></div>',
-    '<div class="sec-title">On-Demand Diagnostics</div>',
-    dumpActionsHtml(s, name),
+
+    // ── Section: diagnosis ───────────────────────────────────────────────────
+    '<div class="dcard" draggable="true" data-card-id="' + s + '-sec-diag" style="margin-bottom:0">',
+      '<div class="sec-title">Diagnosis</div>',
+      '<div class="diag-box"><span id="' + s + '-diag">Waiting for first poll…</span></div>',
+    '</div>',
+
+    // ── Section: JVM detail ──────────────────────────────────────────────────
+    '<div class="dcard" draggable="true" data-card-id="' + s + '-sec-jvmdetail" style="margin-bottom:0">',
+      jvmDetailCardHtml(s),
+    '</div>',
+
+    // ── Section: Memory Pools table ──────────────────────────────────────────
+    '<div class="dcard" draggable="true" data-card-id="' + s + '-sec-pools" style="margin-bottom:14px">',
+      '<div class="table-card" style="margin-bottom:0">',
+        '<div class="table-card-hdr"><span class="sec-title" style="margin:0">Memory Pools</span></div>',
+        '<table><thead><tr><th>Pool</th><th>Used (MB)</th></tr></thead>',
+        '<tbody id="' + s + '-pools"><tr><td colspan="2" style="color:var(--muted)">No data yet</td></tr></tbody>',
+        '</table>',
+      '</div>',
+    '</div>',
+
+    // ── Section: GC Collections table ───────────────────────────────────────
+    '<div class="dcard" draggable="true" data-card-id="' + s + '-sec-gc" style="margin-bottom:14px">',
+      '<div class="table-card" style="margin-bottom:0">',
+        '<div class="table-card-hdr"><span class="sec-title" style="margin:0">GC Collections</span></div>',
+        '<table><thead><tr><th>Collector</th><th>Count</th></tr></thead>',
+        '<tbody id="' + s + '-gctable"><tr><td colspan="2" style="color:var(--muted)">No data yet</td></tr></tbody>',
+        '</table>',
+      '</div>',
+    '</div>',
+
+    // ── Section: On-Demand Diagnostics ───────────────────────────────────────
+    '<div class="dcard" draggable="true" data-card-id="' + s + '-sec-dump" style="margin-bottom:14px">',
+      '<div class="sec-title">On-Demand Diagnostics</div>',
+      dumpActionsHtml(s, name),
+    '</div>',
+
+    '</div>', // /.dashboard-grid
   ].join('');
 }
 
@@ -1174,52 +1242,59 @@ function requestDump(slug, type, encoded) {
 }
 
 // ── card drag-and-drop + localStorage order persistence ───────────────────────
-// Storage key: "oom-card-order:<pane-slug>"
-// Stored value: JSON array of data-card-id strings in desired order.
+// Works on any grid whose direct children have [draggable][data-card-id].
+// Used for:
+//   .dashboard-grid  — section-level: draggable children are .dcard
+//   .metric-grid     — metric-level:  draggable children are .mcard
 
 var _dragSrc  = null;   // the card element being dragged
 var _dragOver = null;   // card currently highlighted as drop target
 
-function initCardDrag(gridEl) {
+// childSelector: CSS selector for the direct draggable children of gridEl
+function initCardDrag(gridEl, childSelector) {
   if (!gridEl) return;
+  childSelector = childSelector || '.mcard';
 
-  // dragstart / dragend are on individual cards (they fire on the dragged element).
-  // dragover / drop are on the GRID so they fire regardless of which card row
-  // the pointer is over — avoids the "only top row works" gap-hit-test failure.
+  function directCards() {
+    // Only immediate draggable children — do NOT recurse into nested grids
+    return Array.prototype.filter.call(
+      gridEl.querySelectorAll(childSelector),
+      function(el) { return el.parentElement === gridEl; }
+    );
+  }
 
   function onDragStart(e) {
+    // Only handle drags that start on a direct child of this grid
+    if (e.currentTarget.parentElement !== gridEl) return;
     _dragSrc = e.currentTarget;
-    // Use a short timeout so the drag ghost captures the card before opacity drops
     setTimeout(function() { if (_dragSrc) _dragSrc.classList.add('dragging'); }, 0);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', _dragSrc.dataset.cardId || '');
+    // Stop the event so the outer dashboard-grid doesn't also pick it up
+    e.stopPropagation();
   }
 
   function onDragEnd(e) {
     if (_dragSrc) _dragSrc.classList.remove('dragging');
     clearDragOver();
-    saveCardOrder(gridEl);
+    saveCardOrder(gridEl, childSelector);
     _dragSrc  = null;
     _dragOver = null;
   }
 
   function clearDragOver() {
-    gridEl.querySelectorAll('.mcard.drag-over').forEach(function(c) {
-      c.classList.remove('drag-over');
-    });
+    directCards().forEach(function(c) { c.classList.remove('drag-over'); });
   }
 
-  // Find the nearest .mcard to the pointer position within the grid.
+  // Find the nearest direct-child card to the pointer within this grid.
   function cardAtPoint(x, y) {
-    var cards = Array.prototype.slice.call(gridEl.querySelectorAll('.mcard'));
+    var cards = directCards();
     var best = null, bestDist = Infinity;
     cards.forEach(function(card) {
-      var r    = card.getBoundingClientRect();
-      // Check if pointer is inside the card
+      var r = card.getBoundingClientRect();
       if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
         best = card; bestDist = 0; return;
       }
-      // Otherwise compute distance to nearest edge (for gap areas)
       var dx = Math.max(r.left - x, 0, x - r.right);
       var dy = Math.max(r.top  - y, 0, y - r.bottom);
       var d  = dx * dx + dy * dy;
@@ -1229,7 +1304,10 @@ function initCardDrag(gridEl) {
   }
 
   function onGridDragOver(e) {
+    // Only handle if the current drag source belongs to this grid
+    if (!_dragSrc || _dragSrc.parentElement !== gridEl) return;
     e.preventDefault();
+    e.stopPropagation();
     e.dataTransfer.dropEffect = 'move';
     var over = cardAtPoint(e.clientX, e.clientY);
     if (over !== _dragOver) {
@@ -1240,18 +1318,17 @@ function initCardDrag(gridEl) {
   }
 
   function onGridDrop(e) {
+    if (!_dragSrc || _dragSrc.parentElement !== gridEl) return;
     e.preventDefault();
+    e.stopPropagation();
     clearDragOver();
-    if (!_dragSrc) return;
     var target = cardAtPoint(e.clientX, e.clientY);
     if (!target || target === _dragSrc) return;
 
-    // Insert before or after based on pointer position relative to target centre
-    var cards  = Array.prototype.slice.call(gridEl.querySelectorAll('.mcard'));
+    var cards  = directCards();
     var srcIdx = cards.indexOf(_dragSrc);
     var tgtIdx = cards.indexOf(target);
     var rect   = target.getBoundingClientRect();
-    // For horizontal grid: use X midpoint; fall back to Y for same-column stacks
     var afterTarget = tgtIdx > srcIdx
       ? true
       : (e.clientX > rect.left + rect.width / 2 || e.clientY > rect.top + rect.height / 2);
@@ -1261,36 +1338,33 @@ function initCardDrag(gridEl) {
     } else {
       gridEl.insertBefore(_dragSrc, target);
     }
-    saveCardOrder(gridEl);
+    saveCardOrder(gridEl, childSelector);
   }
 
-  // dragstart / dragend stay on each card
-  gridEl.querySelectorAll('.mcard').forEach(function(card) {
+  directCards().forEach(function(card) {
     card.addEventListener('dragstart', onDragStart);
     card.addEventListener('dragend',   onDragEnd);
   });
 
-  // dragover / drop on the grid container — catches all rows and gap areas
   gridEl.addEventListener('dragover', onGridDragOver);
   gridEl.addEventListener('drop',     onGridDrop);
 }
 
-function saveCardOrder(gridEl) {
+function saveCardOrder(gridEl, childSelector) {
   var paneEl = gridEl.closest('.tab-pane');
   if (!paneEl) return;
-  var order = Array.prototype.slice.call(gridEl.querySelectorAll('.mcard'))
-    .map(function(c) { return c.dataset.cardId || ''; })
-    .filter(Boolean);
-  try {
-    localStorage.setItem('oom-card-order:' + paneEl.id, JSON.stringify(order));
-  } catch (e) { /* storage quota or private mode */ }
+  var key = 'oom-card-order:' + gridEl.id;
+  var order = Array.prototype.filter.call(
+    gridEl.querySelectorAll(childSelector || '.mcard'),
+    function(el) { return el.parentElement === gridEl; }
+  ).map(function(c) { return c.dataset.cardId || ''; }).filter(Boolean);
+  try { localStorage.setItem(key, JSON.stringify(order)); } catch (e) {}
 }
 
-function restoreCardOrder(gridEl) {
-  var paneEl = gridEl.closest('.tab-pane');
-  if (!paneEl) return;
+function restoreCardOrder(gridEl, childSelector) {
+  var key = 'oom-card-order:' + gridEl.id;
   var raw;
-  try { raw = localStorage.getItem('oom-card-order:' + paneEl.id); } catch (e) { return; }
+  try { raw = localStorage.getItem(key); } catch (e) { return; }
   if (!raw) return;
   var order;
   try { order = JSON.parse(raw); } catch (e) { return; }
@@ -1298,7 +1372,7 @@ function restoreCardOrder(gridEl) {
 
   order.forEach(function(cardId) {
     var card = gridEl.querySelector('[data-card-id="' + cardId + '"]');
-    if (card) gridEl.appendChild(card); // moves to end; iterating in saved order re-creates order
+    if (card && card.parentElement === gridEl) gridEl.appendChild(card);
   });
 }
 
@@ -1306,12 +1380,19 @@ function restoreCardOrder(gridEl) {
 var _origEnsureTabs = ensureTabs;
 ensureTabs = function() {
   _origEnsureTabs();
-  document.querySelectorAll('.metric-grid').forEach(function(grid) {
-    // Only initialise once (guard with a data attribute)
+  // Outer section-level grid — .dcard children
+  document.querySelectorAll('.dashboard-grid').forEach(function(grid) {
     if (grid.dataset.dragInit) return;
     grid.dataset.dragInit = '1';
-    restoreCardOrder(grid);
-    initCardDrag(grid);
+    restoreCardOrder(grid, '.dcard');
+    initCardDrag(grid, '.dcard');
+  });
+  // Inner metric grid — .mcard children
+  document.querySelectorAll('.metric-grid').forEach(function(grid) {
+    if (grid.dataset.dragInit) return;
+    grid.dataset.dragInit = '1';
+    restoreCardOrder(grid, '.mcard');
+    initCardDrag(grid, '.mcard');
   });
 };
 </script>

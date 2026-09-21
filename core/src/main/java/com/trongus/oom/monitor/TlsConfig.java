@@ -21,7 +21,7 @@ import java.io.File;
  * <p>Instances are immutable and thread-safe.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.12.5
+ * @version 1.7.12.6
  * @since 1.7.4
  * @see MetricsHttpServer
  */
