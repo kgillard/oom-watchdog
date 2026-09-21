@@ -557,12 +557,22 @@ document.addEventListener('click', function(e) {
     try { localStorage.setItem(INTERVAL_KEY, this.value); } catch(e) {}
   });
 
+  // Restore last-used server URL from history (if any)
   var list = loadHistory();
   if (list.length > 0) {
     document.getElementById('server-url').value = list[0];
-    // Auto-connect after the browser has finished rendering the page
-    window.addEventListener('load', function() { startPolling(); });
   }
+
+  // Auto-connect on every page load whenever the URL field has a value.
+  // This covers both: (a) URL restored from history, and (b) the hardcoded
+  // default https://localhost:9090 that ships in the HTML.
+  window.addEventListener('load', function() {
+    var url = document.getElementById('server-url').value.trim();
+    if (url) {
+      setStatus('', 'Auto-connecting…');
+      startPolling();
+    }
+  });
 })();
 
 // ── polling ───────────────────────────────────────────────────────────────────
