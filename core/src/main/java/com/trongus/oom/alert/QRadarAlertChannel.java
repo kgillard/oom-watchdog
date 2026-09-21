@@ -77,7 +77,7 @@ import java.util.logging.Logger;
  * (guaranteed delivery) via the constructor.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.13.0
+ * @version 1.7.13.3
  * @since 1.0.0
  * @see AlertChannel
  * @see com.trongus.oom.model.JvmSnapshot
@@ -148,7 +148,10 @@ public final class QRadarAlertChannel implements AlertChannel {
         String leefMessage = buildLeefMessage(snapshot);
         byte[] payload     = leefMessage.getBytes(StandardCharsets.UTF_8);
 
-        WatchdogLogger.finest(LOG, "LEEF payload ({0} bytes): {1}", payload.length, leefMessage);
+        // Log at INFO so operators can confirm LEEF events are being sent without
+        // needing FINEST level — critical for troubleshooting QRadar delivery.
+        WatchdogLogger.info(LOG, "LEEF payload ({0} bytes) \u2192 {1}:{2}/{3}: {4}",
+                payload.length, qradarHost, qradarPort, transport, leefMessage);
 
         try {
             if (transport == Transport.UDP) {

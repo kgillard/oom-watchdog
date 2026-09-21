@@ -62,7 +62,7 @@ import java.util.logging.Logger;
  * <p>All methods are stateless and safe for concurrent calls.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.13.1
+ * @version 1.7.13.2
  * @since 1.7.12.9
  */
 public final class ProcessSignalDumper {
@@ -161,7 +161,7 @@ public final class ProcessSignalDumper {
             case THREAD:          return threadDump(pid, outputPath, signalDumpLog);
             case HEAP:            return isJ9 ? heapDumpJ9(pid, outputPath, jcmd)
                                                : heapDumpHotSpot(pid, outputPath, jcmd, jmap);
-            case CORE:            return isJ9 ? coreDumpJ9(pid, outputPath)
+            case CORE:            return isJ9 ? coreDumpJ9(pid, outputPath, jcmd)
                                                : coreDumpGcore(pid, outputPath);
             case CLASS_HISTOGRAM: return classHistogram(pid, outputPath, jcmd);
             default:
@@ -373,24 +373,78 @@ public final class ProcessSignalDumper {
     // ── core dump ─────────────────────────────────────────────────────────────
 
     /**
-     * Non-destructive core dump on IBM J9/OpenJ9 via {@code SIGUSR2}.
-     * J9 writes a system dump ({@code .dmp}) to its working directory without
-     * killing the process.
+     * Non-destructive system dump on IBM J9/OpenJ9.
+     *
+     * <p>Strategy order:
+     * <ol>
+     *   <li>{@code jcmd <pid> Dump.system file=<path>} — OpenJ9 jcmd diagnostic command;
+     *       writes the system dump to the specified path. Available on all modern OpenJ9 builds.</li>
+     *   <li>{@code kill -USR2 <pid>} — fallback for older J9 builds that don't expose
+     *       {@code Dump.system} via jcmd. The dump lands in the target JVM's working directory;
+     *       the returned path is a hint pointing to the expected location.</li>
+     * </ol>
      *
      * @param pid        OS PID of the target JVM
-     * @param outputPath desired output path (J9 controls the actual path)
-     * @return path hint, or {@code null} on failure
+     * @param outputPath desired output path (used for jcmd strategy)
+     * @param jcmd       resolved path to jcmd
+     * @return absolute path of the dump file, or {@code null} on failure
      */
-    private static String coreDumpJ9(long pid, String outputPath) {
+    private static String coreDumpJ9(long pid, String outputPath, String jcmd) {
         if (isWindows()) return null;
         String path = outputPath.endsWith(".dmp") ? outputPath : outputPath + ".dmp";
+
+        // Strategy 1: jcmd Dump.system — writes to specified path (OpenJ9 jcmd command)
+        try {
+            StringBuilder out = new StringBuilder();
+            int exit = runCapture(new String[]{
+                    jcmd, String.valueOf(pid), "Dump.system", "file=" + path
+            }, SUBPROCESS_TIMEOUT_SEC, out);
+            // jcmd exit 0 and file exists = success
+            if (exit == 0 && new File(path).exists() && new File(path).length() > 0) {
+                WatchdogLogger.info(LOG,
+                        "CORE (jcmd [{0}] Dump.system): written [{1}]", jcmd, path);
+                return path;
+            }
+            // jcmd may exit 0 but print the actual path in its output
+            // (some OpenJ9 versions print "Heap dump written to: /path/core....")
+            String output = out.toString().trim();
+            if (exit == 0 && !output.isEmpty()) {
+                // Try to extract the file path from jcmd output
+                for (String line : output.split("\\n")) {
+                    line = line.trim();
+                    // Lines like: "Heap dump written to /path/file.dmp" or just "/path/file.dmp"
+                    if (line.startsWith("/") || line.startsWith("C:\\")) {
+                        File candidate = new File(line);
+                        if (candidate.exists() && candidate.length() > 0) {
+                            WatchdogLogger.info(LOG,
+                                    "CORE (jcmd Dump.system): dump at [{0}]", candidate.getAbsolutePath());
+                            return candidate.getAbsolutePath();
+                        }
+                    }
+                }
+                // Output suggests success but we can't determine the exact path
+                WatchdogLogger.info(LOG,
+                        "CORE (jcmd Dump.system): command succeeded for PID {0}; output: {1}", pid, output);
+                return path;
+            }
+            WatchdogLogger.fine(LOG,
+                    "CORE: jcmd [{0}] Dump.system exited {1} for PID {2} — trying kill -USR2",
+                    jcmd, exit, pid);
+        } catch (IOException e) {
+            WatchdogLogger.fine(LOG,
+                    "CORE: jcmd [{0}] failed ({1}) — trying kill -USR2 for PID {2}",
+                    jcmd, e.getMessage(), pid);
+        }
+
+        // Strategy 2: SIGUSR2 — triggers J9 system dump to JVM working directory
         try {
             int exit = runAndWait(new String[]{ "kill", "-USR2", String.valueOf(pid) }, 10);
             if (exit == 0) {
                 WatchdogLogger.info(LOG,
-                        "CORE (kill -USR2): non-destructive system dump triggered on IBM J9 PID {0}. "
-                        + "Dump written to target JVM working directory.", pid);
-                return path + " [J9 SIGUSR2 — check target JVM working directory]";
+                        "CORE (kill -USR2): system dump triggered on IBM J9 PID {0}. "
+                        + "Dump written to target JVM working directory (check target logs for path).", pid);
+                // Return the desired path as a hint — J9 controls where it actually writes
+                return path;
             }
             WatchdogLogger.warning(LOG,
                     "CORE (kill -USR2): exit {0} for PID {1}", exit, pid);
@@ -403,15 +457,33 @@ public final class ProcessSignalDumper {
 
     /**
      * Non-destructive core dump on HotSpot/OpenJDK via {@code gcore}.
-     * {@code gcore} uses ptrace to snapshot process memory without stopping or
-     * killing the target.
+     * {@code gcore} (part of GNU binutils / GDB) uses ptrace to snapshot process memory
+     * without stopping or killing the target.
+     *
+     * <p>If {@code gcore} is not installed, returns {@code null} so the caller can fall
+     * back to the JMX path.  Install via: {@code yum install gdb} or {@code apt-get install gdb}.
      *
      * @param pid        OS PID of the target JVM
      * @param outputPath desired output path prefix ({@code gcore} appends the PID)
      * @return absolute path of the written core file, or {@code null} on failure
      */
     private static String coreDumpGcore(long pid, String outputPath) {
-        if (isWindows()) return null;
+        if (isWindows()) {
+            WatchdogLogger.warning(LOG, "CORE (gcore): not supported on Windows");
+            return null;
+        }
+
+        // Check gcore is available before trying — avoids a confusing IOException
+        // being logged as the only feedback when it's simply not installed.
+        String gcorePath = findOnPath("gcore");
+        if (gcorePath == null) {
+            WatchdogLogger.warning(LOG,
+                    "CORE (gcore): gcore not found on PATH. "
+                    + "Install via: yum install gdb  or  apt-get install gdb. "
+                    + "Falling back to JMX core dump path.");
+            return null;
+        }
+
         String safePath;
         try {
             safePath = new File(outputPath).getCanonicalPath();
@@ -421,7 +493,7 @@ public final class ProcessSignalDumper {
         }
         try {
             int exit = runAndWait(new String[]{
-                    "gcore", "-o", safePath, String.valueOf(pid)
+                    gcorePath, "-o", safePath, String.valueOf(pid)
             }, SUBPROCESS_TIMEOUT_SEC);
             if (exit == 0) {
                 // gcore appends .<pid> to the output path
@@ -432,10 +504,27 @@ public final class ProcessSignalDumper {
                 return actual.getAbsolutePath();
             }
             WatchdogLogger.warning(LOG,
-                    "CORE (gcore): exit {0} for PID {1} path [{2}]", exit, pid, safePath);
+                    "CORE (gcore): exit {0} for PID {1} path [{2}]. "
+                    + "This may require root or CAP_SYS_PTRACE capability.", exit, pid, safePath);
         } catch (IOException e) {
             WatchdogLogger.warning(LOG,
-                    "CORE (gcore): not on PATH ({0}) for PID {1}", e.getMessage(), pid);
+                    "CORE (gcore): failed for PID {0}: {1}", pid, e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * Checks whether a command exists somewhere on {@code PATH} by probing each
+     * directory entry.  Returns the absolute path of the first match found, or
+     * {@code null} if the command is not available.
+     */
+    private static String findOnPath(String command) {
+        String pathEnv = System.getenv("PATH");
+        if (pathEnv == null || pathEnv.isEmpty()) return null;
+        String exe = isWindows() ? command + ".exe" : command;
+        for (String dir : pathEnv.split(File.pathSeparator)) {
+            File f = new File(dir, exe);
+            if (f.canExecute()) return f.getAbsolutePath();
         }
         return null;
     }

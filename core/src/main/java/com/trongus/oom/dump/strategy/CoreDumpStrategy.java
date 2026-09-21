@@ -9,6 +9,7 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStreamReader;
 import java.util.logging.Logger;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Core / system dump strategy.
@@ -87,12 +88,20 @@ public final class CoreDumpStrategy implements DumpStrategy {
     private static String tryGcore(String outputPath) {
         long pid = JvmPlatform.PID;
         if (pid < 0) {
-            WatchdogLogger.warning(LOG, "CORE dump skipped: cannot determine PID.");
+            WatchdogLogger.warning(LOG, "CORE dump skipped: cannot determine self PID.");
             return null;
         }
 
-        // Canonicalize the output path to prevent path-traversal attacks in the
-        // dump directory when it is derived from user-supplied configuration.
+        // Verify gcore is available before attempting — gives a clear actionable message
+        // rather than an opaque IOException when it's simply not installed.
+        String gcorePath = findOnPath("gcore");
+        if (gcorePath == null) {
+            WatchdogLogger.warning(LOG,
+                    "CORE dump skipped: gcore not found on PATH. "
+                    + "Install via: yum install gdb  or  apt-get install gdb");
+            return null;
+        }
+
         String safePath;
         try {
             safePath = new File(outputPath).getCanonicalPath();
@@ -102,10 +111,7 @@ public final class CoreDumpStrategy implements DumpStrategy {
         }
 
         try {
-            // Pass arguments as separate list elements — never interpolated into a shell string —
-            // so there is no shell-injection risk regardless of path or PID content.
-            ProcessBuilder pb = new ProcessBuilder(
-                    "gcore", "-o", safePath, String.valueOf(pid));
+            ProcessBuilder pb = new ProcessBuilder(gcorePath, "-o", safePath, String.valueOf(pid));
             pb.redirectErrorStream(true);
             Process proc = pb.start();
             StringBuilder out = new StringBuilder();
@@ -114,11 +120,10 @@ public final class CoreDumpStrategy implements DumpStrategy {
                 String line;
                 while ((line = br.readLine()) != null) {
                     out.append(line).append('\n');
-                    if (out.length() > 4096) break; // cap output to prevent unbounded accumulation
+                    if (out.length() > 4096) break;
                 }
             }
-            // Apply a 60-second timeout; gcore on a large heap can be slow but should not hang forever.
-            boolean finished = proc.waitFor(60, java.util.concurrent.TimeUnit.SECONDS);
+            boolean finished = proc.waitFor(60, TimeUnit.SECONDS);
             if (!finished) {
                 proc.destroyForcibly();
                 WatchdogLogger.warning(LOG, "gcore timed out after 60 s for path: {0}", safePath);
@@ -126,25 +131,34 @@ public final class CoreDumpStrategy implements DumpStrategy {
             }
             int exit = proc.exitValue();
             if (exit == 0) {
-                // gcore appends the PID to the output file name: e.g. if -o is /var/dumps/oom_core_...core
-                // the actual file written is /var/dumps/oom_core_...core.<pid>
-                // Check for the PID-suffixed file first; fall back to the bare path.
-                File withPid  = new File(safePath + "." + pid);
+                File withPid    = new File(safePath + "." + pid);
                 File withoutPid = new File(safePath);
                 File actual = withPid.exists() ? withPid : withoutPid;
                 WatchdogLogger.info(LOG, "CORE dump written via gcore: {0}", actual.getAbsolutePath());
                 return actual.getAbsolutePath();
             }
-            WatchdogLogger.warning(LOG, "gcore exited {0} for path [{1}]: {2}", exit, safePath, out);
+            WatchdogLogger.warning(LOG,
+                    "gcore exited {0} for path [{1}] (may require root or CAP_SYS_PTRACE): {2}",
+                    exit, safePath, out);
             return null;
         } catch (java.io.IOException e) {
-            // gcore not on PATH — expected on many systems; not an error
-            WatchdogLogger.warning(LOG, "CORE dump skipped: gcore not found on PATH ({0})", e.getMessage());
+            WatchdogLogger.warning(LOG, "CORE dump failed (gcore): {0}", e.getMessage());
             return null;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return null;
         }
+    }
+
+    /** Searches {@code PATH} for an executable; returns absolute path or {@code null}. */
+    private static String findOnPath(String command) {
+        String pathEnv = System.getenv("PATH");
+        if (pathEnv == null || pathEnv.isEmpty()) return null;
+        for (String dir : pathEnv.split(File.pathSeparator)) {
+            File f = new File(dir, command);
+            if (f.canExecute()) return f.getAbsolutePath();
+        }
+        return null;
     }
 
     private static boolean isWindows() {

@@ -9,6 +9,7 @@ import com.trongus.oom.config.WatchdogConfig;
 import com.trongus.oom.dump.CompositeDumpService;
 import com.trongus.oom.dump.HeapDumpService;
 import com.trongus.oom.logging.WatchdogLogger;
+import com.trongus.oom.monitor.GcHistoryStore;
 import com.trongus.oom.monitor.OomWatchdog;
 import com.trongus.oom.monitor.RiskAssessor;
 import com.trongus.oom.monitor.ThresholdRiskAssessor;
@@ -48,7 +49,7 @@ import java.util.logging.Logger;
  * <p>All lifecycle operations ({@link #start()} and {@link #stop()}) are thread-safe and guarded.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.13.1
+ * @version 1.7.13.2
  * @since 1.7.0
  * @see TargetDescriptor
  * @see TargetRegistry
@@ -75,6 +76,13 @@ public final class WatchdogDaemon implements Closeable {
     private final Map<String, JmxDiagnosticsCollector> collectors       = new LinkedHashMap<>();
     private final Map<String, String>                  dumpApiUrls      = new LinkedHashMap<>();
     private final Map<String, DumpApiServer>           autoDumpServers  = new LinkedHashMap<>();
+
+    /**
+     * Shared GC history store written to by every watchdog on each poll cycle.
+     * All targets share one {@link GcHistoryStore} instance because it is
+     * internally per-target keyed via file names.
+     */
+    private final GcHistoryStore gcHistoryStore = new GcHistoryStore();
 
     /**
      * Shared thread pool for all watchdog poll tasks.
@@ -238,6 +246,9 @@ public final class WatchdogDaemon implements Closeable {
                             "Auto-started DumpApiServer for target [{0}] on port {1}",
                             logSafeName, target.getDumpApiPort());
                 }
+
+                // Attach the shared GC history store before starting so the first poll is recorded.
+                watchdog.setGcHistoryStore(gcHistoryStore, target.getName());
 
                 watchdog.start();
                 WatchdogLogger.info(LOG, "Started watchdog for target [{0}] (JMX: {1})",

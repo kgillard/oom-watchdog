@@ -55,7 +55,7 @@ import java.util.logging.Logger;
  * {@link #lastLevel} is an {@link AtomicReference} for consistent memory visibility.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.13.1
+ * @version 1.7.13.3
  * @since 1.0.0
  * @see JvmDiagnosticsCollector
  * @see RiskAssessor
@@ -99,6 +99,18 @@ public final class OomWatchdog {
      */
     private final AtomicReference<JvmSnapshot> lastSnapshot =
             new AtomicReference<>(null);
+
+    /**
+     * Optional disk-backed GC history store.  When set via
+     * {@link #setGcHistoryStore(GcHistoryStore, String)}, each assessed snapshot
+     * is appended to the store at the end of every poll cycle so the dashboard GC
+     * Analysis panel can replay full history.  {@code null} when GC history is not
+     * required (e.g. pure self-monitoring mode without a metrics server).
+     */
+    private volatile GcHistoryStore gcHistoryStore;
+
+    /** The target name to use when recording to {@link #gcHistoryStore}. */
+    private volatile String gcHistoryTarget;
 
     /**
      * Constructs a fully wired {@code OomWatchdog} instance.
@@ -269,6 +281,13 @@ public final class OomWatchdog {
             lastLevel.set(level);
             lastSnapshot.set(assessed);
 
+            // 6. Append to GC history ring-buffer if a store has been configured.
+            //    Errors are swallowed inside GcHistoryStore.record(); no risk here.
+            GcHistoryStore store = gcHistoryStore;
+            if (store != null && gcHistoryTarget != null) {
+                store.record(gcHistoryTarget, assessed);
+            }
+
         } catch (Exception e) {
             // The watchdog must not crash the host process.
             WatchdogLogger.warning(LOG, e, "Poll cycle error: {0}", e.getMessage());
@@ -321,6 +340,22 @@ public final class OomWatchdog {
             t.setPriority(Thread.MIN_PRIORITY + 1);
             return t;
         };
+    }
+
+    /**
+     * Attaches a {@link GcHistoryStore} so that this watchdog records one history entry
+     * per poll cycle to disk.  Must be called before {@link #start()} to ensure no
+     * records are missed; calling after start is safe (volatile write) but may miss
+     * the first few polls.
+     *
+     * <p>Set {@code store} to {@code null} to detach the store and stop recording.
+     *
+     * @param store      the history store to write to; {@code null} to disable recording
+     * @param targetName the logical name used as the key in the store (e.g. {@code "tomcat"})
+     */
+    public void setGcHistoryStore(GcHistoryStore store, String targetName) {
+        this.gcHistoryStore  = store;
+        this.gcHistoryTarget = targetName;
     }
 
     /**
@@ -393,5 +428,19 @@ public final class OomWatchdog {
             snap = new JvmSnapshot.Builder().targetName("self").build();
         }
         return ((com.trongus.oom.dump.CompositeDumpService) dumpService).buildOutputPath(snap, type);
+    }
+
+    /**
+     * Returns the configured dump output directory for this watchdog instance.
+     *
+     * <p>Used by {@link MetricsHttpServer} to pass the correct {@code ?dir=} parameter
+     * when forwarding on-demand dump requests to the target's embedded
+     * {@link com.trongus.oom.remote.DumpApiServer}, so dumps land in the directory
+     * configured via {@code target.<name>.dump-dir} in {@code targets.properties}.
+     *
+     * @return configured dump directory path; never {@code null}
+     */
+    public String getDumpDirectory() {
+        return config.getHeapDumpDirectory();
     }
 }

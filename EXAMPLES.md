@@ -96,7 +96,7 @@ java -cp oom-watchdog.jar com.trongus.oom.examples.Example11CauseAnalysisAndI18n
 
 ```bash
 curl -L -o oom-watchdog.jar \
-  https://github.com/kgillard/oom-watchdog/releases/download/v1.7.13.1/oom-watchdog.jar
+  https://github.com/kgillard/oom-watchdog/releases/download/v1.7.13.3/oom-watchdog.jar
 ```
 
 No installation, no classpath setup — the JAR is a self-contained fat JAR with no
@@ -1439,7 +1439,7 @@ For Liberty 8.5.5.x (older feature names):
 
 ## 16. Multi-Target Daemon Mode and Remote JMX Monitoring
 
-### 15.1 Overview (v1.7.13.1)
+### 15.1 Overview (v1.7.13.3)
 
 In enterprise deployments such as IBM QRadar or multi-tier WebSphere clusters, multiple JVMs run concurrently on a single appliance or host. `WatchdogDaemon` allows a single lightweight watchdog process to monitor all target JVMs simultaneously over standard JMX (JSR-160 RMI).
 

@@ -57,14 +57,25 @@ import java.util.logging.Logger;
 /**
  * Lightweight HTTP/HTTPS server that serves live JVM health metrics on
  * {@code GET /metrics} (single self-monitoring target),
- * {@code GET /metrics/all} (all monitored targets as a JSON array), and
- * on-demand diagnostic dump endpoints triggered from the dashboard.
+ * {@code GET /metrics/all} (all monitored targets as a JSON array),
+ * {@code GET /gc/history} (per-target disk-backed GC history for the dashboard
+ * GC Analysis panel), and on-demand diagnostic dump endpoints triggered from
+ * the dashboard.
  *
- * <p>Every metrics response reads directly from the same
+ * <p>Every live metrics response reads directly from the same
  * {@link java.lang.management} MXBeans that
  * {@link com.trongus.oom.collector.MxBeanDiagnosticsCollector} uses — so
  * each dashboard request gets current data straight from the JVM, not a
  * cached snapshot from the last watchdog poll cycle.
+ *
+ * <h2>GC History</h2>
+ * <p>Each assessed snapshot produced by the watchdog poll cycle is automatically
+ * appended to a per-target {@code .jsonl} file managed by {@link GcHistoryStore}.
+ * The file is a newline-delimited JSON ring-buffer capped at
+ * {@value GcHistoryStore#DEFAULT_MAX_LINES} entries (≈ 24 h at 10-second polls).
+ * The dashboard GC Analysis panel fetches this history via
+ * {@code GET /gc/history?target=&lt;name&gt;&amp;limit=&lt;n&gt;} and uses it to
+ * render full-history time-series charts with a time-scrubber slider.
  *
  * <h2>TLS / Security</h2>
  * <p>By default the server starts in <em>HTTPS</em> mode using an automatically
@@ -119,16 +130,21 @@ import java.util.logging.Logger;
  *   <li><strong>Risk level, critical threshold, diagnosis notes, heap dump path</strong> —
  *       taken from the watchdog's most recently assessed snapshot (set by
  *       {@link OomWatchdog#getLastSnapshot()}), since those require the assessor's analysis.</li>
+ *   <li><strong>GC history</strong> — read from disk by {@link GcHistoryStore}; one
+ *       record appended per watchdog poll cycle per target.</li>
  * </ul>
  *
  * <h2>Endpoints</h2>
  * <table border="1">
  *   <caption>Exposed HTTP endpoints</caption>
- *   <tr><th>Path</th><th>Method</th><th>Response</th></tr>
+ *   <tr><th>Path</th><th>Method</th><th>Description</th></tr>
  *   <tr><td>{@code /metrics}</td><td>GET</td>
- *       <td>JSON object — self-monitoring JVM metrics</td></tr>
+ *       <td>JSON object — self-monitoring JVM live metrics</td></tr>
  *   <tr><td>{@code /metrics/all}</td><td>GET</td>
- *       <td>JSON array — one entry per monitored target</td></tr>
+ *       <td>JSON array — one live-metrics entry per monitored target</td></tr>
+ *   <tr><td>{@code /gc/history}</td><td>GET</td>
+ *       <td>JSON array — historical GC records from disk.
+ *           Query params: {@code target} (name), {@code limit} (max records, default 8640)</td></tr>
  *   <tr><td>{@code /dump/thread}</td><td>POST</td>
  *       <td>JSON — triggers a thread dump; returns {@code {"ok":true,"path":"…"}} or
  *           {@code {"ok":false,"error":"…"}}</td></tr>
@@ -149,9 +165,10 @@ import java.util.logging.Logger;
  * they respond with {@code 503 Service Unavailable}.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.13.0
+ * @version 1.7.13.3
  * @since 1.7.3
  * @see TlsConfig
+ * @see GcHistoryStore
  * @see OomWatchdog#getLastSnapshot()
  * @see OomWatchdog#triggerDump(DumpType)
  * @see com.trongus.oom.collector.MxBeanDiagnosticsCollector
@@ -191,12 +208,17 @@ public final class MetricsHttpServer {
 
     private volatile HttpServer server;
 
+    /**
+     * Disk-backed per-target GC history store.  A record is appended on every
+     * {@link #recordSnapshot(String, JvmSnapshot)} call so the dashboard GC
+     * Analysis panel can replay full history.
+     */
+    private final GcHistoryStore gcHistory = new GcHistoryStore();
+
     // ── constructors ──────────────────────────────────────────────────────────
 
     /**
      * Creates a single-target (self-monitoring) metrics server with TLS.
-     *
-     * <p>TLS defaults to {@link TlsConfig#selfSigned()} (auto-generated cert).
      *
      * @param watchdog  the running watchdog; must not be {@code null}
      * @param port      TCP port to listen on (1–65535)
@@ -214,53 +236,6 @@ public final class MetricsHttpServer {
         this.port              = port;
         this.bindAll           = bindAll;
         this.tlsConfig         = tlsConfig;
-    }
-
-    /**
-     * Creates a single-target (self-monitoring) metrics server using the default
-     * self-signed TLS configuration.
-     *
-     * @param watchdog the running watchdog; must not be {@code null}
-     * @param port     TCP port to listen on (1–65535)
-     * @param bindAll  {@code true} to bind all interfaces; {@code false} for loopback only
-     * @deprecated Prefer {@link #MetricsHttpServer(OomWatchdog, int, boolean, TlsConfig)}
-     *             and supply an explicit {@link TlsConfig} for clarity.
-     */
-    public MetricsHttpServer(OomWatchdog watchdog, int port, boolean bindAll) {
-        this(watchdog, port, bindAll, TlsConfig.selfSigned());
-    }
-
-    /**
-     * Creates a multi-target metrics server (daemon mode) with TLS.
-     *
-     * @param selfWatchdog    the self-monitoring watchdog (may be {@code null} in pure-daemon mode)
-     * @param remoteWatchdogs named watchdogs for each remote target; must not be {@code null}
-     * @param port            TCP port to listen on (1–65535)
-     * @param bindAll         {@code true} to bind all interfaces; {@code false} for loopback only
-     * @param tlsConfig       TLS configuration; must not be {@code null}
-     */
-    public MetricsHttpServer(OomWatchdog selfWatchdog,
-                             Map<String, OomWatchdog> remoteWatchdogs,
-                             int port, boolean bindAll, TlsConfig tlsConfig) {
-        this(selfWatchdog, remoteWatchdogs, Collections.emptyMap(), port, bindAll, tlsConfig);
-    }
-
-    /**
-     * Creates a multi-target metrics server (daemon mode) with TLS and per-target JMX collectors
-     * for remote dump support.
-     *
-     * @param selfWatchdog     the self-monitoring watchdog (may be {@code null} in pure-daemon mode)
-     * @param remoteWatchdogs  named watchdogs for each remote target; must not be {@code null}
-     * @param remoteCollectors JMX collectors keyed by target name, used to trigger remote dumps
-     * @param port             TCP port to listen on (1–65535)
-     * @param bindAll          {@code true} to bind all interfaces; {@code false} for loopback only
-     * @param tlsConfig        TLS configuration; must not be {@code null}
-     */
-    public MetricsHttpServer(OomWatchdog selfWatchdog,
-                             Map<String, OomWatchdog> remoteWatchdogs,
-                             Map<String, JmxDiagnosticsCollector> remoteCollectors,
-                             int port, boolean bindAll, TlsConfig tlsConfig) {
-        this(selfWatchdog, remoteWatchdogs, remoteCollectors, Collections.emptyMap(), port, bindAll, tlsConfig);
     }
 
     /**
@@ -294,21 +269,6 @@ public final class MetricsHttpServer {
         this.port              = port;
         this.bindAll           = bindAll;
         this.tlsConfig         = tlsConfig;
-    }
-
-    /**
-     * Creates a multi-target metrics server (daemon mode) using the default
-     * self-signed TLS configuration.
-     *
-     * @param selfWatchdog    the self-monitoring watchdog (may be {@code null} in pure-daemon mode)
-     * @param remoteWatchdogs named watchdogs for each remote target; must not be {@code null}
-     * @param port            TCP port to listen on (1–65535)
-     * @param bindAll         {@code true} to bind all interfaces; {@code false} for loopback only
-     */
-    public MetricsHttpServer(OomWatchdog selfWatchdog,
-                             Map<String, OomWatchdog> remoteWatchdogs,
-                             int port, boolean bindAll) {
-        this(selfWatchdog, remoteWatchdogs, port, bindAll, TlsConfig.selfSigned());
     }
 
     // ── lifecycle ─────────────────────────────────────────────────────────────
@@ -412,6 +372,25 @@ public final class MetricsHttpServer {
         }
     }
 
+    // ── public API ────────────────────────────────────────────────────────────
+
+    /**
+     * Records one GC/memory snapshot to the disk-backed history ring-buffer for
+     * {@code targetName}.  This method should be called by the watchdog daemon on
+     * every assessed poll cycle — the history accumulates in
+     * {@code ./oom-gc-history/&lt;target&gt;.jsonl} and is served back to the
+     * dashboard via {@code GET /gc/history}.
+     *
+     * <p>Errors are logged and swallowed so a storage problem never disrupts
+     * normal monitoring.
+     *
+     * @param targetName logical name of the monitored target; must not be {@code null}
+     * @param snap       the fully assessed snapshot to record; must not be {@code null}
+     */
+    public void recordSnapshot(String targetName, JvmSnapshot snap) {
+        gcHistory.record(targetName, snap);
+    }
+
     // ── request handlers ──────────────────────────────────────────────────────
 
     private void handleMetrics(HttpExchange ex) throws IOException {
@@ -449,6 +428,60 @@ public final class MetricsHttpServer {
     private void handleRoot(HttpExchange ex) throws IOException {
         ex.getResponseHeaders().add("Location", "/metrics");
         send(ex, 302, "text/plain", "Redirecting to /metrics");
+    }
+
+    /**
+     * Handles {@code GET /gc/history?target=&lt;name&gt;&amp;limit=&lt;n&gt;}.
+     *
+     * <p>Returns a JSON array of historical GC/memory records read from
+     * the {@link GcHistoryStore} disk files.  Records are in chronological order
+     * (oldest first); newest entry is last.
+     *
+     * <p>Query parameters:
+     * <ul>
+     *   <li>{@code target} — target name as configured in {@code targets.properties}.
+     *       Required.</li>
+     *   <li>{@code limit} — maximum number of records to return.  Defaults to
+     *       {@value GcHistoryStore#DEFAULT_MAX_LINES}.  Capped at
+     *       {@value GcHistoryStore#DEFAULT_MAX_LINES}.</li>
+     * </ul>
+     *
+     * <p>Responds with {@code 400 Bad Request} when the {@code target} parameter
+     * is missing or blank.  Returns {@code "[]"} (empty array) when no history
+     * exists yet for the requested target.
+     *
+     * @param ex the HTTP exchange
+     * @throws IOException if the response cannot be written
+     */
+    private void handleGcHistory(HttpExchange ex) throws IOException {
+        if (isOptions(ex)) { sendPreflight(ex); return; }
+        if (!isGet(ex))    { send(ex, 405, "text/plain", "Method Not Allowed"); return; }
+
+        String targetParam = queryParam(ex, "target");
+        WatchdogLogger.fine(LOG, "GC history request: target=[{0}] uri=[{1}]",
+                targetParam, ex.getRequestURI());
+        if (targetParam == null || targetParam.isEmpty()) {
+            WatchdogLogger.warning(LOG,
+                    "GC history request missing 'target' parameter; raw query: [{0}]",
+                    ex.getRequestURI().getRawQuery());
+            send(ex, 400, "application/json; charset=UTF-8",
+                    "{\"error\":\"target parameter is required\"}");
+            return;
+        }
+
+        int limit = GcHistoryStore.DEFAULT_MAX_LINES;
+        String limitParam = queryParam(ex, "limit");
+        if (limitParam != null && !limitParam.isEmpty()) {
+            try {
+                int parsed = Integer.parseInt(limitParam);
+                if (parsed > 0 && parsed <= GcHistoryStore.DEFAULT_MAX_LINES) {
+                    limit = parsed;
+                }
+            } catch (NumberFormatException ignored) { /* keep default */ }
+        }
+
+        String json = gcHistory.readHistory(targetParam, limit);
+        send(ex, 200, "application/json; charset=UTF-8", json);
     }
 
     /**
@@ -603,8 +636,15 @@ public final class MetricsHttpServer {
             default:
                 return "ERROR: Dump type " + dumpType + " not supported via Dump API";
         }
-        // Optionally pass the configured dump directory as a hint
-        String urlStr = baseUrl.replaceAll("/+$", "") + "/dump/" + typePath;
+        // Pass the target's configured dump directory so the DumpApiServer writes
+        // dumps to the correct location rather than its own default directory.
+        String dumpDir = watchdog != null ? watchdog.getDumpDirectory() : null;
+        String urlStr  = baseUrl.replaceAll("/+$", "") + "/dump/" + typePath;
+        if (dumpDir != null && !dumpDir.isEmpty()) {
+            try {
+                urlStr += "?dir=" + java.net.URLEncoder.encode(dumpDir, "UTF-8");
+            } catch (java.io.UnsupportedEncodingException ignored) { /* UTF-8 always supported */ }
+        }
         WatchdogLogger.info(LOG, "Forwarding {0} dump for [{1}] to DumpApiServer: {2}",
                 dumpType, targetLabel, urlStr);
         try {
@@ -944,6 +984,7 @@ public final class MetricsHttpServer {
     private void registerContexts(HttpServer s) {
         s.createContext("/metrics/all", this::handleMetricsAll);
         s.createContext("/metrics",     this::handleMetrics);
+        s.createContext("/gc/history",  this::handleGcHistory);
         s.createContext("/dump/thread", ex -> handleDump(ex, DumpType.THREAD));
         s.createContext("/dump/heap",   ex -> handleDump(ex, DumpType.HEAP));
         s.createContext("/dump/core",   ex -> handleDump(ex, DumpType.CORE));
@@ -999,11 +1040,13 @@ public final class MetricsHttpServer {
                 ? (double) nurseryUsed / heapMax * 100.0 : 0.0;
 
         Map<String, Long> gcCounts = new LinkedHashMap<>();
+        Map<String, Long> gcTimes  = new LinkedHashMap<>();
         long totalGcMs = 0L;
         for (GarbageCollectorMXBean gc : ManagementFactory.getGarbageCollectorMXBeans()) {
             long cnt  = gc.getCollectionCount();
             long time = gc.getCollectionTime();
             gcCounts.put(gc.getName(), cnt < 0 ? 0L : cnt);
+            gcTimes .put(gc.getName(), time < 0 ? 0L : time);
             if (time > 0) totalGcMs += time;
         }
         long   uptimeMs   = RUNTIME_MX.getUptime();
@@ -1077,6 +1120,7 @@ public final class MetricsHttpServer {
         appendLong  (sb, "threadCount",      threadCount);
         appendLong  (sb, "peakThreadCount",  peakThreadCount);
         appendGcCounts (sb, gcCounts);
+        appendGcTimes  (sb, gcTimes);
         appendPoolsLast(sb, poolUsed, MB);
         sb.append("}");
         return sb.toString();
@@ -1113,6 +1157,9 @@ public final class MetricsHttpServer {
             appendString(sb, "diagnosisNotes",   null);
             appendString(sb, "heapDumpPath",     null);
             appendGcCounts (sb, Collections.<String, Long>emptyMap());
+            appendGcTimes  (sb, Collections.<String, Long>emptyMap());
+            appendDouble(sb, "postGcHeapMB",  -1.0);
+            appendDouble(sb, "growthMbHr",     0.0);
             appendPoolsLast(sb, Collections.<String, Long>emptyMap(), MB);
             sb.append("}");
             return sb.toString();
@@ -1155,6 +1202,15 @@ public final class MetricsHttpServer {
         appendLong  (sb, "threadCount",      snap.getThreadCount());
         appendLong  (sb, "peakThreadCount",  snap.getPeakThreadCount());
         appendGcCounts (sb, snap.getGcCollectionCounts());
+        appendGcTimes  (sb, snap.getGcCollectionTimesMs());
+        // Post-GC trend fields consumed by GC Analysis panel
+        double postGcMb   = snap.getPostGcHeapUsedBytes() > 0
+                            ? snap.getPostGcHeapUsedBytes() / MB : -1.0;
+        double growthMbHr = Double.isNaN(snap.getPostGcHeapGrowthRatePerMs())
+                            ? 0.0
+                            : snap.getPostGcHeapGrowthRatePerMs() * 3_600_000.0 / MB;
+        appendDouble(sb, "postGcHeapMB",  postGcMb);
+        appendDouble(sb, "growthMbHr",    growthMbHr);
         appendPoolsLast(sb, snap.getPoolUsedBytes(), MB);
         sb.append("}");
         return sb.toString();
@@ -1198,6 +1254,17 @@ public final class MetricsHttpServer {
         sb.append("  \"gcCounts\": {");
         boolean first = true;
         for (Map.Entry<String, Long> e : gcCounts.entrySet()) {
+            if (!first) sb.append(", ");
+            sb.append('"').append(escapeJson(e.getKey())).append("\": ").append(e.getValue());
+            first = false;
+        }
+        sb.append("},\n");
+    }
+
+    private static void appendGcTimes(StringBuilder sb, Map<String, Long> gcTimes) {
+        sb.append("  \"gcTimes\": {");
+        boolean first = true;
+        for (Map.Entry<String, Long> e : gcTimes.entrySet()) {
             if (!first) sb.append(", ");
             sb.append('"').append(escapeJson(e.getKey())).append("\": ").append(e.getValue());
             first = false;

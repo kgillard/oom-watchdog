@@ -438,6 +438,102 @@
     .jvm-cmd-val { font-family: monospace; font-size: 10px; overflow-x: auto;
                    white-space: nowrap; color: var(--text); font-weight: 600; }
 
+    /* ── GC Analysis panel ───────────────────────────────────────────────────── */
+    .gc-analysis-hdr {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 14px; flex-wrap: wrap; gap: 8px;
+    }
+    .gc-tabs { display: flex; gap: 0; }
+    .gc-tab-btn {
+      background: var(--surface); border: 1px solid var(--border);
+      color: var(--muted); padding: 5px 14px; font-size: 12px; cursor: pointer;
+      font-family: inherit;
+    }
+    .gc-tab-btn:first-child { border-radius: 6px 0 0 6px; }
+    .gc-tab-btn:last-child  { border-radius: 0 6px 6px 0; }
+    .gc-tab-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .gc-panel { display: none; }
+    .gc-panel.active { display: block; }
+    /* History chart grid: 3 charts across */
+    .gc-chart-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+    .gc-chart-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 12px 14px;
+    }
+    .gc-chart-title {
+      font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px;
+      color: var(--muted); margin-bottom: 8px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .gc-chart-cur {
+      font-size: 13px; font-weight: 700; text-transform: none; letter-spacing: 0;
+    }
+    .gc-canvas-wrap { position: relative; width: 100%; }
+    .gc-canvas-wrap canvas { width: 100% !important; display: block; }
+    /* Collector breakdown table */
+    .gc-collector-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+    .gc-collector-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 12px 14px;
+    }
+    .gc-collector-name {
+      font-size: 11px; color: var(--muted); text-transform: uppercase;
+      letter-spacing: 0.5px; margin-bottom: 6px;
+    }
+    .gc-collector-count {
+      font-size: 20px; font-weight: 700; color: var(--text);
+    }
+    .gc-collector-time {
+      font-size: 11px; color: var(--muted); margin-top: 2px;
+    }
+    .gc-collector-bar-wrap { margin-top: 6px; }
+    /* Time scrubber */
+    .gc-scrubber-wrap {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 12px 14px; margin-bottom: 14px;
+    }
+    .gc-scrubber-label {
+      font-size: 11px; color: var(--muted); margin-bottom: 6px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .gc-scrubber-label span { font-size: 12px; color: var(--text); font-weight: 600; }
+    .gc-scrubber {
+      width: 100%; accent-color: var(--accent); cursor: pointer;
+    }
+    .gc-fetch-bar {
+      display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 14px;
+    }
+    .gc-fetch-btn {
+      background: var(--accent); color: #fff; border: none; border-radius: 6px;
+      padding: 5px 14px; font-size: 12px; cursor: pointer; font-family: inherit;
+    }
+    .gc-fetch-btn:hover { opacity: 0.85; }
+    .gc-fetch-status { font-size: 11px; color: var(--muted); }
+    .gc-no-data {
+      padding: 24px; text-align: center; color: var(--muted); font-size: 13px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    }
+    /* GC event overlay markers on history charts */
+    .gc-event-badge {
+      display: inline-block; background: var(--surface2);
+      border: 1px solid var(--border); border-radius: 4px;
+      padding: 1px 6px; font-size: 10px; color: var(--muted); margin: 0 2px;
+    }
+    /* Leak trend sparkline */
+    .gc-leak-positive { color: var(--crit); }
+    .gc-leak-negative { color: var(--ok);   }
+    .gc-leak-neutral  { color: var(--muted);}
+
     /* ── Footer ──────────────────────────────────────────────────────────────── */
     footer { text-align: left; padding: 7px 20px; color: var(--muted); font-size: 11px;
              border-top: 1px solid var(--border); background: var(--surface); }
@@ -663,7 +759,17 @@ function setStatus(cls, msg) {
 }
 
 // ── data model ────────────────────────────────────────────────────────────────
+var _connectingMsgRemoved = false;
 function ingress(d) {
+  // Remove the "Connecting…" placeholder paragraph the first time real data arrives.
+  if (!_connectingMsgRemoved) {
+    _connectingMsgRemoved = true;
+    var mc = document.getElementById('main-content');
+    if (mc) {
+      var p = mc.querySelector('p');
+      if (p) mc.removeChild(p);
+    }
+  }
   var name = d.targetName || d.processName || 'self';
   if (!targets[name]) {
     targets[name] = { name: name, history: { heap: [], gc: [], nursery: [], ts: [] },
@@ -695,8 +801,11 @@ function renderAll() {
   var names = Object.keys(targets);
   if (!activeTab || !targets[activeTab]) {
     activeTab = names[0];
-    switchTab(activeTab);   // auto-select first tab on first successful data
   }
+  // Always sync active classes — ensures the pane created by ensureTabs gets
+  // the correct active state even when activeTab was restored from localStorage
+  // before the DOM was ready.
+  switchTab(activeTab);
   names.forEach(function(name) { renderPane(name); });
 
   var activeRisk = ((targets[activeTab] && targets[activeTab].latest) || {}).riskLevel || 'OK';
@@ -827,6 +936,11 @@ function buildPaneHtml(name) {
       '</div>',
     '</div>',
 
+    // ── Section: GC Analysis (history + scrubber) ────────────────────────────
+    '<div class="dcard" draggable="true" data-card-id="' + s + '-sec-gcanalysis" style="margin-bottom:14px">',
+      gcAnalysisSectionHtml(s, name),
+    '</div>',
+
     // ── Section: On-Demand Diagnostics ───────────────────────────────────────
     '<div class="dcard" draggable="true" data-card-id="' + s + '-sec-dump" style="margin-bottom:14px">',
       '<div class="sec-title">On-Demand Diagnostics</div>',
@@ -943,6 +1057,130 @@ function dumpActionsHtml(s, name) {
   ].join('');
 }
 
+// ── GC Analysis section HTML builder ─────────────────────────────────────────
+// Builds the static skeleton for the GC Analysis section.
+// The actual chart rendering happens in gcRenderHistory() once history is loaded.
+function gcAnalysisSectionHtml(s, name) {
+  var enc = encodeURIComponent(name);
+  return [
+    '<div class="sec-title" style="margin-bottom:12px">GC Analysis',
+      '<span style="font-size:10px;color:var(--muted);font-weight:400;margin-left:8px">',
+        'Historical data from disk · scrub back in time',
+      '</span>',
+    '</div>',
+
+    // ── Fetch bar ───────────────────────────────────────────────────────────
+    '<div class="gc-fetch-bar">',
+      '<button class="gc-fetch-btn" onclick="gcFetchHistory(\'' + s + '\',\'' + enc + '\')">',
+        'Load Full History',
+      '</button>',
+      '<label style="font-size:11px;color:var(--muted)">Points:</label>',
+      '<select id="' + s + '-gc-limit" style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:3px 6px;font-size:11px;font-family:inherit">',
+        '<option value="120">2 h (120)</option>',
+        '<option value="360">6 h (360)</option>',
+        '<option value="720" selected>12 h (720)</option>',
+        '<option value="1440">24 h (1440)</option>',
+        '<option value="8640">All (max 8640)</option>',
+      '</select>',
+      '<span class="gc-fetch-status" id="' + s + '-gc-status">Not loaded</span>',
+    '</div>',
+
+    // ── Sub-panel tabs (Live / History) ─────────────────────────────────────
+    '<div class="gc-analysis-hdr">',
+      '<div class="gc-tabs">',
+        '<button class="gc-tab-btn active" id="' + s + '-gc-tab-live"',
+          ' onclick="gcSwitchTab(\'' + s + '\',\'live\')">Live</button>',
+        '<button class="gc-tab-btn" id="' + s + '-gc-tab-hist"',
+          ' onclick="gcSwitchTab(\'' + s + '\',\'hist\')">History</button>',
+      '</div>',
+    '</div>',
+
+    // ── Live sub-panel: per-collector cards ─────────────────────────────────
+    '<div class="gc-panel active" id="' + s + '-gc-panel-live">',
+      '<div class="gc-collector-grid" id="' + s + '-gc-collectors">',
+        '<div class="gc-no-data">Waiting for first poll…</div>',
+      '</div>',
+      // Leak trend summary
+      '<div class="gc-chart-card" style="margin-bottom:0">',
+        '<div class="gc-chart-title">',
+          'Post-GC Heap Leak Trend',
+          '<span class="gc-chart-cur" id="' + s + '-gc-leak-cur">—</span>',
+        '</div>',
+        '<div class="gc-canvas-wrap">',
+          '<canvas id="' + s + '-gc-leak-canvas" height="80"></canvas>',
+        '</div>',
+        '<div style="font-size:10px;color:var(--muted);margin-top:6px" id="' + s + '-gc-leak-detail">',
+          'Records post-GC heap size after each GC cycle to detect memory leaks.',
+        '</div>',
+      '</div>',
+    '</div>',
+
+    // ── History sub-panel: full time-series + scrubber ──────────────────────
+    '<div class="gc-panel" id="' + s + '-gc-panel-hist">',
+      '<div id="' + s + '-gc-hist-nodata" class="gc-no-data">',
+        'Click <strong>Load Full History</strong> to fetch server-side GC history.',
+      '</div>',
+
+      // Scrubber (hidden until data loaded)
+      '<div class="gc-scrubber-wrap" id="' + s + '-gc-scrubber-wrap" style="display:none">',
+        '<div class="gc-scrubber-label">',
+          '<span>Time cursor</span>',
+          '<span id="' + s + '-gc-cursor-ts">—</span>',
+        '</div>',
+        '<input type="range" class="gc-scrubber" id="' + s + '-gc-scrubber" min="0" max="100" value="100"',
+          ' oninput="gcScrub(\'' + s + '\',this.value)">',
+        '<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:2px">',
+          '<span id="' + s + '-gc-ts-start">—</span>',
+          '<span id="' + s + '-gc-ts-end">—</span>',
+        '</div>',
+      '</div>',
+
+      // Snapshot info bar (shown when scrubber is not at live position)
+      '<div id="' + s + '-gc-snapshot-bar" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 14px;margin-bottom:14px;font-size:12px">',
+        '<strong>Historical snapshot</strong> · ',
+        '<span id="' + s + '-gc-snap-ts"></span>',
+        ' · Heap: <strong id="' + s + '-gc-snap-heap"></strong>',
+        ' · GC: <strong id="' + s + '-gc-snap-gc"></strong>',
+        ' · Young: <strong id="' + s + '-gc-snap-nursery"></strong>',
+        ' · Non-Heap: <strong id="' + s + '-gc-snap-nonheap"></strong>',
+        '<button onclick="gcLiveJump(\'' + s + '\')" style="margin-left:10px;background:var(--accent);color:#fff;border:none;border-radius:4px;padding:2px 8px;font-size:10px;cursor:pointer">Jump to Live</button>',
+      '</div>',
+
+      // History charts grid (hidden until data loaded)
+      '<div id="' + s + '-gc-hist-charts" style="display:none">',
+        '<div class="gc-chart-grid">',
+          gcHistChartHtml(s + '-hchart-heap',    'Heap Usage %',    s + '-hchart-heap-cur'),
+          gcHistChartHtml(s + '-hchart-gc',      'GC Overhead %',   s + '-hchart-gc-cur'),
+          gcHistChartHtml(s + '-hchart-nursery', 'Young Gen %',     s + '-hchart-nursery-cur'),
+          gcHistChartHtml(s + '-hchart-nonheap', 'Non-Heap MB',     s + '-hchart-nonheap-cur'),
+          gcHistChartHtml(s + '-hchart-postGc',  'Post-GC Heap MB (Leak)', s + '-hchart-postGc-cur'),
+        '</div>',
+        // Per-collector history
+        '<div class="gc-chart-card" style="margin-bottom:14px">',
+          '<div class="gc-chart-title">GC Event Rate — counts per collector</div>',
+          '<div class="gc-canvas-wrap">',
+            '<canvas id="' + s + '-hchart-coll-canvas" height="120"></canvas>',
+          '</div>',
+        '</div>',
+      '</div>',
+    '</div>',  // /.gc-panel-hist
+  ].join('');
+}
+
+function gcHistChartHtml(id, title, curId) {
+  return [
+    '<div class="gc-chart-card">',
+      '<div class="gc-chart-title">',
+        '<span>' + title + '</span>',
+        '<span class="gc-chart-cur" id="' + curId + '">—</span>',
+      '</div>',
+      '<div class="gc-canvas-wrap">',
+        '<canvas id="' + id + '-canvas" height="80"></canvas>',
+      '</div>',
+    '</div>',
+  ].join('');
+}
+
 // ── per-pane render ───────────────────────────────────────────────────────────
 function renderPane(name) {
   var t = targets[name];
@@ -1047,6 +1285,9 @@ function renderPane(name) {
   drawSparkline(s + '-chart-heap',    h.heap,    100, critPct, s + '-chart-heap-cur',    heapPct.toFixed(1) + '%',    riskColor(risk));
   drawSparkline(s + '-chart-gc',      h.gc,      100, 50,      s + '-chart-gc-cur',      gcPct.toFixed(2)   + '%',    gaugeColor(gcPct, 25, 50));
   drawSparkline(s + '-chart-nursery', h.nursery, 100, 90,      s + '-chart-nursery-cur', nurseryPct.toFixed(1) + '%', gaugeColor(nurseryPct, 70, 90));
+
+  // Update GC Analysis live panel
+  gcUpdateLive(s, d, t);
 }
 
 // ── sparkline drawing ─────────────────────────────────────────────────────────
@@ -1239,6 +1480,497 @@ function requestDump(slug, type, encoded) {
       [btnThread, btnHeap, btnCore].forEach(function(b) { if (b) b.disabled = false; });
     });
 }
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GC ANALYSIS ENGINE
+// Manages the GC Analysis section per target:
+//  - Live panel: per-collector cards + leak-trend canvas updated each poll
+//  - History panel: disk-backed history fetched via GET /gc/history, rendered
+//    with SVG line charts, per-collector multi-line chart, and a time-scrubber
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Per-target GC history cache: slug → { records: [], cursor: int }
+var _gcHistory = {};
+// Per-canvas Chart2D render state (replace previous render)
+var _gcCanvases = {};
+
+// ── helpers ───────────────────────────────────────────────────────────────────
+
+function gcSwitchTab(s, which) {
+  var livePnl  = document.getElementById(s + '-gc-panel-live');
+  var histPnl  = document.getElementById(s + '-gc-panel-hist');
+  var liveBtn  = document.getElementById(s + '-gc-tab-live');
+  var histBtn  = document.getElementById(s + '-gc-tab-hist');
+  if (!livePnl || !histPnl) return;
+  if (which === 'live') {
+    livePnl.classList.add('active'); histPnl.classList.remove('active');
+    if (liveBtn) liveBtn.classList.add('active');
+    if (histBtn) histBtn.classList.remove('active');
+  } else {
+    histPnl.classList.add('active'); livePnl.classList.remove('active');
+    if (histBtn) histBtn.classList.add('active');
+    if (liveBtn) liveBtn.classList.remove('active');
+  }
+}
+
+// ── Live panel update ─────────────────────────────────────────────────────────
+
+function gcUpdateLive(s, d, t) {
+  // ── Per-collector cards ──────────────────────────────────────────────────
+  var collEl = document.getElementById(s + '-gc-collectors');
+  if (collEl && d.gcCounts && Object.keys(d.gcCounts).length > 0) {
+    var prev = (t.prevGcCounts || {});
+    var prevTimes = (t.prevGcTimes || {});
+    var html = Object.keys(d.gcCounts).map(function(name) {
+      var count     = d.gcCounts[name] || 0;
+      var timeMs    = (d.gcCounts[name] !== undefined && d.gcTimes) ? (d.gcTimes[name] || 0) : 0;
+      var prevCount = prev[name] || 0;
+      var delta     = count - prevCount;
+      var avgMs     = count > 0 ? Math.round(timeMs / count) : 0;
+      var barPct    = Math.min(count / Math.max.apply(null,
+                        Object.values(d.gcCounts).map(Number).filter(function(v){return v>0;})) * 100, 100);
+      var barColor  = name.toLowerCase().indexOf('old') >= 0 ? 'var(--warn)' : 'var(--accent)';
+      return '<div class="gc-collector-card">' +
+        '<div class="gc-collector-name">' + esc(name) + '</div>' +
+        '<div class="gc-collector-count">' + count.toLocaleString() + '</div>' +
+        '<div class="gc-collector-time">Total: ' + timeMs.toLocaleString() + ' ms · Avg: ' + avgMs + ' ms/cycle' +
+          (delta > 0 ? ' · <span style="color:var(--warn)">+' + delta + ' this poll</span>' : '') + '</div>' +
+        '<div class="gc-collector-bar-wrap">' +
+          '<div style="height:4px;border-radius:2px;background:var(--border)">' +
+            '<div style="height:4px;border-radius:2px;background:' + barColor + ';width:' + barPct.toFixed(1) + '%"></div>' +
+          '</div>' +
+        '</div></div>';
+    }).join('');
+    collEl.innerHTML = html;
+    t.prevGcCounts = Object.assign({}, d.gcCounts);
+    t.prevGcTimes  = Object.assign({}, d.gcTimes || {});
+  }
+
+  // ── Leak trend canvas ────────────────────────────────────────────────────
+  var leakCanvas = document.getElementById(s + '-gc-leak-canvas');
+  if (leakCanvas && t.history) {
+    // Build post-GC heap history from rolling window
+    if (!t.postGcHistory) t.postGcHistory = [];
+    if (d.postGcHeapMB !== undefined && d.postGcHeapMB > 0) {
+      t.postGcHistory.push({ ts: d.timestampMs, v: d.postGcHeapMB });
+      if (t.postGcHistory.length > 60) t.postGcHistory.shift();
+    }
+    var leakCur = document.getElementById(s + '-gc-leak-cur');
+    var leakDetail = document.getElementById(s + '-gc-leak-detail');
+    var growthMbHr = parseFloat(d.growthMbHr) || 0;
+    if (leakCur) {
+      var growthColor = growthMbHr > 5 ? 'var(--crit)' : growthMbHr > 0 ? 'var(--warn)' : 'var(--ok)';
+      leakCur.textContent = (growthMbHr >= 0 ? '+' : '') + growthMbHr.toFixed(1) + ' MB/h';
+      leakCur.style.color = growthColor;
+    }
+    if (leakDetail) {
+      var postGcMb = parseFloat(d.postGcHeapMB) || 0;
+      leakDetail.textContent = postGcMb > 0
+        ? 'Post-GC heap: ' + postGcMb.toFixed(1) + ' MB · Growth rate: ' +
+          (growthMbHr >= 0 ? '+' : '') + growthMbHr.toFixed(2) + ' MB/h'
+        : 'No GC events yet — post-GC heap data will appear after the first GC cycle.';
+    }
+    if (t.postGcHistory.length >= 2) {
+      gcDrawCanvas(leakCanvas, t.postGcHistory.map(function(p){ return p.v; }),
+        null, 'var(--accent)', false, false);
+    }
+  }
+}
+
+// ── Fetch history from server ─────────────────────────────────────────────────
+
+function gcFetchHistory(s, encodedName) {
+  var statusEl = document.getElementById(s + '-gc-status');
+  var limitEl  = document.getElementById(s + '-gc-limit');
+  var limit    = limitEl ? parseInt(limitEl.value, 10) : 720;
+  if (statusEl) statusEl.textContent = 'Fetching…';
+  // encodedName is already URI-encoded from the HTML builder; use it directly.
+  var url = BASE_URL + '/gc/history?target=' + encodedName + '&limit=' + limit;
+  fetch(url, { mode: 'cors' })
+    .then(function(r) {
+      if (!r.ok) {
+        return r.text().then(function(body) {
+          throw new Error('HTTP ' + r.status + ': ' + body.slice(0, 120));
+        });
+      }
+      return r.json();
+    })
+    .then(function(records) {
+      if (!Array.isArray(records)) {
+        // Server returned a JSON object (e.g. {"error":"..."}) — surface the message.
+        var msg = (records && records.error) ? records.error : JSON.stringify(records).slice(0, 120);
+        throw new Error(msg);
+      }
+      if (records.length === 0) {
+        if (statusEl) statusEl.textContent = 'No history yet — monitoring has just started.';
+        return;
+      }
+      _gcHistory[s] = { records: records, cursor: records.length - 1 };
+      if (statusEl) statusEl.textContent = records.length + ' records loaded · ' +
+        fmtTs(records[0].ts) + ' → ' + fmtTs(records[records.length - 1].ts);
+      gcRenderHistory(s);
+      gcSwitchTab(s, 'hist');
+    })
+    .catch(function(e) {
+      if (statusEl) statusEl.textContent = 'Error: ' + e.message;
+    });
+}
+
+function fmtTs(ms) {
+  if (!ms) return '—';
+  var d = new Date(ms);
+  return d.toLocaleDateString() + ' ' + d.toLocaleTimeString();
+}
+
+// ── Render full history ───────────────────────────────────────────────────────
+
+function gcRenderHistory(s) {
+  var h = _gcHistory[s];
+  if (!h || !h.records || h.records.length === 0) return;
+  var records = h.records;
+
+  // Show scrubber and charts, hide no-data banner
+  var noData = document.getElementById(s + '-gc-hist-nodata');
+  var scrubWrap = document.getElementById(s + '-gc-scrubber-wrap');
+  var charts   = document.getElementById(s + '-gc-hist-charts');
+  if (noData)   noData.style.display   = 'none';
+  if (scrubWrap) scrubWrap.style.display = '';
+  if (charts)   charts.style.display   = '';
+
+  // Wire scrubber range
+  var scrubber = document.getElementById(s + '-gc-scrubber');
+  if (scrubber) {
+    scrubber.min   = 0;
+    scrubber.max   = records.length - 1;
+    scrubber.value = records.length - 1;
+  }
+
+  // Start/end timestamps
+  var el = document.getElementById(s + '-gc-ts-start');
+  if (el) el.textContent = fmtTs(records[0].ts);
+  el = document.getElementById(s + '-gc-ts-end');
+  if (el) el.textContent = fmtTs(records[records.length - 1].ts);
+
+  // Extract time series
+  var heaps    = records.map(function(r){ return r.heap    || 0; });
+  var gcs      = records.map(function(r){ return r.gc      || 0; });
+  var nursery  = records.map(function(r){ return r.nursery || 0; });
+  var nonHeap  = records.map(function(r){ return r.nonHeapMB || 0; });
+  var postGc   = records.map(function(r){ return r.postGcHeapMB > 0 ? r.postGcHeapMB : null; });
+
+  // Draw individual time-series
+  gcDrawToCanvas(s + '-hchart-heap-canvas',    heaps,   '%',  'var(--crit)',   s + '-hchart-heap-cur',    heaps[heaps.length-1].toFixed(1) + '%');
+  gcDrawToCanvas(s + '-hchart-gc-canvas',      gcs,     '%',  'var(--warn)',   s + '-hchart-gc-cur',      gcs[gcs.length-1].toFixed(2) + '%');
+  gcDrawToCanvas(s + '-hchart-nursery-canvas', nursery, '%',  'var(--accent)', s + '-hchart-nursery-cur', nursery[nursery.length-1].toFixed(1) + '%');
+  gcDrawToCanvas(s + '-hchart-nonheap-canvas', nonHeap, 'MB', '#a855f7',       s + '-hchart-nonheap-cur', nonHeap[nonHeap.length-1].toFixed(1) + ' MB');
+  var postGcClean = postGc.map(function(v){ return v === null ? 0 : v; });
+  gcDrawToCanvas(s + '-hchart-postGc-canvas',  postGcClean, 'MB', '#f59e0b', s + '-hchart-postGc-cur',
+    postGcClean[postGcClean.length-1].toFixed(1) + ' MB');
+
+  // Per-collector multi-line chart
+  gcDrawCollectorHistory(s + '-hchart-coll-canvas', records);
+
+  // Update cursor to live end
+  gcScrub(s, records.length - 1);
+}
+
+// ── Scrubber interaction ──────────────────────────────────────────────────────
+
+function gcScrub(s, idx) {
+  idx = parseInt(idx, 10);
+  var h = _gcHistory[s];
+  if (!h || !h.records || idx < 0) return;
+  idx = Math.min(idx, h.records.length - 1);
+  h.cursor = idx;
+
+  var r = h.records[idx];
+  var isLive = (idx === h.records.length - 1);
+
+  // Update cursor timestamp
+  var curTs = document.getElementById(s + '-gc-cursor-ts');
+  if (curTs) curTs.textContent = fmtTs(r.ts);
+
+  // Show/hide snapshot bar
+  var snapBar = document.getElementById(s + '-gc-snapshot-bar');
+  if (snapBar) {
+    snapBar.style.display = isLive ? 'none' : '';
+    if (!isLive) {
+      setElText(s + '-gc-snap-ts',      fmtTs(r.ts));
+      setElText(s + '-gc-snap-heap',    (r.heap || 0).toFixed(1) + '%');
+      setElText(s + '-gc-snap-gc',      (r.gc   || 0).toFixed(3) + '%');
+      setElText(s + '-gc-snap-nursery', (r.nursery || 0).toFixed(1) + '%');
+      setElText(s + '-gc-snap-nonheap', (r.nonHeapMB || 0).toFixed(1) + ' MB');
+    }
+  }
+
+  // Redraw all charts with cursor overlay (highlight point at idx)
+  var records = h.records;
+  gcDrawToCanvas(s + '-hchart-heap-canvas',    records.map(function(rec){ return rec.heap    || 0; }), '%',  'var(--crit)',   s + '-hchart-heap-cur',    (r.heap||0).toFixed(1)+'%',    idx);
+  gcDrawToCanvas(s + '-hchart-gc-canvas',      records.map(function(rec){ return rec.gc      || 0; }), '%',  'var(--warn)',   s + '-hchart-gc-cur',      (r.gc||0).toFixed(3)+'%',      idx);
+  gcDrawToCanvas(s + '-hchart-nursery-canvas', records.map(function(rec){ return rec.nursery || 0; }), '%',  'var(--accent)', s + '-hchart-nursery-cur', (r.nursery||0).toFixed(1)+'%', idx);
+  gcDrawToCanvas(s + '-hchart-nonheap-canvas', records.map(function(rec){ return rec.nonHeapMB||0; }), 'MB', '#a855f7',       s + '-hchart-nonheap-cur', (r.nonHeapMB||0).toFixed(1)+' MB', idx);
+  var postGc = records.map(function(rec){ return rec.postGcHeapMB > 0 ? rec.postGcHeapMB : 0; });
+  gcDrawToCanvas(s + '-hchart-postGc-canvas',  postGc, 'MB', '#f59e0b', s + '-hchart-postGc-cur', postGc[idx].toFixed(1)+' MB', idx);
+  gcDrawCollectorHistory(s + '-hchart-coll-canvas', records, idx);
+}
+
+function gcLiveJump(s) {
+  var h = _gcHistory[s];
+  if (!h || !h.records) return;
+  var scrubber = document.getElementById(s + '-gc-scrubber');
+  if (scrubber) {
+    scrubber.value = h.records.length - 1;
+    gcScrub(s, h.records.length - 1);
+  }
+}
+
+function setElText(id, v) {
+  var el = document.getElementById(id);
+  if (el) el.textContent = v;
+}
+
+// ── Canvas drawing engine ─────────────────────────────────────────────────────
+// All history charts use native HTML5 Canvas for high-performance rendering.
+// No external dependencies.
+
+function gcDrawToCanvas(canvasId, data, unit, lineColor, curId, curText, cursorIdx) {
+  var canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  gcDrawCanvas(canvas, data, cursorIdx !== undefined ? cursorIdx : null, lineColor, true, true, curId, curText, unit);
+}
+
+/**
+ * Draws a time-series line chart onto a canvas element.
+ *
+ * @param {HTMLCanvasElement} canvas     - target canvas
+ * @param {number[]}          data       - y values (already converted to display units)
+ * @param {number|null}       cursorIdx  - index to highlight with a vertical cursor line (null = none)
+ * @param {string}            lineColor  - CSS color string for the line and fill
+ * @param {boolean}           fillArea   - whether to draw a gradient area fill
+ * @param {boolean}           drawGrid   - whether to draw horizontal grid lines
+ * @param {string}            [curId]    - element ID whose textContent to update with current value
+ * @param {string}            [curText]  - text to set on curId element
+ * @param {string}            [unit]     - unit label for y-axis ticks (e.g. '%' or 'MB')
+ */
+function gcDrawCanvas(canvas, data, cursorIdx, lineColor, fillArea, drawGrid, curId, curText, unit) {
+  var dpr = window.devicePixelRatio || 1;
+  var W   = canvas.clientWidth  || 320;
+  var H   = canvas.clientHeight || 80;
+  canvas.width  = W * dpr;
+  canvas.height = H * dpr;
+  var ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  var n = data.length;
+  if (n === 0) return;
+
+  // Y-axis range with 10% padding
+  var minV = Math.min.apply(null, data.filter(function(v){ return v > 0; }));
+  var maxV = Math.max.apply(null, data);
+  if (!isFinite(minV) || !isFinite(maxV) || maxV === 0) {
+    minV = 0; maxV = 100;
+  }
+  if (maxV === minV) maxV = minV + 1;
+  var pad   = (maxV - minV) * 0.1;
+  var yMin  = Math.max(0, minV - pad);
+  var yMax  = maxV + pad;
+  var xPad  = drawGrid ? 32 : 0;  // left margin for y-axis labels
+  var bPad  = drawGrid ? 16 : 0;  // bottom margin for x-axis ticks
+
+  function px(i) { return xPad + (i / (n - 1)) * (W - xPad); }
+  function py(v) { return H - bPad - ((v - yMin) / (yMax - yMin)) * (H - bPad - 4); }
+
+  ctx.clearRect(0, 0, W, H);
+
+  // Grid lines + y-axis labels
+  if (drawGrid) {
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.lineWidth   = 1;
+    ctx.font        = '9px -apple-system, system-ui, sans-serif';
+    ctx.fillStyle   = 'rgba(170,175,200,0.6)';
+    ctx.textAlign   = 'right';
+    var steps = 4;
+    for (var gi = 0; gi <= steps; gi++) {
+      var gv = yMin + (yMax - yMin) * gi / steps;
+      var gy = py(gv);
+      ctx.beginPath(); ctx.moveTo(xPad, gy); ctx.lineTo(W, gy); ctx.stroke();
+      ctx.fillText(gv.toFixed(1) + (unit || ''), xPad - 2, gy + 3);
+    }
+  }
+
+  // Area fill
+  if (fillArea && n >= 2) {
+    var grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, lineColor.replace(')', ',0.30)').replace('var(--', 'rgba(').replace('crit', '239,68,68').replace('warn', '245,158,11').replace('accent', '59,130,246').replace('ok', '34,197,94'));
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.beginPath();
+    ctx.moveTo(px(0), py(data[0]));
+    for (var i = 1; i < n; i++) ctx.lineTo(px(i), py(data[i]));
+    ctx.lineTo(px(n-1), H - bPad);
+    ctx.lineTo(px(0),   H - bPad);
+    ctx.closePath();
+    ctx.fillStyle = grad;
+    ctx.fill();
+  }
+
+  // Line
+  if (n >= 2) {
+    ctx.beginPath();
+    ctx.strokeStyle = lineColor;
+    ctx.lineWidth   = 1.5;
+    ctx.lineJoin    = 'round';
+    ctx.moveTo(px(0), py(data[0]));
+    for (var j = 1; j < n; j++) {
+      // Smooth cubic bezier interpolation
+      var cx1 = (px(j-1) + px(j)) / 2, cy1 = py(data[j-1]);
+      var cx2 = (px(j-1) + px(j)) / 2, cy2 = py(data[j]);
+      ctx.bezierCurveTo(cx1, cy1, cx2, cy2, px(j), py(data[j]));
+    }
+    ctx.stroke();
+  }
+
+  // Cursor overlay
+  if (cursorIdx !== null && cursorIdx >= 0 && cursorIdx < n) {
+    var cx = px(cursorIdx), cy = py(data[cursorIdx]);
+    // Vertical cursor line
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+    ctx.lineWidth   = 1;
+    ctx.setLineDash([3, 3]);
+    ctx.moveTo(cx, 0); ctx.lineTo(cx, H - bPad);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // Dot at cursor
+    ctx.beginPath();
+    ctx.arc(cx, cy, 4, 0, 2 * Math.PI);
+    ctx.fillStyle   = '#fff';
+    ctx.strokeStyle = lineColor;
+    ctx.lineWidth   = 2;
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  // Update current-value text
+  if (curId) {
+    var curEl = document.getElementById(curId);
+    if (curEl) {
+      curEl.textContent = curText || '';
+      // Colour based on value magnitude
+      var lastV = data[cursorIdx !== null ? cursorIdx : n - 1];
+      var maxFrac = maxV > 0 ? lastV / maxV : 0;
+      curEl.style.color = maxFrac > 0.75 ? 'var(--crit)' : maxFrac > 0.40 ? 'var(--warn)' : 'var(--ok)';
+    }
+  }
+}
+
+/**
+ * Draws a multi-line chart showing cumulative GC count delta per collector over time.
+ * Each collector gets a distinct colour; a legend is drawn at the top-right.
+ */
+function gcDrawCollectorHistory(canvasId, records, cursorIdx) {
+  var canvas = document.getElementById(canvasId);
+  if (!canvas || records.length < 2) return;
+
+  // Collect all collector names from the first record that has gcCounts
+  var collectorNames = [];
+  for (var ri = 0; ri < records.length; ri++) {
+    if (records[ri].gcCounts) {
+      collectorNames = Object.keys(records[ri].gcCounts);
+      break;
+    }
+  }
+  if (collectorNames.length === 0) { canvas.style.display = 'none'; return; }
+  canvas.style.display = '';
+
+  // Build delta series per collector (diff between consecutive samples)
+  var palette = ['#3b82f6','#f59e0b','#22c55e','#ef4444','#a855f7','#06b6d4','#ec4899'];
+  var series  = collectorNames.map(function(name, ci) {
+    var prev = 0, deltas = [];
+    for (var ri2 = 0; ri2 < records.length; ri2++) {
+      var count = (records[ri2].gcCounts && records[ri2].gcCounts[name]) ? records[ri2].gcCounts[name] : prev;
+      deltas.push(Math.max(0, count - prev));
+      prev = count;
+    }
+    return { name: name, data: deltas, color: palette[ci % palette.length] };
+  });
+
+  var dpr = window.devicePixelRatio || 1;
+  var W   = canvas.clientWidth || 400;
+  var H   = canvas.clientHeight || 120;
+  canvas.width  = W * dpr;
+  canvas.height = H * dpr;
+  var ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, W, H);
+
+  var n   = records.length;
+  var legH = 14 * collectorNames.length + 6;
+  var plotH = H - legH - 20;
+  var xPad = 32, bPad = 16;
+
+  // Find max delta across all series
+  var maxDelta = 1;
+  series.forEach(function(s2) {
+    var m = Math.max.apply(null, s2.data);
+    if (m > maxDelta) maxDelta = m;
+  });
+
+  function px2(i) { return xPad + (i / (n - 1)) * (W - xPad); }
+  function py2(v) { return plotH - bPad - (v / maxDelta) * (plotH - bPad - 4); }
+
+  // Grid
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+  ctx.lineWidth   = 1;
+  ctx.font        = '9px -apple-system,system-ui,sans-serif';
+  ctx.fillStyle   = 'rgba(170,175,200,0.6)';
+  ctx.textAlign   = 'right';
+  for (var gi2 = 0; gi2 <= 3; gi2++) {
+    var gv2 = maxDelta * gi2 / 3;
+    var gy2 = py2(gv2);
+    ctx.beginPath(); ctx.moveTo(xPad, gy2); ctx.lineTo(W, gy2); ctx.stroke();
+    ctx.fillText(gv2.toFixed(0), xPad - 2, gy2 + 3);
+  }
+
+  // Draw each series
+  series.forEach(function(ser) {
+    if (ser.data.every(function(v){ return v === 0; })) return;
+    ctx.beginPath();
+    ctx.strokeStyle = ser.color;
+    ctx.lineWidth   = 1.5;
+    ctx.lineJoin    = 'round';
+    ctx.moveTo(px2(0), py2(ser.data[0]));
+    for (var k = 1; k < ser.data.length; k++) {
+      ctx.lineTo(px2(k), py2(ser.data[k]));
+    }
+    ctx.stroke();
+  });
+
+  // Cursor
+  if (cursorIdx !== undefined && cursorIdx !== null && cursorIdx >= 0 && cursorIdx < n) {
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+    ctx.lineWidth   = 1;
+    ctx.setLineDash([3,3]);
+    ctx.moveTo(px2(cursorIdx), 0); ctx.lineTo(px2(cursorIdx), plotH - bPad);
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+
+  // Legend
+  var ly = plotH + 14;
+  ctx.textAlign = 'left';
+  series.forEach(function(ser, ci3) {
+    var lx = 4;
+    ctx.fillStyle = ser.color;
+    ctx.fillRect(lx, ly + ci3 * 14, 12, 3);
+    ctx.fillStyle = 'rgba(200,205,220,0.85)';
+    ctx.font = '9px -apple-system,system-ui,sans-serif';
+    ctx.fillText(ser.name.length > 30 ? ser.name.slice(0,28)+'…' : ser.name, lx + 16, ly + ci3 * 14 + 4);
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 
 // ── card drag-and-drop + localStorage order persistence ───────────────────────
 // Works on any grid whose direct children have [draggable][data-card-id].
