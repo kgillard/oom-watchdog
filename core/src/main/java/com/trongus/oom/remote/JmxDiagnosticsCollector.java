@@ -100,7 +100,7 @@ import java.util.logging.Logger;
  * allow safe use from multiple threads if required.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.12.3
+ * @version 1.7.12.4
  * @since 1.7.0
  * @see TargetDescriptor
  * @see JvmDiagnosticsCollector
@@ -499,29 +499,70 @@ public final class JmxDiagnosticsCollector implements JvmDiagnosticsCollector, C
     /**
      * Checks which dump-related MBeans are registered on the remote JVM.
      * Returns a map of ObjectName string → registered (true/false).
+     * Also discovers all IBM-domain MBeans via a wildcard query and logs them
+     * so we can see what is actually available on locked-down JVMs.
      */
     private Map<String, Boolean> probeDumpMBeans() {
-        String[] names = {
+        // Fixed candidates we know about
+        String[] known = {
             "com.ibm.jvm:type=Dump",
             "com.ibm.lang.management:type=JvmMemory",
             "com.sun.management:type=HotSpotDiagnostic",
             "com.sun.management:type=DiagnosticCommand"
         };
         Map<String, Boolean> result = new java.util.LinkedHashMap<>();
-        for (String name : names) {
+        for (String name : known) {
             try {
                 result.put(name, mbsc.isRegistered(new ObjectName(name)));
             } catch (Exception e) {
                 result.put(name, false);
             }
         }
+
+        // Wildcard-discover all com.ibm.* and com.sun.management.* MBeans so
+        // we can see exactly what is available on this JVM without guessing.
+        try {
+            Set<ObjectName> ibmBeans = mbsc.queryNames(
+                    new ObjectName("com.ibm.*:*"), null);
+            if (!ibmBeans.isEmpty()) {
+                StringBuilder sb = new StringBuilder("Discovered com.ibm MBeans on [")
+                        .append(descriptor.getName()).append("]: ");
+                java.util.List<String> names = new ArrayList<>();
+                for (ObjectName on : ibmBeans) names.add(on.getCanonicalName());
+                java.util.Collections.sort(names);
+                for (String n : names) sb.append(n).append("; ");
+                WatchdogLogger.info(LOG, "{0}", sb.toString().trim());
+                // Add any discovered IBM dump-capable MBeans to the result map
+                for (ObjectName on : ibmBeans) {
+                    String canonical = on.getCanonicalName();
+                    if (!result.containsKey(canonical)) {
+                        result.put(canonical, true);
+                    }
+                }
+            } else {
+                WatchdogLogger.info(LOG,
+                        "No com.ibm.* MBeans found on [{0}] — target JVM is not IBM J9 or MBeans are not exposed",
+                        descriptor.getName());
+            }
+        } catch (Exception e) {
+            WatchdogLogger.warning(LOG, "MBean discovery failed for [{0}]: {1}",
+                    descriptor.getName(), e.getMessage());
+        }
         return result;
     }
 
     private static String formatMBeanSummary(Map<String, Boolean> m) {
+        // Only include the four key candidates in the dashboard summary to keep it short
+        String[] key = {
+            "com.ibm.jvm:type=Dump",
+            "com.ibm.lang.management:type=JvmMemory",
+            "com.sun.management:type=HotSpotDiagnostic",
+            "com.sun.management:type=DiagnosticCommand"
+        };
         StringBuilder sb = new StringBuilder();
-        for (Map.Entry<String, Boolean> e : m.entrySet()) {
-            sb.append(e.getKey()).append('=').append(e.getValue() ? "YES" : "no").append("; ");
+        for (String k : key) {
+            Boolean v = m.get(k);
+            sb.append(k).append('=').append(Boolean.TRUE.equals(v) ? "YES" : "no").append("; ");
         }
         return sb.toString().trim();
     }
@@ -595,6 +636,7 @@ public final class JmxDiagnosticsCollector implements JvmDiagnosticsCollector, C
         }
 
         // Strategy 3: com.ibm.lang.management:type=JvmMemory createHeapDump()
+        // This MBean is registered by default on all IBM JDK 8 JVMs — no startup flags needed.
         if (Boolean.TRUE.equals(present.get("com.ibm.lang.management:type=JvmMemory"))) {
             try {
                 ObjectName on = new ObjectName("com.ibm.lang.management:type=JvmMemory");
@@ -608,6 +650,28 @@ public final class JmxDiagnosticsCollector implements JvmDiagnosticsCollector, C
                 String r = e.getClass().getSimpleName() + ": " + e.getMessage();
                 WatchdogLogger.warning(LOG, "IBM JvmMemory createHeapDump() failed for [{0}]: {1}", descriptor.getName(), r);
                 failures.append("[J9-JvmMemory] ").append(r).append("; ");
+            }
+        }
+
+        // Strategy 3b: scan any discovered com.ibm.lang.management MBean for createHeapDump()
+        // Handles IBM JDK builds where the ObjectName type differs from the standard.
+        for (Map.Entry<String, Boolean> entry : present.entrySet()) {
+            String beanName = entry.getKey();
+            if (Boolean.TRUE.equals(entry.getValue())
+                    && beanName.startsWith("com.ibm.lang.management:")
+                    && !beanName.equals("com.ibm.lang.management:type=JvmMemory")) {
+                try {
+                    ObjectName on = new ObjectName(beanName);
+                    Object result = mbsc.invoke(on, "createHeapDump", new Object[0], new String[0]);
+                    String path = result != null && !result.toString().trim().isEmpty()
+                            ? result.toString().trim() : phdPath;
+                    WatchdogLogger.info(LOG, "Remote heap dump ({0} createHeapDump()) → [{1}] for [{2}]",
+                            beanName, path, descriptor.getName());
+                    return path;
+                } catch (Exception e) {
+                    String r = e.getClass().getSimpleName() + ": " + e.getMessage();
+                    failures.append("[").append(beanName).append("] ").append(r).append("; ");
+                }
             }
         }
 

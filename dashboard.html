@@ -454,7 +454,7 @@
 <div id="scroll-region">
   <main id="main-content">
     <p style="color:var(--muted);font-size:13px;padding:20px 0">
-      Enter the OOM Watchdog metrics server URL above and click <strong>Connect</strong>.
+      Connecting to OOM Watchdog metrics server…
     </p>
   </main>
 </div>
@@ -563,16 +563,18 @@ document.addEventListener('click', function(e) {
     document.getElementById('server-url').value = list[0];
   }
 
-  // Auto-connect on every page load whenever the URL field has a value.
-  // This covers both: (a) URL restored from history, and (b) the hardcoded
-  // default https://localhost:9090 that ships in the HTML.
-  window.addEventListener('load', function() {
+  // Auto-connect immediately (script runs at bottom of <body>, DOM is fully
+  // parsed and the load event has already fired by this point — so we use
+  // setTimeout(0) to defer one tick, allowing the rest of the IIFE to finish
+  // first, then connect).  Covers both (a) URL restored from history and
+  // (b) the hardcoded default https://localhost:9090 that ships in the HTML.
+  setTimeout(function() {
     var url = document.getElementById('server-url').value.trim();
     if (url) {
       setStatus('', 'Auto-connecting…');
       startPolling();
     }
-  });
+  }, 0);
 })();
 
 // ── polling ───────────────────────────────────────────────────────────────────
