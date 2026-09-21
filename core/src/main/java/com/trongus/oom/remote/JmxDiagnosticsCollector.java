@@ -30,8 +30,10 @@ import java.lang.management.ThreadMXBean;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Deque;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -100,7 +102,7 @@ import java.util.logging.Logger;
  * allow safe use from multiple threads if required.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.12.4
+ * @version 1.7.12.5
  * @since 1.7.0
  * @see TargetDescriptor
  * @see JvmDiagnosticsCollector
@@ -552,17 +554,24 @@ public final class JmxDiagnosticsCollector implements JvmDiagnosticsCollector, C
     }
 
     private static String formatMBeanSummary(Map<String, Boolean> m) {
-        // Only include the four key candidates in the dashboard summary to keep it short
+        // Show the four key candidates; then append any extra discovered beans
         String[] key = {
             "com.ibm.jvm:type=Dump",
             "com.ibm.lang.management:type=JvmMemory",
             "com.sun.management:type=HotSpotDiagnostic",
             "com.sun.management:type=DiagnosticCommand"
         };
+        Set<String> keySet = new HashSet<>(Arrays.asList(key));
         StringBuilder sb = new StringBuilder();
         for (String k : key) {
             Boolean v = m.get(k);
             sb.append(k).append('=').append(Boolean.TRUE.equals(v) ? "YES" : "no").append("; ");
+        }
+        // Append any extra discovered beans (e.g. JvmCpuMonitor) so the user can see what IS present
+        for (Map.Entry<String, Boolean> e : m.entrySet()) {
+            if (!keySet.contains(e.getKey()) && Boolean.TRUE.equals(e.getValue())) {
+                sb.append(e.getKey()).append("=discovered; ");
+            }
         }
         return sb.toString().trim();
     }
@@ -655,6 +664,8 @@ public final class JmxDiagnosticsCollector implements JvmDiagnosticsCollector, C
 
         // Strategy 3b: scan any discovered com.ibm.lang.management MBean for createHeapDump()
         // Handles IBM JDK builds where the ObjectName type differs from the standard.
+        // Guard: only invoke if the MBean's MBeanInfo actually declares createHeapDump —
+        // other com.ibm.lang.management beans (e.g. JvmCpuMonitor) don't have that operation.
         for (Map.Entry<String, Boolean> entry : present.entrySet()) {
             String beanName = entry.getKey();
             if (Boolean.TRUE.equals(entry.getValue())
@@ -662,6 +673,15 @@ public final class JmxDiagnosticsCollector implements JvmDiagnosticsCollector, C
                     && !beanName.equals("com.ibm.lang.management:type=JvmMemory")) {
                 try {
                     ObjectName on = new ObjectName(beanName);
+                    // Check that createHeapDump is actually declared before invoking
+                    boolean hasOp = false;
+                    try {
+                        javax.management.MBeanInfo info = mbsc.getMBeanInfo(on);
+                        for (javax.management.MBeanOperationInfo op : info.getOperations()) {
+                            if ("createHeapDump".equals(op.getName())) { hasOp = true; break; }
+                        }
+                    } catch (Exception ignored) { /* treat as absent */ }
+                    if (!hasOp) continue;
                     Object result = mbsc.invoke(on, "createHeapDump", new Object[0], new String[0]);
                     String path = result != null && !result.toString().trim().isEmpty()
                             ? result.toString().trim() : phdPath;

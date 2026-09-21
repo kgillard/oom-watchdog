@@ -14,7 +14,7 @@ import static org.junit.Assert.*;
  * Unit tests for {@link TargetRegistry}.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.12.4
+ * @version 1.7.12.5
  * @since 1.7.0
  */
 public class TargetRegistryTest {
