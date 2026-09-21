@@ -13,7 +13,7 @@ package com.trongus.oom.diagnosis;
  * state.  Instances are safe to share across threads without synchronisation.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.11.2
+ * @version 1.7.11.3
  * @since 1.3.0
  * @see OomCauseCategory
  * @see OomCauseAnalyser
