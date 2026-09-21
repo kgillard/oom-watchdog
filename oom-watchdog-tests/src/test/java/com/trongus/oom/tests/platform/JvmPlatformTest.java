@@ -14,7 +14,7 @@ import static org.junit.Assert.*;
  * that would differ between JDK vendors and versions.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.11.9
+ * @version 1.7.12.0
  * @since 1.0.0
  * @see JvmPlatform
  */

@@ -100,7 +100,7 @@ import java.util.logging.Logger;
  * allow safe use from multiple threads if required.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.11.9
+ * @version 1.7.12.0
  * @since 1.7.0
  * @see TargetDescriptor
  * @see JvmDiagnosticsCollector
@@ -513,27 +513,48 @@ public final class JmxDiagnosticsCollector implements JvmDiagnosticsCollector, C
             WatchdogLogger.info(LOG, "Remote heap dump (HotSpot) written to [{0}] for target [{1}]",
                     outputPath, descriptor.getName());
             return outputPath;
-        } catch (Exception ignored) {
-            WatchdogLogger.fine(LOG,
-                    "HotSpotDiagnosticMXBean not available on [{0}]; trying IBM J9 strategies",
-                    descriptor.getName());
+        } catch (Exception e1) {
+            WatchdogLogger.warning(LOG,
+                    "HotSpotDiagnosticMXBean heap dump failed for [{0}]: {1}",
+                    descriptor.getName(), e1.getMessage());
         }
 
         // Strategy 2: IBM J9 / OpenJ9 — com.ibm.jvm:type=Dump  heapDump(String)
+        // The argument must be in IBM dump token format: "heap:file=<path>"
+        // Ensure the output file ends in .phd (IBM portable heap dump format).
+        String phdPath = outputPath.endsWith(".phd") ? outputPath
+                : outputPath.replaceAll("\\.[^./]+$", "") + ".phd";
         try {
             ObjectName on = new ObjectName("com.ibm.jvm:type=Dump");
             Object result = mbsc.invoke(on, "heapDump",
-                    new Object[]{ outputPath },
+                    new Object[]{ "heap:file=" + phdPath },
                     new String[]{ String.class.getName() });
             String path = result != null && !result.toString().trim().isEmpty()
-                    ? result.toString().trim() : outputPath;
-            WatchdogLogger.info(LOG, "Remote heap dump (IBM J9 Dump MBean) written to [{0}] " +
+                    ? result.toString().trim() : phdPath;
+            WatchdogLogger.info(LOG, "Remote heap dump (IBM J9 Dump MBean, with path) written to [{0}] " +
                     "for target [{1}]", path, descriptor.getName());
             return path;
-        } catch (Exception ignored) {
-            WatchdogLogger.fine(LOG,
-                    "IBM J9 Dump MBean (heapDump) not available on [{0}]; trying JvmMemory MBean",
-                    descriptor.getName());
+        } catch (Exception e2) {
+            WatchdogLogger.warning(LOG,
+                    "IBM J9 Dump MBean heapDump(String) failed for [{0}]: {1}",
+                    descriptor.getName(), e2.getMessage());
+        }
+
+        // Strategy 2b: IBM J9 — com.ibm.jvm:type=Dump  heapDump() (no-arg, J9 chooses path)
+        // Available on all IBM JDK 8 / OpenJ9 builds regardless of dump-agent config.
+        try {
+            ObjectName on = new ObjectName("com.ibm.jvm:type=Dump");
+            Object result = mbsc.invoke(on, "heapDump",
+                    new Object[0], new String[0]);
+            String path = result != null && !result.toString().trim().isEmpty()
+                    ? result.toString().trim() : phdPath;
+            WatchdogLogger.info(LOG, "Remote heap dump (IBM J9 Dump MBean, no-arg) written to [{0}] " +
+                    "for target [{1}]", path, descriptor.getName());
+            return path;
+        } catch (Exception e3) {
+            WatchdogLogger.warning(LOG,
+                    "IBM J9 Dump MBean heapDump() (no-arg) failed for [{0}]: {1}",
+                    descriptor.getName(), e3.getMessage());
         }
 
         // Strategy 3: IBM J9 — com.ibm.lang.management:type=JvmMemory  createHeapDump()
@@ -542,14 +563,15 @@ public final class JmxDiagnosticsCollector implements JvmDiagnosticsCollector, C
             Object result = mbsc.invoke(on, "createHeapDump",
                     new Object[0], new String[0]);
             String path = result != null && !result.toString().trim().isEmpty()
-                    ? result.toString().trim() : outputPath;
+                    ? result.toString().trim() : phdPath;
             WatchdogLogger.info(LOG, "Remote heap dump (IBM J9 JvmMemory MBean) written to [{0}] " +
                     "for target [{1}]", path, descriptor.getName());
             return path;
-        } catch (Exception e) {
+        } catch (Exception e4) {
             WatchdogLogger.warning(LOG,
-                    "Remote heap dump failed for [{0}] — no supported dump MBean found: {1}",
-                    descriptor.getName(), e.getMessage());
+                    "Remote heap dump failed for [{0}] — all strategies exhausted. " +
+                    "Last error: {1}",
+                    descriptor.getName(), e4.getMessage());
             return null;
         }
     }
@@ -618,13 +640,16 @@ public final class JmxDiagnosticsCollector implements JvmDiagnosticsCollector, C
      */
     private String remoteCoreOrSystemDump(String outputPath) {
         // Strategy 1: IBM J9 / OpenJ9 — com.ibm.jvm:type=Dump  systemDump(String)
+        // Use IBM dump token format: "system:file=<path>"
+        String dmpPath = outputPath.endsWith(".dmp") ? outputPath
+                : outputPath.replaceAll("\\.[^./]+$", "") + ".dmp";
         try {
             ObjectName on = new ObjectName("com.ibm.jvm:type=Dump");
             Object result = mbsc.invoke(on, "systemDump",
-                    new Object[]{ outputPath },
+                    new Object[]{ "system:file=" + dmpPath },
                     new String[]{ String.class.getName() });
             String path = result != null && !result.toString().trim().isEmpty()
-                    ? result.toString().trim() : outputPath;
+                    ? result.toString().trim() : dmpPath;
             // J9 sometimes returns a decorated message like "Dump written to /path/file.dmp"
             if (path.contains(" ")) {
                 int idx = path.lastIndexOf(' ');
@@ -632,20 +657,42 @@ public final class JmxDiagnosticsCollector implements JvmDiagnosticsCollector, C
                 if (new File(candidate).exists()) path = candidate;
             }
             WatchdogLogger.info(LOG,
-                    "Remote system dump (IBM J9 Dump MBean) written to [{0}] for target [{1}]",
+                    "Remote system dump (IBM J9 Dump MBean, with path) written to [{0}] for target [{1}]",
                     path, descriptor.getName());
             return path;
-        } catch (Exception ignored) {
-            WatchdogLogger.fine(LOG,
-                    "IBM J9 Dump MBean (systemDump) not available on [{0}]; trying DiagnosticCommand",
-                    descriptor.getName());
+        } catch (Exception e1) {
+            WatchdogLogger.warning(LOG,
+                    "IBM J9 Dump MBean systemDump(String) failed for [{0}]: {1}",
+                    descriptor.getName(), e1.getMessage());
+        }
+
+        // Strategy 1b: IBM J9 — com.ibm.jvm:type=Dump  systemDump() (no-arg, J9 chooses path)
+        try {
+            ObjectName on = new ObjectName("com.ibm.jvm:type=Dump");
+            Object result = mbsc.invoke(on, "systemDump",
+                    new Object[0], new String[0]);
+            String path = result != null && !result.toString().trim().isEmpty()
+                    ? result.toString().trim() : dmpPath;
+            if (path.contains(" ")) {
+                int idx = path.lastIndexOf(' ');
+                String candidate = path.substring(idx + 1);
+                if (new File(candidate).exists()) path = candidate;
+            }
+            WatchdogLogger.info(LOG,
+                    "Remote system dump (IBM J9 Dump MBean, no-arg) written to [{0}] for target [{1}]",
+                    path, descriptor.getName());
+            return path;
+        } catch (Exception e2) {
+            WatchdogLogger.warning(LOG,
+                    "IBM J9 Dump MBean systemDump() (no-arg) failed for [{0}]: {1}",
+                    descriptor.getName(), e2.getMessage());
         }
 
         // Strategy 2: DiagnosticCommand systemDump (some J9/OpenJ9 builds)
         try {
             ObjectName on = new ObjectName("com.sun.management:type=DiagnosticCommand");
             Object result = mbsc.invoke(on, "systemDump",
-                    new Object[]{ new String[]{ "file=" + outputPath } },
+                    new Object[]{ new String[]{ "file=" + dmpPath } },
                     new String[]{ String[].class.getName() });
             String text = result != null ? result.toString().trim() : "";
             if (!text.isEmpty()) {
@@ -653,11 +700,12 @@ public final class JmxDiagnosticsCollector implements JvmDiagnosticsCollector, C
                 String candidate = idx >= 0 ? text.substring(idx + 1) : text;
                 if (new File(candidate).exists()) return candidate;
             }
-            return outputPath;
-        } catch (Exception e) {
+            return dmpPath;
+        } catch (Exception e3) {
             WatchdogLogger.warning(LOG,
-                    "Remote system/core dump not supported by target JVM [{0}]: {1}",
-                    descriptor.getName(), e.getMessage());
+                    "Remote system/core dump failed for [{0}] — all strategies exhausted. " +
+                    "Last error: {1}",
+                    descriptor.getName(), e3.getMessage());
             return null;
         }
     }
