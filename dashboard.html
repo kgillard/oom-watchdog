@@ -348,13 +348,27 @@
 
     /* ── Sticky alert panel at bottom ────────────────────────────────────────── */
     #sticky-bottom { flex-shrink: 0; }
+    #alert-resize-handle {
+      height: 6px;
+      cursor: ns-resize;
+      background: transparent;
+      border-top: 2px solid transparent;
+      transition: border-color 0.15s;
+      flex-shrink: 0;
+    }
+    #alert-resize-handle:hover,
+    #alert-resize-handle.dragging { border-top-color: var(--accent); }
+    body.alert-resizing,
+    body.alert-resizing * { user-select: none !important; cursor: ns-resize !important; }
     #alert-panel {
       background: var(--surface);
       border-top: 1px solid var(--border);
       padding: 0;
-      max-height: 160px;
+      height: 160px;   /* default; overridden by JS */
+      min-height: 60px;
       display: flex;
       flex-direction: column;
+      overflow: hidden;
     }
     #alert-panel-hdr {
       padding: 6px 20px;
@@ -661,6 +675,7 @@
 </div>
 
 <div id="sticky-bottom">
+  <div id="alert-resize-handle"></div>
   <div id="alert-panel">
     <div id="alert-panel-hdr">
       <span>Alert Log — all targets</span>
@@ -2619,6 +2634,47 @@ ensureTabs = function() {
     initCardDrag(grid, '.mcard');
   });
 };
+
+// ── Alert panel vertical resize ───────────────────────────────────────────────
+(function() {
+  var ALERT_HEIGHT_KEY = 'oom-alert-panel-height';
+  var MIN_H = 60;
+  var panel  = document.getElementById('alert-panel');
+  var handle = document.getElementById('alert-resize-handle');
+
+  // Restore persisted height
+  try {
+    var saved = parseInt(localStorage.getItem(ALERT_HEIGHT_KEY), 10);
+    if (saved >= MIN_H) panel.style.height = saved + 'px';
+  } catch(e) {}
+
+  var _startY = 0;
+  var _startH = 0;
+
+  function onMouseMove(e) {
+    var dy   = _startY - e.clientY;   // dragging up → positive → taller
+    var newH = Math.max(MIN_H, Math.min(_startH + dy, window.innerHeight * 0.6));
+    panel.style.height = newH + 'px';
+  }
+
+  function onMouseUp() {
+    handle.classList.remove('dragging');
+    document.body.classList.remove('alert-resizing');
+    document.removeEventListener('mousemove', onMouseMove);
+    document.removeEventListener('mouseup',   onMouseUp);
+    try { localStorage.setItem(ALERT_HEIGHT_KEY, parseInt(panel.style.height, 10)); } catch(e) {}
+  }
+
+  handle.addEventListener('mousedown', function(e) {
+    e.preventDefault();
+    _startY = e.clientY;
+    _startH = panel.offsetHeight;
+    handle.classList.add('dragging');
+    document.body.classList.add('alert-resizing');
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup',   onMouseUp);
+  });
+}());
 </script>
 </body>
 </html>
