@@ -36,7 +36,7 @@ import java.util.logging.Logger;
  * <p>This strategy is always the last in the chain so it is the guaranteed
  * fallback for every JVM and JDK version including JDK 26+.
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.12.8
+ * @version 1.7.12.9
  * @since 1.7.0
  */
 public final class GraalNativeHeapDumpStrategy implements DumpStrategy {

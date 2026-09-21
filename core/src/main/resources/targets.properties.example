@@ -14,18 +14,25 @@
 #   target.<name>.username      = <jmx-user>                                            (optional)
 #   target.<name>.password      = <jmx-password>                                        (optional)
 #
-# Direct Dump API (same-host deployments — preferred over JMX for heap/core dumps):
+# Direct Dump API – option A: target JVM embeds DumpApiServer (preferred for same-host deployments):
 #   target.<name>.dump-api-url  = http://localhost:<port>
 #
 #   When set, the watchdog forwards POST /dump/heap, /dump/thread, /dump/core requests
 #   directly to the target JVM's embedded DumpApiServer instead of using JMX RMI.
 #   The target JVM calls its own local MXBeans — no JMX port required for dumps.
 #   Dumps are written to the DumpApiServer's configured directory inside the target JVM.
-#   Falls back to JMX if dump-api-url is not set.
 #
 #   To enable, start DumpApiServer inside the target JVM:
 #     DumpApiServer dumpApi = new DumpApiServer(19999, "/var/log/dumps/myapp");
 #     dumpApi.start();
+#
+# Direct Dump API – option B: watchdog auto-starts DumpApiServer (no target code changes required):
+#   target.<name>.dump-api-port = <port>
+#
+#   When set, the watchdog starts its own DumpApiServer on the given port and delegates
+#   all dump operations to the target JVM via the existing JMX connection.  The target JVM
+#   requires zero code changes.  Mutually exclusive with dump-api-url (url takes precedence).
+#   Falls back to JMX if neither dump-api-url nor dump-api-port is set.
 #
 # Per-metric dump thresholds (all optional, default: disabled = -1):
 #   target.<name>.gc-dump-threshold      = 0.40   Trigger dump when GC overhead >= this fraction
@@ -53,9 +60,10 @@
 #   -Dcom.sun.management.jmxremote.ssl=false
 #   -Dcom.sun.management.jmxremote.authenticate=false
 #
-# If DumpApiServer is embedded in hostcontext (recommended for same-host deployments):
+# Option A – target JVM embeds DumpApiServer:
 #   DumpApiServer dumpApi = new DumpApiServer(19777, "/var/log/qradar/dumps/hostcontext");
 #   dumpApi.start();
+# Option B – watchdog auto-starts (no target code changes): use dump-api-port instead of dump-api-url
 target.hostcontext.jmx-url              = service:jmx:rmi:///jndi/rmi://localhost:7777/jmxrmi
 target.hostcontext.warn                 = 0.75
 target.hostcontext.crit                 = 0.85
@@ -64,6 +72,7 @@ target.hostcontext.poll-ms              = 3000
 target.hostcontext.dump-types           = heap,thread
 target.hostcontext.dump-dir             = /var/log/qradar/dumps/hostcontext
 target.hostcontext.dump-api-url         = http://localhost:19777
+# target.hostcontext.dump-api-port      = 19777    # alternative to dump-api-url (watchdog-hosted)
 target.hostcontext.gc-dump-threshold    = 0.40
 target.hostcontext.heap-dump-threshold  = 0.80
 target.hostcontext.leef-category        = JVM_OOM_QRadar_hostcontext
@@ -75,15 +84,17 @@ target.hostcontext.leef-tags            = env=prod,component=hostcontext,team=qr
 # Enable JMX in /opt/tomcat/bin/setenv.sh or /opt/qradar/bin/tomcat.sh:
 #   CATALINA_OPTS="$CATALINA_OPTS -Dcom.sun.management.jmxremote.port=8090 ..."
 #
-# If DumpApiServer is embedded in tomcat (recommended for same-host deployments):
+# Option A – target JVM embeds DumpApiServer:
 #   DumpApiServer dumpApi = new DumpApiServer(19779, "/var/log/qradar/dumps/tomcat");
 #   dumpApi.start();
+# Option B – watchdog auto-starts (no target code changes): use dump-api-port instead of dump-api-url
 target.tomcat.jmx-url                   = service:jmx:rmi:///jndi/rmi://localhost:8090/jmxrmi
 target.tomcat.warn                      = 0.80
 target.tomcat.crit                      = 0.90
 target.tomcat.dump-types                = heap,thread,class_histogram
 target.tomcat.dump-dir                  = /var/log/qradar/dumps/tomcat
 target.tomcat.dump-api-url              = http://localhost:19779
+# target.tomcat.dump-api-port           = 19779    # alternative to dump-api-url (watchdog-hosted)
 target.tomcat.nursery-dump-threshold    = 0.90
 target.tomcat.leef-category             = JVM_OOM_QRadar_tomcat
 target.tomcat.leef-tags                 = env=prod,component=tomcat,team=qradar-ops
@@ -96,7 +107,8 @@ target.was.warn               = 0.80
 target.was.crit               = 0.90
 target.was.poll-ms            = 5000
 target.was.dump-dir           = /var/log/was/dumps
-# target.was.dump-api-url     = http://localhost:19880   # uncomment if DumpApiServer is embedded
+# target.was.dump-api-url     = http://localhost:19880   # option A: uncomment if DumpApiServer is embedded
+# target.was.dump-api-port    = 19880                    # option B: watchdog auto-starts (no target changes)
 
 # ------------------------------------------------------------------------------
 # IBM WebSphere Liberty / Open Liberty
@@ -108,7 +120,8 @@ target.liberty.warn           = 0.75
 target.liberty.crit           = 0.88
 target.liberty.dump-types     = heap,thread
 target.liberty.dump-dir       = /var/log/liberty/dumps
-# target.liberty.dump-api-url = http://localhost:19443   # uncomment if DumpApiServer is embedded
+# target.liberty.dump-api-url = http://localhost:19443   # option A: uncomment if DumpApiServer is embedded
+# target.liberty.dump-api-port= 19443                    # option B: watchdog auto-starts (no target changes)
 
 # ------------------------------------------------------------------------------
 # IBM Cognos – Content Manager (CM) / Admin Task Center (ATC)
@@ -118,4 +131,5 @@ target.cognos-atc.warn        = 0.80
 target.cognos-atc.crit        = 0.90
 target.cognos-atc.dump-types  = heap,thread
 target.cognos-atc.dump-dir    = /var/log/cognos/dumps
-# target.cognos-atc.dump-api-url = http://localhost:19300   # uncomment if DumpApiServer is embedded
+# target.cognos-atc.dump-api-url  = http://localhost:19300   # option A: uncomment if DumpApiServer is embedded
+# target.cognos-atc.dump-api-port = 19300                    # option B: watchdog auto-starts (no target changes)

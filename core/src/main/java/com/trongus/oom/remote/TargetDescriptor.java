@@ -23,7 +23,7 @@ import java.util.Set;
  * to prevent accidental exposure in log files or console transcripts.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.12.8
+ * @version 1.7.12.9
  * @since 1.7.0
  * @see TargetRegistry
  * @see JmxDiagnosticsCollector
@@ -80,6 +80,14 @@ public final class TargetDescriptor {
     private final String        dumpApiUrl;
 
     /**
+     * TCP port on which the watchdog should auto-start a {@link DumpApiServer} for this
+     * target when the daemon launches.  The server delegates all dump operations to the
+     * target via the already-open JMX connection, so the target JVM requires no code changes.
+     * {@code 0} means auto-start is disabled (default).
+     */
+    private final int           dumpApiPort;
+
+    /**
      * GC overhead ratio (0.0–1.0) that triggers an immediate dump, or
      * {@link #DUMP_THRESHOLD_DISABLED} ({@code -1}) when disabled.
      */
@@ -111,6 +119,7 @@ public final class TargetDescriptor {
         this.leefCategory         = b.leefCategory;
         this.leefTags             = b.leefTags;
         this.dumpApiUrl           = b.dumpApiUrl;
+        this.dumpApiPort          = b.dumpApiPort;
         this.gcDumpThreshold      = b.gcDumpThreshold;
         this.heapDumpThreshold    = b.heapDumpThreshold;
         this.nurseryDumpThreshold = b.nurseryDumpThreshold;
@@ -253,6 +262,15 @@ public final class TargetDescriptor {
     public String getDumpApiUrl() {
         return dumpApiUrl;
     }
+    /**
+     * Returns the TCP port on which the watchdog auto-starts a {@link DumpApiServer} for
+     * this target, or {@code 0} if auto-start is disabled (default).
+     *
+     * @return dump API auto-start port, or {@code 0} if disabled
+     */
+    public int getDumpApiPort() {
+        return dumpApiPort;
+    }
 
     /**
      * Returns the GC overhead ratio threshold (0.0–1.0) that triggers an immediate dump,
@@ -304,14 +322,15 @@ public final class TargetDescriptor {
                Objects.equals(dumpDirectory, that.dumpDirectory) &&
                Objects.equals(leefCategory, that.leefCategory) &&
                Objects.equals(leefTags, that.leefTags) &&
-               Objects.equals(dumpApiUrl, that.dumpApiUrl);
+               Objects.equals(dumpApiUrl, that.dumpApiUrl) &&
+               dumpApiPort == that.dumpApiPort;
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(name, jmxUrl, username, password, warnThreshold,
                             critThreshold, gcThreshold, pollIntervalMs, dumpTypes,
-                            dumpDirectory, leefCategory, leefTags, dumpApiUrl,
+                            dumpDirectory, leefCategory, leefTags, dumpApiUrl, dumpApiPort,
                             gcDumpThreshold, heapDumpThreshold, nurseryDumpThreshold);
     }
 
@@ -331,6 +350,7 @@ public final class TargetDescriptor {
                 ", leefCategory=" + (leefCategory != null ? "'" + leefCategory + "'" : "null") +
                 ", leefTags=" + (leefTags != null ? "'" + leefTags + "'" : "null") +
                 ", dumpApiUrl=" + (dumpApiUrl != null ? "'" + dumpApiUrl + "'" : "null") +
+                ", dumpApiPort=" + dumpApiPort +
                 ", gcDumpThreshold=" + gcDumpThreshold +
                 ", heapDumpThreshold=" + heapDumpThreshold +
                 ", nurseryDumpThreshold=" + nurseryDumpThreshold +
@@ -355,6 +375,7 @@ public final class TargetDescriptor {
         private String        leefCategory;
         private String        leefTags;
         private String        dumpApiUrl;
+        private int           dumpApiPort          = 0;
         private double        gcDumpThreshold      = DUMP_THRESHOLD_DISABLED;
         private double        heapDumpThreshold    = DUMP_THRESHOLD_DISABLED;
         private double        nurseryDumpThreshold = DUMP_THRESHOLD_DISABLED;
@@ -517,6 +538,24 @@ public final class TargetDescriptor {
          */
         public Builder dumpApiUrl(String url) {
             this.dumpApiUrl = (url != null && !url.trim().isEmpty()) ? url.trim() : null;
+            return this;
+        }
+
+        /**
+         * Sets the TCP port on which the watchdog auto-starts a {@link DumpApiServer} for
+         * this target.  The server runs inside the watchdog process and delegates all dump
+         * operations to the target via the already-open JMX connection.
+         * Use {@code 0} (the default) to disable auto-start.
+         *
+         * @param port TCP port (1–65535), or {@code 0} to disable
+         * @return {@code this}
+         * @throws IllegalArgumentException if port is not 0 and outside 1–65535
+         */
+        public Builder dumpApiPort(int port) {
+            if (port != 0 && (port < 1 || port > 65535)) {
+                throw new IllegalArgumentException("dumpApiPort must be 0 (disabled) or 1–65535, got: " + port);
+            }
+            this.dumpApiPort = port;
             return this;
         }
 

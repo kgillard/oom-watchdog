@@ -105,7 +105,7 @@ import java.util.logging.Logger;
  * <p>This utility class is stateless and thread-safe.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.12.8
+ * @version 1.7.12.9
  * @since 1.7.0
  * @see TargetDescriptor
  * @see WatchdogDaemon
@@ -316,6 +316,11 @@ public final class TargetRegistry {
                 b.dumpApiUrl(dumpApiUrl);
             }
 
+            // Optional auto-start dump API port (watchdog starts DumpApiServer internally)
+            if (p.containsKey("dump-api-port")) {
+                b.dumpApiPort(parseInt(p.get("dump-api-port"), "dump-api-port", targetName));
+            }
+
             // Optional dump thresholds
             if (p.containsKey("gc-dump-threshold")) {
                 b.gcDumpThreshold(parseDouble(p.get("gc-dump-threshold"), "gc-dump-threshold", targetName));
@@ -369,6 +374,26 @@ public final class TargetRegistry {
         } catch (NumberFormatException e) {
             throw new IllegalArgumentException(String.format(
                     "Invalid value '%s' for property 'target.%s.%s' – expected a whole number in milliseconds",
+                    value, targetName, propName));
+        }
+    }
+
+    /**
+     * Parses an int value from a property string, throwing a descriptive
+     * {@link IllegalArgumentException} rather than a raw {@link NumberFormatException}.
+     *
+     * @param value      raw string value
+     * @param propName   property name for error reporting
+     * @param targetName target name for error reporting
+     * @return parsed int value
+     * @throws IllegalArgumentException if the value is not a valid integer
+     */
+    private static int parseInt(String value, String propName, String targetName) {
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException(String.format(
+                    "Invalid value '%s' for property 'target.%s.%s' – expected a whole number (TCP port)",
                     value, targetName, propName));
         }
     }

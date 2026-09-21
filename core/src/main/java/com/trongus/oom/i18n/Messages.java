@@ -42,7 +42,7 @@ import java.util.ResourceBundle;
  * {@code Messages} instances may be freely shared across threads.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.12.8
+ * @version 1.7.12.9
  * @since 1.3.0
  */
 public final class Messages {

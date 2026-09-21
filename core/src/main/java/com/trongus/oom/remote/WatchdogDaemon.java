@@ -44,7 +44,7 @@ import java.util.logging.Logger;
  * <p>All lifecycle operations ({@link #start()} and {@link #stop()}) are thread-safe and guarded.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.12.8
+ * @version 1.7.12.9
  * @since 1.7.0
  * @see TargetDescriptor
  * @see TargetRegistry
@@ -67,9 +67,10 @@ public final class WatchdogDaemon implements Closeable {
      */
     private final boolean overrideThresholds;
 
-    private final Map<String, OomWatchdog>             activeWatchdogs = new LinkedHashMap<>();
-    private final Map<String, JmxDiagnosticsCollector> collectors      = new LinkedHashMap<>();
-    private final Map<String, String>                  dumpApiUrls     = new LinkedHashMap<>();
+    private final Map<String, OomWatchdog>             activeWatchdogs  = new LinkedHashMap<>();
+    private final Map<String, JmxDiagnosticsCollector> collectors       = new LinkedHashMap<>();
+    private final Map<String, String>                  dumpApiUrls      = new LinkedHashMap<>();
+    private final Map<String, DumpApiServer>           autoDumpServers  = new LinkedHashMap<>();
 
     private volatile boolean running = false;
 
@@ -202,6 +203,19 @@ public final class WatchdogDaemon implements Closeable {
                 activeWatchdogs.put(target.getName(), watchdog);
                 if (target.getDumpApiUrl() != null) {
                     dumpApiUrls.put(target.getName(), target.getDumpApiUrl());
+                } else if (target.getDumpApiPort() > 0) {
+                    // Auto-start a DumpApiServer inside the watchdog, delegating via JMX
+                    String dumpDir = target.getDumpDirectory() != null
+                            ? target.getDumpDirectory()
+                            : baseConfig.getHeapDumpDirectory();
+                    DumpApiServer apiServer = new DumpApiServer(
+                            target.getDumpApiPort(), dumpDir, collector);
+                    apiServer.start();
+                    autoDumpServers.put(target.getName(), apiServer);
+                    dumpApiUrls.put(target.getName(), "http://127.0.0.1:" + target.getDumpApiPort());
+                    WatchdogLogger.info(LOG,
+                            "Auto-started DumpApiServer for target [{0}] on port {1}",
+                            logSafeName, target.getDumpApiPort());
                 }
 
                 watchdog.start();
@@ -250,8 +264,19 @@ public final class WatchdogDaemon implements Closeable {
             }
         }
 
+        for (Map.Entry<String, DumpApiServer> entry : autoDumpServers.entrySet()) {
+            try {
+                entry.getValue().close();
+                WatchdogLogger.fine(LOG, "Stopped auto-started DumpApiServer for target [{0}]", entry.getKey());
+            } catch (Exception e) {
+                WatchdogLogger.warning(LOG, e, "Error stopping DumpApiServer for target [{0}]: {1}",
+                        entry.getKey(), e.getMessage());
+            }
+        }
+
         activeWatchdogs.clear();
         collectors.clear();
+        autoDumpServers.clear();
         running = false;
         WatchdogLogger.info(LOG, "WatchdogDaemon stopped.");
     }

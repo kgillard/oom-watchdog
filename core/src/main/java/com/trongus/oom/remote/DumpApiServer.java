@@ -2,6 +2,7 @@ package com.trongus.oom.remote;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
+import com.trongus.oom.dump.DumpType;
 import com.trongus.oom.logging.WatchdogLogger;
 
 import java.io.Closeable;
@@ -70,7 +71,7 @@ import java.util.logging.Logger;
  * this server on a public network interface.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.12.8
+ * @version 1.7.12.9
  * @since 1.7.12.8
  */
 public final class DumpApiServer implements Closeable {
@@ -80,10 +81,18 @@ public final class DumpApiServer implements Closeable {
     private final int    port;
     private final String defaultDumpDir;
 
+    /**
+     * Optional JMX collector used when this server is started by the watchdog on behalf of a
+     * remote target.  When non-null, all dump operations are delegated to the target JVM via
+     * JMX instead of calling local MXBeans.
+     */
+    private final JmxDiagnosticsCollector jmxCollector;
+
     private volatile HttpServer server;
 
     /**
      * Creates a dump API server bound to the loopback interface.
+     * Dump operations call local MXBeans (for use when embedded inside the target JVM).
      *
      * @param port           TCP port to listen on (1–65535)
      * @param defaultDumpDir default directory for dump files; created on demand if absent
@@ -92,6 +101,23 @@ public final class DumpApiServer implements Closeable {
         if (port < 1 || port > 65535) throw new IllegalArgumentException("port out of range: " + port);
         this.port           = port;
         this.defaultDumpDir = defaultDumpDir != null ? defaultDumpDir : System.getProperty("java.io.tmpdir");
+        this.jmxCollector   = null;
+    }
+
+    /**
+     * Creates a dump API server that delegates all dump operations to a remote target JVM via
+     * the provided JMX collector.  Intended to be started by {@link WatchdogDaemon} on behalf
+     * of a configured target — no code changes are required in the target JVM.
+     *
+     * @param port           TCP port to listen on (1–65535)
+     * @param defaultDumpDir default directory for dump files on the watchdog host
+     * @param jmxCollector   open JMX collector for the target; must not be null
+     */
+    public DumpApiServer(int port, String defaultDumpDir, JmxDiagnosticsCollector jmxCollector) {
+        if (port < 1 || port > 65535) throw new IllegalArgumentException("port out of range: " + port);
+        this.port           = port;
+        this.defaultDumpDir = defaultDumpDir != null ? defaultDumpDir : System.getProperty("java.io.tmpdir");
+        this.jmxCollector   = jmxCollector;
     }
 
     /**
@@ -150,14 +176,19 @@ public final class DumpApiServer implements Closeable {
         String timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss_SSS").format(new Date());
         try {
             String path;
-            switch (type) {
-                case "heap":      path = dumpHeap(outDir, timestamp);      break;
-                case "thread":    path = dumpThread(outDir, timestamp);    break;
-                case "core":      path = dumpCore(outDir, timestamp);      break;
-                case "histogram": path = dumpHistogram(outDir, timestamp); break;
-                default:
-                    send(ex, 400, "{\"ok\":false,\"error\":\"Unknown dump type: " + escJson(type) + "\"}");
-                    return;
+            if (jmxCollector != null) {
+                // Delegate to the remote target JVM via the open JMX connection
+                path = dumpViaJmx(type, outDir, timestamp);
+            } else {
+                switch (type) {
+                    case "heap":      path = dumpHeap(outDir, timestamp);      break;
+                    case "thread":    path = dumpThread(outDir, timestamp);    break;
+                    case "core":      path = dumpCore(outDir, timestamp);      break;
+                    case "histogram": path = dumpHistogram(outDir, timestamp); break;
+                    default:
+                        send(ex, 400, "{\"ok\":false,\"error\":\"Unknown dump type: " + escJson(type) + "\"}");
+                        return;
+                }
             }
             if (path == null) {
                 send(ex, 500, "{\"ok\":false,\"error\":\"Dump produced no output — check server logs\"}");
@@ -168,6 +199,34 @@ public final class DumpApiServer implements Closeable {
             WatchdogLogger.warning(LOG, e, "DumpApiServer: {0} dump failed: {1}", type, e.getMessage());
             send(ex, 500, "{\"ok\":false,\"error\":\"" + escJson(e.getMessage() != null ? e.getMessage() : e.toString()) + "\"}");
         }
+    }
+
+    // ── JMX-delegating dump (watchdog-hosted mode) ────────────────────────────
+
+    /**
+     * Triggers a dump on the remote target JVM via the open JMX connection.
+     * Maps the HTTP type string to a {@link DumpType} and calls
+     * {@link JmxDiagnosticsCollector#triggerRemoteDump}.
+     */
+    private String dumpViaJmx(String type, File outDir, String timestamp) throws Exception {
+        DumpType dumpType;
+        switch (type) {
+            case "heap":      dumpType = DumpType.HEAP;            break;
+            case "thread":    dumpType = DumpType.THREAD;          break;
+            case "core":      dumpType = DumpType.CORE;            break;
+            case "histogram": dumpType = DumpType.CLASS_HISTOGRAM; break;
+            default:
+                throw new IllegalArgumentException("Unknown dump type: " + type);
+        }
+        String outputPath = new File(outDir, type + "_" + timestamp).getAbsolutePath();
+        String result = jmxCollector.triggerRemoteDump(dumpType, outputPath);
+        WatchdogLogger.info(LOG, "DumpApiServer (JMX mode): triggered {0} dump on remote target → [{1}]",
+                type, result);
+        // triggerRemoteDump returns "ERROR: ..." on failure
+        if (result != null && result.startsWith("ERROR:")) {
+            throw new RuntimeException(result);
+        }
+        return result != null ? result : outputPath;
     }
 
     // ── dump implementations — called in-process, so MXBeans are local ────────

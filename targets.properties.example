@@ -7,6 +7,7 @@ target.accumulator.crit          = 0.85
 target.accumulator.dump-types    = heap,thread
 target.accumulator.dump-dir      = /var/log
 target.accumulator.dump-api-url  = http://localhost:19791
+# target.accumulator.dump-api-port = 19791   # alternative: watchdog auto-starts DumpApiServer (no target changes)
 target.accumulator.leef-category = JVM_OOM_QRadar_accumulator
 target.accumulator.leef-tags     = env=prod,component=accumulator
 
@@ -19,6 +20,7 @@ target.accumulator_rollup.crit          = 0.85
 target.accumulator_rollup.dump-types    = heap,thread
 target.accumulator_rollup.dump-dir      = /var/log
 target.accumulator_rollup.dump-api-url  = http://localhost:19795
+# target.accumulator_rollup.dump-api-port = 19795   # alternative: watchdog auto-starts DumpApiServer (no target changes)
 target.accumulator_rollup.leef-category = JVM_OOM_QRadar_accumulator_rollup
 target.accumulator_rollup.leef-tags     = env=prod,component=accumulator_rollup
 
@@ -31,6 +33,7 @@ target.arc_builder.crit          = 0.85
 target.arc_builder.dump-types    = heap,thread
 target.arc_builder.dump-dir      = /var/log
 target.arc_builder.dump-api-url  = http://localhost:19792
+# target.arc_builder.dump-api-port = 19792   # alternative: watchdog auto-starts DumpApiServer (no target changes)
 target.arc_builder.leef-category = JVM_OOM_QRadar_arc_builder
 target.arc_builder.leef-tags     = env=prod,component=arc_builder
 
@@ -43,6 +46,7 @@ target.ariel_proxy_server.crit          = 0.85
 target.ariel_proxy_server.dump-types    = heap,thread
 target.ariel_proxy_server.dump-dir      = /var/log
 target.ariel_proxy_server.dump-api-url  = http://localhost:19782
+# target.ariel_proxy_server.dump-api-port = 19782   # alternative: watchdog auto-starts DumpApiServer (no target changes)
 target.ariel_proxy_server.leef-category = JVM_OOM_QRadar_ariel_proxy_server
 target.ariel_proxy_server.leef-tags     = env=prod,component=ariel_proxy_server
 
@@ -55,6 +59,7 @@ target.assetprofiler.crit          = 0.85
 target.assetprofiler.dump-types    = heap,thread
 target.assetprofiler.dump-dir      = /var/log
 target.assetprofiler.dump-api-url  = http://localhost:19780
+# target.assetprofiler.dump-api-port = 19780   # alternative: watchdog auto-starts DumpApiServer (no target changes)
 target.assetprofiler.leef-category = JVM_OOM_QRadar_assetprofiler
 target.assetprofiler.leef-tags     = env=prod,component=assetprofiler
 
@@ -67,6 +72,7 @@ target.ecs-ec.crit          = 0.85
 target.ecs-ec.dump-types    = heap,thread
 target.ecs-ec.dump-dir      = /var/log
 target.ecs-ec.dump-api-url  = http://localhost:19777
+# target.ecs-ec.dump-api-port = 19777   # alternative: watchdog auto-starts DumpApiServer (no target changes)
 target.ecs-ec.leef-category = JVM_OOM_QRadar_ecs-ec
 target.ecs-ec.leef-tags     = env=prod,component=ecs-ec
 
@@ -79,6 +85,7 @@ target.ecs-ep.crit          = 0.85
 target.ecs-ep.dump-types    = heap,thread
 target.ecs-ep.dump-dir      = /var/log
 target.ecs-ep.dump-api-url  = http://localhost:19799
+# target.ecs-ep.dump-api-port = 19799   # alternative: watchdog auto-starts DumpApiServer (no target changes)
 target.ecs-ep.leef-category = JVM_OOM_QRadar_ecs-ep
 target.ecs-ep.leef-tags     = env=prod,component=ecs-ep
 
@@ -91,6 +98,7 @@ target.historical_correlation_server.crit          = 0.85
 target.historical_correlation_server.dump-types    = heap,thread
 target.historical_correlation_server.dump-dir      = /var/log
 target.historical_correlation_server.dump-api-url  = http://localhost:19783
+# target.historical_correlation_server.dump-api-port = 19783   # alternative: watchdog auto-starts DumpApiServer (no target changes)
 target.historical_correlation_server.leef-category = JVM_OOM_QRadar_historical_correlation_server
 target.historical_correlation_server.leef-tags     = env=prod,component=historical_correlation_server
 
@@ -103,6 +111,7 @@ target.hostcontext.crit          = 0.85
 target.hostcontext.dump-types    = heap,thread
 target.hostcontext.dump-dir      = /var/log
 target.hostcontext.dump-api-url  = http://localhost:19778
+# target.hostcontext.dump-api-port = 19778   # alternative: watchdog auto-starts DumpApiServer (no target changes)
 target.hostcontext.leef-category = JVM_OOM_QRadar_hostcontext
 target.hostcontext.leef-tags     = env=prod,component=hostcontext
 
@@ -115,6 +124,7 @@ target.offline_forwarder.crit          = 0.85
 target.offline_forwarder.dump-types    = heap,thread
 target.offline_forwarder.dump-dir      = /var/log
 target.offline_forwarder.dump-api-url  = http://localhost:19793
+# target.offline_forwarder.dump-api-port = 19793   # alternative: watchdog auto-starts DumpApiServer (no target changes)
 target.offline_forwarder.leef-category = JVM_OOM_QRadar_offline_forwarder
 target.offline_forwarder.leef-tags     = env=prod,component=offline_forwarder
 
@@ -127,6 +137,7 @@ target.reporting_executor.crit          = 0.85
 target.reporting_executor.dump-types    = heap,thread
 target.reporting_executor.dump-dir      = /var/log
 target.reporting_executor.dump-api-url  = http://localhost:19781
+# target.reporting_executor.dump-api-port = 19781   # alternative: watchdog auto-starts DumpApiServer (no target changes)
 target.reporting_executor.leef-category = JVM_OOM_QRadar_reporting_executor
 target.reporting_executor.leef-tags     = env=prod,component=reporting_executor
 
@@ -139,6 +150,7 @@ target.tomcat.crit          = 0.85
 target.tomcat.dump-types    = heap,thread
 target.tomcat.dump-dir      = /var/log
 target.tomcat.dump-api-url  = http://localhost:19779
+# target.tomcat.dump-api-port = 19779   # alternative: watchdog auto-starts DumpApiServer (no target changes)
 target.tomcat.leef-category = JVM_OOM_QRadar_tomcat
 target.tomcat.leef-tags     = env=prod,component=tomcat
 
@@ -151,5 +163,6 @@ target.vis.crit          = 0.85
 target.vis.dump-types    = heap,thread
 target.vis.dump-dir      = /var/log
 target.vis.dump-api-url  = http://localhost:19790
+# target.vis.dump-api-port = 19790   # alternative: watchdog auto-starts DumpApiServer (no target changes)
 target.vis.leef-category = JVM_OOM_QRadar_vis
 target.vis.leef-tags     = env=prod,component=vis
