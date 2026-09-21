@@ -71,7 +71,7 @@ import java.util.logging.Logger;
  * this server on a public network interface.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.12.9
+ * @version 1.7.13.0
  * @since 1.7.12.8
  */
 public final class DumpApiServer implements Closeable {

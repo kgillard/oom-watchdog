@@ -23,7 +23,7 @@ import java.util.Set;
  * to prevent accidental exposure in log files or console transcripts.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.12.9
+ * @version 1.7.13.0
  * @since 1.7.0
  * @see TargetRegistry
  * @see JmxDiagnosticsCollector
@@ -80,6 +80,14 @@ public final class TargetDescriptor {
     private final String        dumpApiUrl;
 
     /**
+     * Optional filesystem path to the target JVM's stdout/stderr log file.
+     * When set, {@code kill -3} (SIGQUIT) thread dumps are reported as landing
+     * in this file rather than writing a synthetic marker.
+     * {@code null} when not configured.
+     */
+    private final String        signalDumpLog;
+
+    /**
      * TCP port on which the watchdog should auto-start a {@link DumpApiServer} for this
      * target when the daemon launches.  The server delegates all dump operations to the
      * target via the already-open JMX connection, so the target JVM requires no code changes.
@@ -119,6 +127,7 @@ public final class TargetDescriptor {
         this.leefCategory         = b.leefCategory;
         this.leefTags             = b.leefTags;
         this.dumpApiUrl           = b.dumpApiUrl;
+        this.signalDumpLog        = b.signalDumpLog;
         this.dumpApiPort          = b.dumpApiPort;
         this.gcDumpThreshold      = b.gcDumpThreshold;
         this.heapDumpThreshold    = b.heapDumpThreshold;
@@ -263,6 +272,16 @@ public final class TargetDescriptor {
         return dumpApiUrl;
     }
     /**
+     * Returns the optional filesystem path to the target JVM's stdout/stderr log file,
+     * where {@code kill -3} (SIGQUIT) thread dump output is written.
+     *
+     * @return absolute log file path, or {@code null} if not configured
+     */
+    public String getSignalDumpLog() {
+        return signalDumpLog;
+    }
+
+    /**
      * Returns the TCP port on which the watchdog auto-starts a {@link DumpApiServer} for
      * this target, or {@code 0} if auto-start is disabled (default).
      *
@@ -323,6 +342,7 @@ public final class TargetDescriptor {
                Objects.equals(leefCategory, that.leefCategory) &&
                Objects.equals(leefTags, that.leefTags) &&
                Objects.equals(dumpApiUrl, that.dumpApiUrl) &&
+               Objects.equals(signalDumpLog, that.signalDumpLog) &&
                dumpApiPort == that.dumpApiPort;
     }
 
@@ -330,8 +350,8 @@ public final class TargetDescriptor {
     public int hashCode() {
         return Objects.hash(name, jmxUrl, username, password, warnThreshold,
                             critThreshold, gcThreshold, pollIntervalMs, dumpTypes,
-                            dumpDirectory, leefCategory, leefTags, dumpApiUrl, dumpApiPort,
-                            gcDumpThreshold, heapDumpThreshold, nurseryDumpThreshold);
+                            dumpDirectory, leefCategory, leefTags, dumpApiUrl, signalDumpLog,
+                            dumpApiPort, gcDumpThreshold, heapDumpThreshold, nurseryDumpThreshold);
     }
 
     @Override
@@ -350,6 +370,7 @@ public final class TargetDescriptor {
                 ", leefCategory=" + (leefCategory != null ? "'" + leefCategory + "'" : "null") +
                 ", leefTags=" + (leefTags != null ? "'" + leefTags + "'" : "null") +
                 ", dumpApiUrl=" + (dumpApiUrl != null ? "'" + dumpApiUrl + "'" : "null") +
+                ", signalDumpLog=" + (signalDumpLog != null ? "'" + signalDumpLog + "'" : "null") +
                 ", dumpApiPort=" + dumpApiPort +
                 ", gcDumpThreshold=" + gcDumpThreshold +
                 ", heapDumpThreshold=" + heapDumpThreshold +
@@ -375,6 +396,7 @@ public final class TargetDescriptor {
         private String        leefCategory;
         private String        leefTags;
         private String        dumpApiUrl;
+        private String        signalDumpLog;
         private int           dumpApiPort          = 0;
         private double        gcDumpThreshold      = DUMP_THRESHOLD_DISABLED;
         private double        heapDumpThreshold    = DUMP_THRESHOLD_DISABLED;
@@ -538,6 +560,21 @@ public final class TargetDescriptor {
          */
         public Builder dumpApiUrl(String url) {
             this.dumpApiUrl = (url != null && !url.trim().isEmpty()) ? url.trim() : null;
+            return this;
+        }
+
+        /**
+         * Sets the filesystem path to the target JVM's stdout/stderr log file.
+         * When configured, {@code kill -3} (SIGQUIT) thread dump results report
+         * this path instead of writing a synthetic marker file.
+         *
+         * <p>Example: {@code signalDumpLog("/var/log/qradar/hostcontext.log")}
+         *
+         * @param logPath absolute path to the target's stdout/stderr log; {@code null} or blank = unset
+         * @return {@code this}
+         */
+        public Builder signalDumpLog(String logPath) {
+            this.signalDumpLog = (logPath != null && !logPath.trim().isEmpty()) ? logPath.trim() : null;
             return this;
         }
 

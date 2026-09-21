@@ -105,7 +105,7 @@ import java.util.logging.Logger;
  * <p>This utility class is stateless and thread-safe.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.12.9
+ * @version 1.7.13.0
  * @since 1.7.0
  * @see TargetDescriptor
  * @see WatchdogDaemon
@@ -314,6 +314,14 @@ public final class TargetRegistry {
             if (dumpApiUrl == null) dumpApiUrl = p.get("dump-api");
             if (dumpApiUrl != null && !dumpApiUrl.isEmpty()) {
                 b.dumpApiUrl(dumpApiUrl);
+            }
+
+            // Optional signal-dump-log: path to the target JVM's stdout log
+            // (where kill -3 / SIGQUIT thread dump output lands)
+            String signalDumpLog = p.get("signal-dump-log");
+            if (signalDumpLog == null) signalDumpLog = p.get("signal-log");
+            if (signalDumpLog != null && !signalDumpLog.isEmpty()) {
+                b.signalDumpLog(signalDumpLog);
             }
 
             // Optional auto-start dump API port (watchdog starts DumpApiServer internally)

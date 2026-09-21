@@ -55,7 +55,7 @@ import java.util.logging.Logger;
  * {@link #lastLevel} is an {@link AtomicReference} for consistent memory visibility.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.12.9
+ * @version 1.7.13.0
  * @since 1.0.0
  * @see JvmDiagnosticsCollector
  * @see RiskAssessor
@@ -72,7 +72,10 @@ public final class OomWatchdog {
     private final List<AlertChannel>      alertChannels;
     private final HeapDumpService         dumpService;
 
+    /** Executor used to schedule the poll loop. May be shared across watchdog instances. */
     private final ScheduledExecutorService scheduler;
+    /** Whether this instance owns the executor and should shut it down on stop(). */
+    private final boolean                  ownsScheduler;
     private volatile ScheduledFuture<?>    task;
 
     /**
@@ -108,6 +111,19 @@ public final class OomWatchdog {
      * @param dumpService   service used to capture diagnostic dumps at {@code CRITICAL} level
      *                      or when a per-metric dump threshold is exceeded
      */
+    /**
+     * Constructs a fully wired {@code OomWatchdog} using its own private single-thread scheduler.
+     * Use this constructor when a single watchdog is created standalone.
+     * When managing many targets, prefer
+     * {@link #OomWatchdog(WatchdogConfig, JvmDiagnosticsCollector, RiskAssessor, List, HeapDumpService, ScheduledExecutorService)}
+     * with a shared pool to reduce thread count.
+     *
+     * @param config        tuning parameters
+     * @param collector     collects raw JVM metrics each poll cycle
+     * @param assessor      classifies the risk level
+     * @param alertChannels zero or more channels to notify on elevated risk
+     * @param dumpService   captures diagnostic dumps at CRITICAL level
+     */
     public OomWatchdog(WatchdogConfig config,
                        JvmDiagnosticsCollector collector,
                        RiskAssessor assessor,
@@ -119,6 +135,41 @@ public final class OomWatchdog {
         this.alertChannels = Collections.unmodifiableList(alertChannels);
         this.dumpService   = dumpService;
         this.scheduler     = Executors.newSingleThreadScheduledExecutor(daemonThreadFactory());
+        this.ownsScheduler = true;
+    }
+
+    /**
+     * Constructs a fully wired {@code OomWatchdog} with a shared scheduler.
+     *
+     * <p>When many targets are monitored concurrently (e.g. 13 QRadar services),
+     * using a shared {@link ScheduledExecutorService} with a core pool sized to the
+     * target count avoids creating one OS thread per watchdog.  All poll tasks are
+     * submitted to the shared pool; each fires independently at its configured interval.
+     *
+     * <p>The shared scheduler is <strong>not</strong> shut down when this watchdog
+     * is stopped — the caller (typically {@link com.trongus.oom.remote.WatchdogDaemon})
+     * is responsible for lifecycle management of the shared pool.
+     *
+     * @param config          tuning parameters
+     * @param collector       collects raw JVM metrics each poll cycle
+     * @param assessor        classifies the risk level
+     * @param alertChannels   zero or more channels to notify on elevated risk
+     * @param dumpService     captures diagnostic dumps at CRITICAL level
+     * @param sharedScheduler external scheduler to submit poll tasks onto; not owned by this instance
+     */
+    public OomWatchdog(WatchdogConfig config,
+                       JvmDiagnosticsCollector collector,
+                       RiskAssessor assessor,
+                       List<AlertChannel> alertChannels,
+                       HeapDumpService dumpService,
+                       ScheduledExecutorService sharedScheduler) {
+        this.config        = config;
+        this.collector     = collector;
+        this.assessor      = assessor;
+        this.alertChannels = Collections.unmodifiableList(alertChannels);
+        this.dumpService   = dumpService;
+        this.scheduler     = sharedScheduler;
+        this.ownsScheduler = false;
     }
 
     /**
@@ -145,8 +196,11 @@ public final class OomWatchdog {
     public synchronized void stop() {
         if (task != null) {
             task.cancel(false);
+            task = null;
         }
-        scheduler.shutdown();
+        if (ownsScheduler) {
+            scheduler.shutdown();
+        }
         WatchdogLogger.info(LOG, "Stopped.");
     }
 

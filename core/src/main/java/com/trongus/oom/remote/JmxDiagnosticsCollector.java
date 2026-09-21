@@ -3,6 +3,7 @@ package com.trongus.oom.remote;
 import com.trongus.oom.collector.JvmDiagnosticsCollector;
 import com.trongus.oom.config.WatchdogConfig;
 import com.trongus.oom.dump.DumpType;
+import com.trongus.oom.dump.strategy.ProcessSignalDumper;
 import com.trongus.oom.i18n.Messages;
 import com.trongus.oom.logging.WatchdogLogger;
 import com.trongus.oom.model.JvmSnapshot;
@@ -102,7 +103,7 @@ import java.util.logging.Logger;
  * allow safe use from multiple threads if required.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.12.9
+ * @version 1.7.13.0
  * @since 1.7.0
  * @see TargetDescriptor
  * @see JvmDiagnosticsCollector
@@ -125,6 +126,26 @@ public final class JmxDiagnosticsCollector implements JvmDiagnosticsCollector, C
     // Connection state
     private JMXConnector          connector;
     private MBeanServerConnection mbsc;
+
+    /**
+     * Cached same-host determination. {@code null} = not yet evaluated.
+     * Evaluated lazily on the first {@link #triggerRemoteDump} call and cached
+     * so repeated dump requests don't re-resolve DNS on every call.
+     */
+    private volatile Boolean sameHost = null;
+
+    /**
+     * Remote PID parsed from the most recent {@link #collect()} snapshot
+     * ({@code RuntimeMXBean.getName()} format: {@code pid@host}).
+     * {@code -1} until the first successful collection.
+     */
+    private volatile long remotePid = -1L;
+
+    /**
+     * Whether the remote JVM is IBM J9/OpenJ9, detected from the JVM name
+     * property during the first successful collection.
+     */
+    private volatile boolean remoteIsJ9 = false;
 
     /**
      * Constructs a remote JMX collector for the specified target and watchdog configuration.
@@ -298,6 +319,13 @@ public final class JmxDiagnosticsCollector implements JvmDiagnosticsCollector, C
 
             if (postGcWindow.size() >= 2) {
                 growthRate = computeSlope(new ArrayList<>(postGcWindow));
+            }
+
+            // Cache remote PID and J9 flag for use by triggerRemoteDump()
+            long parsedPid = parsePid(remoteProcessName);
+            if (parsedPid > 0) remotePid = parsedPid;
+            if (jvmName != null && (jvmName.contains("J9") || jvmName.contains("OpenJ9"))) {
+                remoteIsJ9 = true;
             }
 
             String processDisplay = descriptor.getName() + " (" + remoteProcessName + ")";
@@ -485,6 +513,14 @@ public final class JmxDiagnosticsCollector implements JvmDiagnosticsCollector, C
         String mbeanSummary = formatMBeanSummary(mbeansPresent);
         WatchdogLogger.info(LOG, "Dump MBean availability on [{0}]: {1}",
                 descriptor.getName(), mbeanSummary);
+        // Priority 0: Same-host fast path — use OS signals and jcmd/jmap.
+        // This is more reliable than JMX MBeans: no MBean registration required,
+        // works on locked-down JVMs, and avoids RMI serialisation issues for heap dumps.
+        String signalResult = trySignalDump(type, outputPath);
+        if (signalResult != null && !signalResult.startsWith("ERROR:")) {
+            return signalResult;
+        }
+
         // Do NOT disconnect on dump failure — the JMX connection is shared with the
         // health-monitoring collect() loop; a bad dump request should not break polling.
         switch (type) {
@@ -881,6 +917,51 @@ public final class JmxDiagnosticsCollector implements JvmDiagnosticsCollector, C
         try (PrintWriter pw = new PrintWriter(new OutputStreamWriter(
                 new FileOutputStream(path), StandardCharsets.UTF_8))) {
             pw.print(text);
+        }
+    }
+
+    /**
+     * Attempts a same-host process-signal or {@code jcmd}/{@code jmap} based dump.
+     * Returns {@code null} if the target is not on the same host, the PID is unknown,
+     * or the mechanism is not available — the caller then falls through to JMX MBeans.
+     */
+    private String trySignalDump(DumpType type, String outputPath) {
+        // Evaluate same-host status once and cache
+        if (sameHost == null) {
+            String host = ProcessSignalDumper.hostFromJmxUrl(descriptor.getJmxUrl());
+            sameHost = ProcessSignalDumper.isSameHost(host);
+            WatchdogLogger.info(LOG,
+                    "Target [{0}] same-host={1} (JMX host=''{2}'')",
+                    descriptor.getName(), sameHost, host);
+        }
+        if (!sameHost) return null;
+        if (remotePid <= 0) {
+            WatchdogLogger.fine(LOG,
+                    "Same-host dump for [{0}]: remote PID not yet known — "
+                    + "waiting for first successful JMX poll", descriptor.getName());
+            return null;
+        }
+        String signalDumpLog = descriptor.getSignalDumpLog();
+        WatchdogLogger.info(LOG,
+                "Same-host dump: type={0} pid={1} j9={2} target=[{3}]",
+                type, remotePid, remoteIsJ9, descriptor.getName());
+        String result = ProcessSignalDumper.dump(type, remotePid, outputPath, remoteIsJ9, signalDumpLog);
+        if (result != null) {
+            WatchdogLogger.info(LOG,
+                    "Same-host {0} dump succeeded for [{1}]: {2}", type, descriptor.getName(), result);
+        }
+        return result;
+    }
+
+    /** Parses the numeric PID from a {@code RuntimeMXBean.getName()} string ({@code pid@host}). */
+    private static long parsePid(String runtimeName) {
+        if (runtimeName == null) return -1L;
+        int at = runtimeName.indexOf('@');
+        String pidStr = at > 0 ? runtimeName.substring(0, at) : runtimeName;
+        try {
+            return Long.parseLong(pidStr.trim());
+        } catch (NumberFormatException e) {
+            return -1L;
         }
     }
 

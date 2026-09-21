@@ -20,6 +20,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Logger;
 
 /**
@@ -44,7 +48,7 @@ import java.util.logging.Logger;
  * <p>All lifecycle operations ({@link #start()} and {@link #stop()}) are thread-safe and guarded.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.12.9
+ * @version 1.7.13.0
  * @since 1.7.0
  * @see TargetDescriptor
  * @see TargetRegistry
@@ -71,6 +75,14 @@ public final class WatchdogDaemon implements Closeable {
     private final Map<String, JmxDiagnosticsCollector> collectors       = new LinkedHashMap<>();
     private final Map<String, String>                  dumpApiUrls      = new LinkedHashMap<>();
     private final Map<String, DumpApiServer>           autoDumpServers  = new LinkedHashMap<>();
+
+    /**
+     * Shared thread pool for all watchdog poll tasks.
+     * Sized to the number of targets so every target can poll in parallel without
+     * one slow JMX connection delaying another.  Uses daemon threads so the pool
+     * does not prevent JVM shutdown.
+     */
+    private volatile ScheduledExecutorService sharedPool;
 
     private volatile boolean running = false;
 
@@ -133,6 +145,14 @@ public final class WatchdogDaemon implements Closeable {
         }
 
         WatchdogLogger.info(LOG, "Starting WatchdogDaemon with {0} target(s)...", targets.size());
+
+        // Create a shared pool sized to the number of targets so all can poll in parallel.
+        // JMX polls are mostly blocked on I/O, so a pool equal to the target count is appropriate.
+        int poolSize = Math.max(2, targets.size());
+        sharedPool = Executors.newScheduledThreadPool(poolSize, sharedDaemonThreadFactory());
+        WatchdogLogger.info(LOG,
+                "Created shared poll thread pool with {0} threads for {1} targets",
+                poolSize, targets.size());
 
         for (TargetDescriptor target : targets) {
             try {
@@ -197,7 +217,8 @@ public final class WatchdogDaemon implements Closeable {
                 RiskAssessor            assessor  = new ThresholdRiskAssessor(targetConfig);
                 HeapDumpService         dumper    = new CompositeDumpService(targetConfig);
 
-                OomWatchdog watchdog = new OomWatchdog(targetConfig, collector, assessor, channels, dumper);
+                OomWatchdog watchdog = new OomWatchdog(targetConfig, collector, assessor, channels, dumper,
+                        sharedPool);
 
                 collectors.put(target.getName(), collector);
                 activeWatchdogs.put(target.getName(), watchdog);
@@ -264,6 +285,12 @@ public final class WatchdogDaemon implements Closeable {
             }
         }
 
+        // Shut down the shared poll pool after all watchdogs are stopped
+        if (sharedPool != null) {
+            sharedPool.shutdown();
+            sharedPool = null;
+        }
+
         for (Map.Entry<String, DumpApiServer> entry : autoDumpServers.entrySet()) {
             try {
                 entry.getValue().close();
@@ -277,6 +304,7 @@ public final class WatchdogDaemon implements Closeable {
         activeWatchdogs.clear();
         collectors.clear();
         autoDumpServers.clear();
+        dumpApiUrls.clear();
         running = false;
         WatchdogLogger.info(LOG, "WatchdogDaemon stopped.");
     }
@@ -344,5 +372,22 @@ public final class WatchdogDaemon implements Closeable {
     @Override
     public void close() {
         stop();
+    }
+
+    // ── helpers ───────────────────────────────────────────────────────────────
+
+    /**
+     * Creates a {@link ThreadFactory} producing named daemon threads for the shared poll pool.
+     * Thread names include a sequential counter for easy identification in thread dumps:
+     * {@code oom-poll-1}, {@code oom-poll-2}, etc.
+     */
+    private static ThreadFactory sharedDaemonThreadFactory() {
+        AtomicInteger counter = new AtomicInteger(0);
+        return runnable -> {
+            Thread t = new Thread(runnable, "oom-poll-" + counter.incrementAndGet());
+            t.setDaemon(true);
+            t.setPriority(Thread.MIN_PRIORITY + 1);
+            return t;
+        };
     }
 }

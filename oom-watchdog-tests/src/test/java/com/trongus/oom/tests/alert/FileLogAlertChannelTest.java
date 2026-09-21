@@ -28,7 +28,7 @@ import static org.junit.Assert.*;
  * exercised indirectly through the file channel.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.12.9
+ * @version 1.7.13.0
  * @since 1.0.0
  * @see FileLogAlertChannel
  */
