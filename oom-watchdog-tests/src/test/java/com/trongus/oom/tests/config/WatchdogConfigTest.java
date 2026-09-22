@@ -214,26 +214,39 @@ public class WatchdogConfigTest {
         assertEquals(100L, cfg.getPollIntervalMs());
     }
 
-    /** QRadar port 0 must be rejected. */
+    /** QRadar port 0 must be rejected when a QRadar host is configured. */
     @Test(expected = IllegalArgumentException.class)
     public void testValidationQradarPortZeroIsInvalid() {
         WatchdogConfig.defaults()
+                .qradarHost("qradar.example.com")
                 .qradarPort(0)
                 .build();
     }
 
-    /** QRadar port 65536 must be rejected. */
+    /** QRadar port 65536 must be rejected when a QRadar host is configured. */
     @Test(expected = IllegalArgumentException.class)
     public void testValidationQradarPort65536IsInvalid() {
         WatchdogConfig.defaults()
+                .qradarHost("qradar.example.com")
                 .qradarPort(65536)
                 .build();
     }
 
-    /** QRadar port 65535 (maximum valid port) must be accepted. */
+    /** Invalid qradar port must be silently accepted when no host is configured (QRadar disabled). */
+    @Test
+    public void testValidationQradarPortIgnoredWhenNoHost() {
+        // Port 0 is invalid but QRadar is disabled — should not throw
+        WatchdogConfig cfg = WatchdogConfig.defaults()
+                .qradarPort(0)
+                .build();
+        assertEquals(0, cfg.getQradarPort());
+    }
+
+    /** QRadar port 65535 (maximum valid port) must be accepted when host is set. */
     @Test
     public void testValidationQradarPortMaxValid() {
         WatchdogConfig cfg = WatchdogConfig.defaults()
+                .qradarHost("qradar.example.com")
                 .qradarPort(65535)
                 .build();
         assertEquals(65535, cfg.getQradarPort());

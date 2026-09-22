@@ -436,7 +436,10 @@ public final class WatchdogConfig {
                 throw new IllegalArgumentException(
                     "leakDetectionWindowSize must be >= 2");
             }
-            if (qradarPort < 1 || qradarPort > 65535) {
+            // Only validate qradarPort when a QRadar host is actually configured;
+            // when QRadar is disabled the port value is irrelevant.
+            if (qradarHost != null && !qradarHost.trim().isEmpty()
+                    && (qradarPort < 1 || qradarPort > 65535)) {
                 throw new IllegalArgumentException(
                     "qradarPort must be in [1, 65535]");
             }
