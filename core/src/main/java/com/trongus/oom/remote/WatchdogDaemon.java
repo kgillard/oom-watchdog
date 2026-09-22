@@ -3,7 +3,6 @@ package com.trongus.oom.remote;
 import com.trongus.oom.alert.AlertChannel;
 import com.trongus.oom.alert.ConsoleAlertChannel;
 import com.trongus.oom.alert.FileLogAlertChannel;
-import com.trongus.oom.alert.QRadarAlertChannel;
 import com.trongus.oom.collector.JvmDiagnosticsCollector;
 import com.trongus.oom.config.WatchdogConfig;
 import com.trongus.oom.dump.CompositeDumpService;

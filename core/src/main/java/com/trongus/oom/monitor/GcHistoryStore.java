@@ -10,7 +10,6 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -54,7 +53,7 @@ import java.util.logging.Logger;
  * parallel; concurrent writes to the same target are serialised.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.13.13
+ * @version 1.7.13.17
  * @since 1.7.13.2
  * @see MetricsHttpServer
  */

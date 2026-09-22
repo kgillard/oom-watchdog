@@ -13,7 +13,7 @@
 
 ## Download
 
-Pre-built JARs are available in the [v1.7.11.5 release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.13.17):
+Pre-built JARs are available in the [v1.7.13.17 release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.13.17):
 
 | Artefact | Description | Size |
 |----------|-------------|------|
@@ -114,7 +114,7 @@ chmod +x oom-watchdog-installer.sh
 | `--gc-dump-threshold <0.0–1.0>` | _(disabled)_ | GC overhead ratio that triggers an immediate dump regardless of risk level |
 | `--heap-dump-threshold <0.0–1.0>` | _(disabled)_ | Heap usage ratio that triggers an immediate dump (supplements the CRITICAL-level dump) |
 | `--poll-ms <ms>` | `5000` | Poll interval in milliseconds (minimum: 100) |
-| `--dump-dir <path>` | `./dumps` | Output directory for dump artefacts |
+| `--dump-dir <path>` | `./oom-watchdog` | Output directory for dump artefacts |
 | `--dump-types <list>` | _(none)_ | Comma-separated: `HEAP,THREAD,CLASS_HISTOGRAM,CORE` |
 | `--log-file <path>` | `./oom-watchdog.log` | Append structured alerts to this file |
 | `--log-level <level>` | `INFO` | Internal diagnostic log level: `FINEST` (full trace incl. LEEF payloads), `FINE` (debug — per-poll and per-channel events), `CONFIG`, `INFO`, `WARNING`, `SEVERE` |

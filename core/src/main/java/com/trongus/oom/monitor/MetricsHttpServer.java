@@ -5,7 +5,6 @@ import com.sun.net.httpserver.HttpServer;
 import com.sun.net.httpserver.HttpsConfigurator;
 import com.sun.net.httpserver.HttpsParameters;
 import com.sun.net.httpserver.HttpsServer;
-import com.trongus.oom.dump.CompositeDumpService;
 import com.trongus.oom.dump.DumpType;
 import com.trongus.oom.logging.WatchdogLogger;
 import com.trongus.oom.model.JvmSnapshot;
@@ -165,7 +164,7 @@ import java.util.logging.Logger;
  * they respond with {@code 503 Service Unavailable}.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.13.13
+ * @version 1.7.13.17
  * @since 1.7.3
  * @see TlsConfig
  * @see GcHistoryStore

@@ -124,6 +124,8 @@ classDiagram
     class MetricsHttpServer {
         -OomWatchdog selfWatchdog
         -Map~String,OomWatchdog~ remoteWatchdogs
+        -Map~String,JmxDiagnosticsCollector~ remoteCollectors
+        -Map~String,String~ remoteDumpApiUrls
         -GcHistoryStore gcHistory
         -int port
         -boolean bindAll
@@ -464,6 +466,7 @@ classDiagram
     MetricsHttpServer --> OomWatchdog
     MetricsHttpServer --> TlsConfig
     MetricsHttpServer --> GcHistoryStore
+    MetricsHttpServer --> JmxDiagnosticsCollector
     OomWatchdog --> GcHistoryStore
     TlsConfig --> Mode
     WatchdogDaemon --> MetricsHttpServer

@@ -180,7 +180,7 @@ You should see output like:
 | `--gc-dump-threshold` | `double` (0–1) | _(disabled)_ | GC overhead ratio that triggers an immediate dump |
 | `--heap-dump-threshold` | `double` (0–1) | _(disabled)_ | Heap usage ratio that triggers an immediate dump |
 | `--poll-ms` | `long` ≥100 | `5000` | Poll interval in milliseconds |
-| `--dump-dir` | `path` | `./dumps` | Output directory for dump artefacts |
+| `--dump-dir` | `path` | `./oom-watchdog` | Output directory for dump artefacts |
 | `--dump-types` | CSV | _(none)_ | `HEAP`, `THREAD`, `CLASS_HISTOGRAM`, `CORE` |
 | `--log-file` | `path` | `./oom-watchdog.log` | Append structured alerts to this file |
 | `--qradar-host` | `host/IP` | _(disabled)_ | QRadar syslog receiver hostname |
