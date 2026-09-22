@@ -244,7 +244,6 @@
       user-select: none;
       transition: box-shadow 0.15s, opacity 0.15s;
       border-radius: var(--radius);
-      min-width: 220px;
       min-height: 40px;
       overflow: visible;
     }
@@ -266,19 +265,19 @@
     }
     .dcard:hover::before { opacity: 0.55; }
 
-    /* ── Per-card resize handle ──────────────────────────────────────────────── */
-    /* Small triangular grip injected into each card via JS (.card-resize-handle) */
+    /* ── Per-card resize handle (height only) ───────────────────────────────── */
+    /* Small bottom-centre grip injected into each card via JS */
     .card-resize-handle {
       position: absolute;
-      bottom: 0; right: 0;
-      width: 16px; height: 16px;
-      cursor: se-resize;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 40px; height: 8px;
+      cursor: ns-resize;
       z-index: 10;
-      /* Two-line corner indicator, drawn with SVG-like borders */
       background: transparent;
       border-bottom: 2px solid var(--muted);
-      border-right:  2px solid var(--muted);
-      border-bottom-right-radius: var(--radius);
+      border-radius: 0 0 2px 2px;
       opacity: 0;
       transition: opacity 0.15s, border-color 0.15s;
     }
@@ -293,9 +292,9 @@
       border-color: var(--accent);
       opacity: 1;
     }
-    /* Suppress text selection and cursor change body-wide while resizing */
+    /* Suppress text selection body-wide while resizing */
     body.card-resizing,
-    body.card-resizing * { user-select: none !important; cursor: se-resize !important; }
+    body.card-resizing * { user-select: none !important; cursor: ns-resize !important; }
 
     /* ── Metric cards grid ───────────────────────────────────────────────────── */
     .metric-grid {
@@ -308,7 +307,7 @@
                     border-radius: var(--radius); padding: 12px 14px;
                     cursor: grab; user-select: none; position: relative;
                     transition: box-shadow 0.15s, opacity 0.15s;
-                    min-width: 150px; min-height: 60px; overflow: visible; }
+                    min-height: 60px; overflow: visible; }
     .mcard:active { cursor: grabbing; }
     .mcard.drag-over  { box-shadow: 0 0 0 2px var(--accent); }
     .mcard.dragging   { opacity: 0.4; }
@@ -2835,21 +2834,24 @@ ensureTabs = function() {
 
 // ── Per-card resize (horizontal + vertical) ───────────────────────────────────
 // Each .dcard and .mcard gets a small .card-resize-handle in its bottom-right
-// corner.  Dragging it sets explicit width + height on the card, stored in
-// localStorage keyed by data-card-id so they survive page reloads.
+// corner.  Dragging it sets an explicit HEIGHT on the card only.
 //
-// Resizing a .dcard (section card) adds an explicit height; the card is already
-// full-width in the flex column so horizontal resize is most useful for .mcard.
-// Both dimensions are always tracked so the user has full control.
+// Width is intentionally NOT resized:
+//   • .dcard lives in a flex column — width must stay 100% so all sections
+//     remain flush and evenly filling the pane.
+//   • .mcard lives in a CSS grid (auto-fill minmax) — width is owned by the
+//     grid track; overriding it on one card breaks column alignment for the rest.
+//
+// Heights are persisted in localStorage and restored on reload.
 
-var CARD_SIZE_KEY = 'oom-card-sizes';  // localStorage key → JSON object
+var CARD_SIZE_KEY = 'oom-card-sizes';  // localStorage key → JSON object { cardId: h }
 
 function _loadCardSizes() {
   try { return JSON.parse(localStorage.getItem(CARD_SIZE_KEY) || '{}'); } catch(e) { return {}; }
 }
-function _saveCardSize(cardId, w, h) {
+function _saveCardSize(cardId, h) {
   var sizes = _loadCardSizes();
-  sizes[cardId] = { w: w, h: h };
+  sizes[cardId] = h;
   try { localStorage.setItem(CARD_SIZE_KEY, JSON.stringify(sizes)); } catch(e) {}
 }
 function _applyCardSizes() {
@@ -2857,9 +2859,10 @@ function _applyCardSizes() {
   Object.keys(sizes).forEach(function(id) {
     var el = document.querySelector('[data-card-id="' + id + '"]');
     if (!el) return;
-    var s = sizes[id];
-    if (s.w > 0) el.style.width  = s.w + 'px';
-    if (s.h > 0) el.style.height = s.h + 'px';
+    var h = sizes[id];
+    // Support both the old {w,h} format and the new plain number format
+    if (typeof h === 'object') h = h.h;
+    if (h > 0) el.style.height = h + 'px';
   });
 }
 
@@ -2875,7 +2878,7 @@ function initCardResize() {
     handle.addEventListener('dragstart', function(e) { e.preventDefault(); e.stopPropagation(); });
     card.appendChild(handle);
   });
-  // Restore previously persisted sizes
+  // Restore previously persisted heights
   _applyCardSizes();
 }
 
@@ -2884,8 +2887,8 @@ function initCardResize() {
 (function() {
   var _resizeCard   = null;   // card element being resized
   var _resizeHandle = null;   // handle element
-  var _startX = 0, _startY = 0;
-  var _startW = 0, _startH = 0;
+  var _startY = 0;
+  var _startH = 0;
 
   document.addEventListener('mousedown', function(e) {
     if (!e.target.classList.contains('card-resize-handle')) return;
@@ -2893,9 +2896,7 @@ function initCardResize() {
     e.stopPropagation();   // do NOT trigger drag-and-drop on the parent card
     _resizeHandle = e.target;
     _resizeCard   = e.target.parentElement;
-    _startX = e.clientX;
     _startY = e.clientY;
-    _startW = _resizeCard.offsetWidth;
     _startH = _resizeCard.offsetHeight;
     _resizeHandle.classList.add('resizing');
     document.body.classList.add('card-resizing');
@@ -2903,15 +2904,7 @@ function initCardResize() {
 
   document.addEventListener('mousemove', function(e) {
     if (!_resizeCard) return;
-    var newW = Math.max(
-      parseInt(_resizeCard.style.minWidth  || '0', 10) || 100,
-      _startW + (e.clientX - _startX)
-    );
-    var newH = Math.max(
-      parseInt(_resizeCard.style.minHeight || '0', 10) || 40,
-      _startH + (e.clientY - _startY)
-    );
-    _resizeCard.style.width  = newW + 'px';
+    var newH = Math.max(40, _startH + (e.clientY - _startY));
     _resizeCard.style.height = newH + 'px';
   });
 
@@ -2919,9 +2912,7 @@ function initCardResize() {
     if (!_resizeCard) return;
     var cardId = _resizeCard.dataset.cardId;
     if (cardId) {
-      _saveCardSize(cardId,
-        parseInt(_resizeCard.style.width,  10) || 0,
-        parseInt(_resizeCard.style.height, 10) || 0);
+      _saveCardSize(cardId, parseInt(_resizeCard.style.height, 10) || 0);
     }
     if (_resizeHandle) _resizeHandle.classList.remove('resizing');
     document.body.classList.remove('card-resizing');
