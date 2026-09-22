@@ -9,6 +9,10 @@
        See BRANDING.md for full instructions and ready-to-paste theme presets.
        ═══════════════════════════════════════════════════════════════════════════ -->
   <title>OOM Watchdog Dashboard</title>
+  <!-- html2canvas: used for the "Save as PNG" page snapshot feature -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"
+          integrity="sha512-BNaRQnYJYiPSqHHDb58B0yaPfCu+Wgds8Gp/gU33kqBtgNS4tSPHuGibyoeqMV/TJlSKda6FXzoEyYGjTe+vXA=="
+          crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
   <style>
     /* ── BRANDING TOKENS ──────────────────────────────────────────────────────── */
@@ -75,7 +79,60 @@
     #brand-logo.visible { display: inline-block; }
     header h1   { font-size: 16px; font-weight: 700; letter-spacing: 0.3px; }
     .subtitle   { color: var(--muted); font-size: 11px; margin-top: 1px; }
-    #risk-badge { margin-left: auto; }
+    #risk-badge { margin-left: auto; margin-right: 8px; }
+
+    /* ── View menu (global card options) ─────────────────────────────────────── */
+    #view-menu-wrap {
+      position: relative;
+      display:  flex;
+      align-items: center;
+    }
+    #view-menu-btn {
+      background:    var(--surface2, var(--surface));
+      border:        1px solid var(--border);
+      border-radius: 6px;
+      color:         var(--muted);
+      padding:       4px 10px;
+      font-size:     12px;
+      cursor:        pointer;
+      display:       flex;
+      align-items:   center;
+      gap:           5px;
+      white-space:   nowrap;
+      font-family:   inherit;
+      line-height:   1;
+    }
+    #view-menu-btn:hover { color: var(--text); border-color: var(--accent); }
+    #view-menu-dropdown {
+      position:      absolute;
+      top:           calc(100% + 4px);
+      right:         0;
+      background:    var(--surface2, var(--surface));
+      border:        1px solid var(--border);
+      border-radius: 6px;
+      z-index:       300;
+      min-width:     190px;
+      display:       none;
+      box-shadow:    0 4px 16px rgba(0,0,0,0.4);
+    }
+    #view-menu-dropdown.open { display: block; }
+    .vmenu-item {
+      display:     flex;
+      align-items: center;
+      gap:         8px;
+      padding:     8px 14px;
+      font-size:   13px;
+      color:       var(--muted);
+      cursor:      pointer;
+      border-radius: 4px;
+    }
+    .vmenu-item:hover  { background: var(--surface); color: var(--text); }
+    .vmenu-item .vico  { font-size: 13px; width: 16px; text-align: center; flex-shrink: 0; }
+    .vmenu-sep {
+      height: 1px;
+      background: var(--border);
+      margin: 4px 0;
+    }
 
     /* ── Toolbar ─────────────────────────────────────────────────────────────── */
     .toolbar {
@@ -270,29 +327,29 @@
     /* ── Per-card resize handle (height only) ───────────────────────────────── */
     /* Small bottom-centre grip injected into each card via JS */
     .card-resize-handle {
-      position: absolute;
-      bottom: 0;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 40px; height: 8px;
-      cursor: ns-resize;
-      z-index: 10;
-      background: transparent;
-      border-bottom: 2px solid var(--muted);
-      border-radius: 0 0 2px 2px;
-      opacity: 0;
-      transition: opacity 0.15s, border-color 0.15s;
+      position:      absolute;
+      top:           0;
+      right:         0;
+      bottom:        0;
+      width:         6px;
+      cursor:        ns-resize;
+      z-index:       10;
+      background:    transparent;
+      border-right:  2px solid var(--muted);
+      border-radius: 0 4px 4px 0;
+      opacity:       0;
+      transition:    opacity 0.15s, border-color 0.15s;
     }
-    /* Show handle on card hover OR during active resize */
+    /* Show handle ONLY on card hover or active resize — never otherwise */
     .dcard:hover  .card-resize-handle,
     .mcard:hover  .card-resize-handle,
     .card-resize-handle.resizing {
-      opacity: 0.7;
+      opacity: 0.55;
     }
     .card-resize-handle:hover,
     .card-resize-handle.resizing {
       border-color: var(--accent);
-      opacity: 1;
+      opacity:      1;
     }
     /* Suppress text selection body-wide while resizing */
     body.card-resizing,
@@ -301,9 +358,14 @@
     /* ── Metric cards grid ───────────────────────────────────────────────────── */
     .metric-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
       gap: 12px;
       margin-bottom: 16px;
+    }
+    /* JVM Process card spans 2 columns so long paths don't wrap */
+    .mcard.mcard-wide {
+      grid-column: span 2;
+      min-width: 0;
     }
     .mcard        { background: var(--surface); border: 1px solid var(--border);
                     border-radius: var(--radius); padding: 12px 14px;
@@ -783,6 +845,24 @@
       <div class="subtitle">Real-time JVM health — heap, GC, and nursery metrics per monitored target</div>
     </div>
     <div id="risk-badge" class="risk-badge risk-UNKNOWN">—</div>
+    <div id="view-menu-wrap">
+      <button id="view-menu-btn" onclick="toggleViewMenu()" title="View options">
+        ⊞ View ▾
+      </button>
+      <div id="view-menu-dropdown">
+        <div class="vmenu-item" onclick="resetAllCardSizes()">
+          <span class="vico">↺</span> Reset all card sizes
+        </div>
+        <div class="vmenu-sep"></div>
+        <div class="vmenu-item" onclick="resetCardOrder()">
+          <span class="vico">⇄</span> Reset card order
+        </div>
+        <div class="vmenu-sep"></div>
+        <div class="vmenu-item" onclick="savePageAsPng()" id="vmenu-snapshot">
+          <span class="vico">📷</span> Save page as PNG…
+        </div>
+      </div>
+    </div>
   </header>
   <!-- ═══════════════════════════════════════════════════════════════════════════ -->
 
@@ -1194,11 +1274,11 @@ function mcardHtml(id, label, value, sub, withGauge) {
 }
 
 function processCardHtml(s) {
-  return '<div class="mcard" draggable="true" data-card-id="' + s + '-proc-card">' +
+  return '<div class="mcard mcard-wide" draggable="true" data-card-id="' + s + '-proc-card">' +
     '<div class="mcard-label">JVM Process</div>' +
-    '<div class="mcard-value" style="font-size:12px;word-break:break-all;line-height:1.4" id="' + s + '-proc">—</div>' +
-    '<div class="info-grid" style="margin-top:7px">' +
-      '<div class="info-k">Path</div><div class="info-v" id="' + s + '-jvmpath" style="font-family:monospace;font-size:10px">—</div>' +
+    '<div class="mcard-value" style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.4" id="' + s + '-proc" title="">—</div>' +
+    '<div class="info-grid" style="margin-top:7px;grid-template-columns:max-content 1fr">' +
+      '<div class="info-k">Path</div><div class="info-v" id="' + s + '-jvmpath" style="font-family:monospace;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">—</div>' +
       '<div class="info-k">Uptime</div><div class="info-v" id="' + s + '-uptime">—</div>' +
       '<div class="info-k">Crit thr.</div><div class="info-v" id="' + s + '-crit-thr">—</div>' +
       '<div class="info-k">Last poll</div><div class="info-v" id="' + s + '-lastpoll">—</div>' +
@@ -1374,7 +1454,10 @@ function gcAnalysisSectionHtml(s, name) {
           '<span class="sc-ts" id="' + s + '-gc-cursor-ts">—</span>',
         '</div>',
         '<input type="range" class="gc-scrubber" id="' + s + '-gc-scrubber" min="0" max="100" value="100"',
-          ' oninput="gcScrub(\'' + s + '\',this.value)">',
+          ' draggable="false" ondragstart="event.stopPropagation()"',
+          ' oninput="gcScrub(\'' + s + '\',this.value)"',
+          ' onmousedown="event.stopPropagation()"',
+          ' ontouchstart="event.stopPropagation()">',
         '<div class="gc-scrubber-ticks">',
           '<span id="' + s + '-gc-ts-start">—</span>',
           '<span id="' + s + '-gc-ts-end">—</span>',
@@ -1472,9 +1555,13 @@ function renderPane(name) {
 
   setEl(s + '-nonheap-mb-val', fmt1(d.nonHeapUsedMB));
 
-  // Process card
+  // Process card — update title attrs so truncated text shows on hover
   setEl(s + '-proc',     d.processName || '—');
+  var procEl = document.getElementById(s + '-proc');
+  if (procEl) procEl.title = d.processName || '';
   setEl(s + '-jvmpath',  d.javaHome    || '—');
+  var pathEl = document.getElementById(s + '-jvmpath');
+  if (pathEl) pathEl.title = d.javaHome || '';
   setEl(s + '-uptime',   fmtUptime(d.jvmUptimeMs || 0));
   setEl(s + '-crit-thr', critPct.toFixed(1) + '%');
   setEl(s + '-lastpoll', new Date(d.timestampMs).toLocaleTimeString());
@@ -1620,8 +1707,47 @@ function drawSparkline(svgId, data, maxVal, threshPct, curId, curText, lineColor
     return;
   }
 
-  // ── LINE / AREA mode (SVG sparkline — default) ──────────────────────────
-  // Restore SVG if a bar canvas replaced it
+  // ── SCATTER mode (canvas dots) ──────────────────────────────────────────
+  if (chartType === 'scatter') {
+    var body3 = document.getElementById(bodyId);
+    if (body3) {
+      var scSpId = svgId + '-scatter-canvas';
+      if (!document.getElementById(scSpId)) {
+        body3.innerHTML = '<canvas id="' + scSpId + '" height="65" style="width:100%;display:block"></canvas>';
+      }
+      var scSp = document.getElementById(scSpId);
+      if (scSp) {
+        var dprSp = window.devicePixelRatio || 1;
+        var WSp = scSp.clientWidth || 300, HSp = 65;
+        scSp.width  = WSp * dprSp; scSp.height = HSp * dprSp;
+        var ctxSp = scSp.getContext('2d');
+        ctxSp.scale(dprSp, dprSp);
+        ctxSp.clearRect(0, 0, WSp, HSp);
+        var nSp = data.length;
+        var resolvedSp = lineColor.replace('var(--crit)','#ef4444').replace('var(--warn)','#f59e0b')
+          .replace('var(--accent)','#3b82f6').replace('var(--ok)','#22c55e').replace('var(--muted)','#7a7e96');
+        for (var spi = 0; spi < nSp; spi++) {
+          var spX = (spi / (nSp - 1)) * WSp;
+          var spY = HSp - Math.min(Math.max(data[spi] / maxVal, 0), 1) * (HSp - 4) - 2;
+          ctxSp.beginPath();
+          ctxSp.arc(spX, spY, 2, 0, 2 * Math.PI);
+          ctxSp.fillStyle = resolvedSp;
+          ctxSp.fill();
+        }
+        if (maxVal > 0) {
+          var tySp = HSp - (threshPct / maxVal) * HSp;
+          ctxSp.strokeStyle = '#ef4444'; ctxSp.lineWidth = 1;
+          ctxSp.setLineDash([4, 3]);
+          ctxSp.beginPath(); ctxSp.moveTo(0, tySp); ctxSp.lineTo(WSp, tySp); ctxSp.stroke();
+          ctxSp.setLineDash([]);
+        }
+      }
+    }
+    return;
+  }
+
+  // ── LINE / AREA / STEP mode (SVG sparkline — default) ───────────────────
+  // Restore SVG if a bar/scatter canvas replaced it
   var bodyEl = document.getElementById(bodyId);
   if (bodyEl && !document.getElementById(svgId)) {
     bodyEl.innerHTML =
@@ -1661,15 +1787,23 @@ function drawSparkline(svgId, data, maxVal, threshPct, curId, curText, lineColor
   for (var i = 0; i < n; i++) {
     pts.push([(i / (n - 1)) * W, H - Math.min(Math.max(data[i] / maxVal, 0), 1) * H]);
   }
-  var linePath = 'M ' + pts[0][0] + ' ' + pts[0][1];
-  for (var j = 1; j < pts.length; j++) {
-    var cx = (pts[j-1][0] + pts[j][0]) / 2;
-    linePath += ' C ' + cx + ' ' + pts[j-1][1] + ' ' + cx + ' ' + pts[j][1] + ' ' + pts[j][0] + ' ' + pts[j][1];
+  var linePath;
+  if (chartType === 'step') {
+    linePath = 'M ' + pts[0][0] + ' ' + pts[0][1];
+    for (var j = 1; j < pts.length; j++) {
+      linePath += ' H ' + pts[j][0] + ' V ' + pts[j][1];
+    }
+  } else {
+    linePath = 'M ' + pts[0][0] + ' ' + pts[0][1];
+    for (var j = 1; j < pts.length; j++) {
+      var cx = (pts[j-1][0] + pts[j][0]) / 2;
+      linePath += ' C ' + cx + ' ' + pts[j-1][1] + ' ' + cx + ' ' + pts[j][1] + ' ' + pts[j][0] + ' ' + pts[j][1];
+    }
   }
   lineEl.setAttribute('d', linePath);
-  // Area: show fill for 'area' type; hide for 'line' type
+  // Area: show fill for 'area' and 'step' types; hide for 'line' type
   if (areaEl) {
-    if (chartType === 'area') {
+    if (chartType === 'area' || chartType === 'step') {
       var areaPath = linePath + ' L ' + pts[pts.length-1][0] + ' ' + H + ' L ' + pts[0][0] + ' ' + H + ' Z';
       areaEl.setAttribute('d', areaPath);
     } else {
@@ -2241,7 +2375,48 @@ function gcDrawToCanvas(canvasId, data, unit, lineColor, curId, curText, cursorI
     return;
   }
 
-  // Line / Area — restore canvas element if it was replaced
+  // Scatter — dots only, no connecting line
+  if (ctype === 'scatter') {
+    var bodyElS = document.getElementById(bodyId2);
+    if (bodyElS) {
+      var scCanvasId = canvasId + '-scatter';
+      if (!document.getElementById(scCanvasId)) {
+        bodyElS.innerHTML = '<div class="gc-canvas-wrap"><canvas id="' + scCanvasId + '" height="80" style="width:100%;display:block"></canvas></div>';
+      }
+      var scC = document.getElementById(scCanvasId);
+      if (scC) {
+        var dprS = window.devicePixelRatio || 1;
+        var WS = scC.clientWidth || 320, HS = 80;
+        scC.width  = WS * dprS; scC.height = HS * dprS;
+        var ctxS = scC.getContext('2d');
+        ctxS.scale(dprS, dprS);
+        ctxS.clearRect(0, 0, WS, HS);
+        var nS    = data.length;
+        var maxVS = Math.max.apply(null, data.filter(function(v){ return v > 0; })) || 1;
+        var minVS = Math.min.apply(null, data.filter(function(v){ return v > 0; }));
+        if (!isFinite(minVS)) minVS = 0;
+        if (maxVS === minVS) maxVS = minVS + 1;
+        var resColor = lineColor.replace('var(--crit)','#ef4444').replace('var(--warn)','#f59e0b')
+          .replace('var(--accent)','#3b82f6').replace('var(--ok)','#22c55e').replace('var(--muted)','#7a7e96');
+        for (var sci = 0; sci < nS; sci++) {
+          var scX = (sci / (nS - 1)) * WS;
+          var scY = HS - 4 - ((data[sci] - minVS) / (maxVS - minVS)) * (HS - 8);
+          ctxS.beginPath();
+          if (sci === cursorIdx) {
+            ctxS.arc(scX, scY, 4, 0, 2 * Math.PI);
+            ctxS.fillStyle = '#ffffff';
+          } else {
+            ctxS.arc(scX, scY, 2, 0, 2 * Math.PI);
+            ctxS.fillStyle = resColor;
+          }
+          ctxS.fill();
+        }
+      }
+    }
+    return;
+  }
+
+  // Line / Area / Step — restore canvas element if it was replaced
   var bodyEl4 = document.getElementById(bodyId2);
   if (bodyEl4 && !document.getElementById(canvasId)) {
     bodyEl4.innerHTML = '<div class="gc-canvas-wrap"><canvas id="' + canvasId + '" height="80"></canvas></div>';
@@ -2250,8 +2425,8 @@ function gcDrawToCanvas(canvasId, data, unit, lineColor, curId, curText, cursorI
   }
 
   gcDrawCanvas(canvas, data, cursorIdx !== undefined ? cursorIdx : null, lineColor,
-    ctype !== 'line' /* fillArea = true for area, false for line */,
-    true, null, null, unit);
+    ctype === 'area' /* fillArea */,
+    true, null, null, unit, ctype === 'step');
 }
 
 /**
@@ -2267,7 +2442,7 @@ function gcDrawToCanvas(canvasId, data, unit, lineColor, curId, curText, cursorI
  * @param {string}            [curText]  - text to set on curId element
  * @param {string}            [unit]     - unit label for y-axis ticks (e.g. '%' or 'MB')
  */
-function gcDrawCanvas(canvas, data, cursorIdx, lineColor, fillArea, drawGrid, curId, curText, unit) {
+function gcDrawCanvas(canvas, data, cursorIdx, lineColor, fillArea, drawGrid, curId, curText, unit, stepMode) {
   var dpr = window.devicePixelRatio || 1;
   var W   = canvas.clientWidth  || 320;
   var H   = canvas.clientHeight || 80;
@@ -2313,14 +2488,18 @@ function gcDrawCanvas(canvas, data, cursorIdx, lineColor, fillArea, drawGrid, cu
     }
   }
 
-  // Area fill
+  // Area fill (line or step shape)
   if (fillArea && n >= 2) {
     var grad = ctx.createLinearGradient(0, 0, 0, H);
     grad.addColorStop(0, lineColor.replace(')', ',0.30)').replace('var(--', 'rgba(').replace('crit', '239,68,68').replace('warn', '245,158,11').replace('accent', '59,130,246').replace('ok', '34,197,94'));
     grad.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.beginPath();
     ctx.moveTo(px(0), py(data[0]));
-    for (var i = 1; i < n; i++) ctx.lineTo(px(i), py(data[i]));
+    if (stepMode) {
+      for (var i = 1; i < n; i++) { ctx.lineTo(px(i), py(data[i-1])); ctx.lineTo(px(i), py(data[i])); }
+    } else {
+      for (var i = 1; i < n; i++) ctx.lineTo(px(i), py(data[i]));
+    }
     ctx.lineTo(px(n-1), H - bPad);
     ctx.lineTo(px(0),   H - bPad);
     ctx.closePath();
@@ -2328,18 +2507,25 @@ function gcDrawCanvas(canvas, data, cursorIdx, lineColor, fillArea, drawGrid, cu
     ctx.fill();
   }
 
-  // Line
+  // Line / Step
   if (n >= 2) {
     ctx.beginPath();
     ctx.strokeStyle = lineColor;
     ctx.lineWidth   = 1.5;
     ctx.lineJoin    = 'round';
     ctx.moveTo(px(0), py(data[0]));
-    for (var j = 1; j < n; j++) {
-      // Smooth cubic bezier interpolation
-      var cx1 = (px(j-1) + px(j)) / 2, cy1 = py(data[j-1]);
-      var cx2 = (px(j-1) + px(j)) / 2, cy2 = py(data[j]);
-      ctx.bezierCurveTo(cx1, cy1, cx2, cy2, px(j), py(data[j]));
+    if (stepMode) {
+      for (var j = 1; j < n; j++) {
+        ctx.lineTo(px(j), py(data[j-1]));  // horizontal step
+        ctx.lineTo(px(j), py(data[j]));    // vertical drop/rise
+      }
+    } else {
+      for (var j = 1; j < n; j++) {
+        // Smooth cubic bezier interpolation
+        var cx1 = (px(j-1) + px(j)) / 2, cy1 = py(data[j-1]);
+        var cx2 = (px(j-1) + px(j)) / 2, cy2 = py(data[j]);
+        ctx.bezierCurveTo(cx1, cy1, cx2, cy2, px(j), py(data[j]));
+      }
     }
     ctx.stroke();
   }
@@ -2518,10 +2704,12 @@ function chartTypeFor(id) {
 // kind: 'spark' (SVG live) or 'canvas' (history canvas)
 function chartMenuHtml(id, kind) {
   var types = [
-    { key: 'line',  icon: '╱', label: 'Line'  },
-    { key: 'area',  icon: '▲', label: 'Area'  },
-    { key: 'bar',   icon: '▐', label: 'Bar'   },
-    { key: 'table', icon: '☰', label: 'Table' }
+    { key: 'line',    icon: '╱', label: 'Line'    },
+    { key: 'area',    icon: '▲', label: 'Area'    },
+    { key: 'step',    icon: '⌐', label: 'Step'    },
+    { key: 'bar',     icon: '▐', label: 'Bar'     },
+    { key: 'scatter', icon: '⁘', label: 'Scatter' },
+    { key: 'table',   icon: '☰', label: 'Table'   }
   ];
   var items = types.map(function(t) {
     return '<div class="chart-menu-item" id="mi-' + id + '-' + t.key + '"' +
@@ -2553,7 +2741,7 @@ function toggleChartMenu(e, id) {
     menu.classList.add('open');
     // Mark the active item
     var cur = chartTypeFor(id);
-    ['line','area','bar','table'].forEach(function(k) {
+    ['line','area','step','bar','scatter','table'].forEach(function(k) {
       var mi = document.getElementById('mi-' + id + '-' + k);
       if (mi) mi.classList.toggle('active', k === cur);
     });
@@ -2849,6 +3037,110 @@ ensureTabs = function() {
 //   • Version guard — stored sizes from older format versions ({w,h} objects)
 //     are silently discarded on first read to eliminate ghost blank cards.
 //   • Heights persisted in localStorage; cleared per-card on double-click reset.
+
+// ── View menu ──────────────────────────────────────────────────────────────────
+function toggleViewMenu(force) {
+  var dd = document.getElementById('view-menu-dropdown');
+  if (!dd) return;
+  var open = dd.classList.contains('open');
+  dd.classList.toggle('open', force !== undefined ? force : !open);
+}
+
+// Close view menu when clicking outside
+document.addEventListener('click', function(e) {
+  if (!document.getElementById('view-menu-wrap').contains(e.target)) {
+    toggleViewMenu(false);
+  }
+});
+
+/** Reset every card in the current tab pane back to natural height. */
+function resetAllCardSizes() {
+  toggleViewMenu(false);
+  try { localStorage.removeItem(CARD_SIZE_KEY); } catch(e) {}
+  document.querySelectorAll('.dcard, .mcard').forEach(function(card) {
+    card.style.height = '';
+    card.classList.remove('resized');
+  });
+}
+
+/**
+ * Capture the full scrollable page (sticky header + full scroll-region + footer)
+ * as a PNG and trigger a browser Save dialog. Requires html2canvas (loaded from CDN).
+ */
+function savePageAsPng() {
+  toggleViewMenu(false);
+  var btn = document.getElementById('vmenu-snapshot');
+  if (btn) btn.textContent = '⏳ Capturing…';
+
+  // Temporarily expand the scroll-region to its full scroll height so
+  // html2canvas can see all content in a single pass.
+  var scrollEl = document.getElementById('scroll-region');
+  var savedOverflow = '', savedHeight = '';
+  if (scrollEl) {
+    savedOverflow = scrollEl.style.overflow;
+    savedHeight   = scrollEl.style.height;
+    scrollEl.style.overflow = 'visible';
+    scrollEl.style.height   = scrollEl.scrollHeight + 'px';
+  }
+
+  var opts = {
+    scale:           window.devicePixelRatio || 1,
+    useCORS:         true,
+    allowTaint:      true,
+    backgroundColor: getComputedStyle(document.body).backgroundColor || '#0d1117',
+    logging:         false,
+    width:           document.body.scrollWidth,
+    height:          document.body.scrollHeight,
+    windowWidth:     document.body.scrollWidth,
+    windowHeight:    document.body.scrollHeight
+  };
+
+  if (typeof html2canvas === 'undefined') {
+    alert('html2canvas not loaded — check your network connection.');
+    if (btn) btn.innerHTML = '<span class="vico">📷</span> Save page as PNG…';
+    if (scrollEl) { scrollEl.style.overflow = savedOverflow; scrollEl.style.height = savedHeight; }
+    return;
+  }
+
+  html2canvas(document.body, opts).then(function(canvas) {
+    // Restore scroll region
+    if (scrollEl) { scrollEl.style.overflow = savedOverflow; scrollEl.style.height = savedHeight; }
+    var ts    = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    var fname = 'oom-watchdog-' + (activeTab || 'dashboard') + '-' + ts + '.png';
+    var link  = document.createElement('a');
+    link.download = fname;
+    link.href     = canvas.toDataURL('image/png');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    if (btn) btn.innerHTML = '<span class="vico">📷</span> Save page as PNG…';
+  }).catch(function(err) {
+    if (scrollEl) { scrollEl.style.overflow = savedOverflow; scrollEl.style.height = savedHeight; }
+    console.error('[oom-watchdog] savePageAsPng failed:', err);
+    alert('Snapshot failed: ' + err.message);
+    if (btn) btn.innerHTML = '<span class="vico">📷</span> Save page as PNG…';
+  });
+}
+
+/** Clear persisted card order for all grids and reload the active pane. */
+function resetCardOrder() {
+  toggleViewMenu(false);
+  // Remove all oom-card-order:* keys from localStorage
+  try {
+    var keys = [];
+    for (var i = 0; i < localStorage.length; i++) {
+      var k = localStorage.key(i);
+      if (k && k.indexOf('oom-card-order:') === 0) keys.push(k);
+    }
+    keys.forEach(function(k) { localStorage.removeItem(k); });
+  } catch(e) {}
+  // Re-render the active tab to pick up default order
+  if (activeTab) {
+    var pane = document.querySelector('.tab-pane[data-tab="' + activeTab + '"]');
+    if (pane) pane.remove();
+    switchTab(activeTab);
+  }
+}
 
 var CARD_SIZE_KEY     = 'oom-card-sizes';   // { cardId: pixelHeight }
 var CARD_SIZE_VER_KEY = 'oom-card-sizes-v'; // version sentinel
