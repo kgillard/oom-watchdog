@@ -3064,62 +3064,192 @@ function resetAllCardSizes() {
 }
 
 /**
- * Capture the full scrollable page (sticky header + full scroll-region + footer)
- * as a PNG and trigger a browser Save dialog. Requires html2canvas (loaded from CDN).
+ * Capture the full scrollable dashboard as a PNG and trigger a browser Save dialog.
+ *
+ * Strategy — stitch-scroll approach:
+ *   The layout uses html/body overflow:hidden with a flex-column. Canvas charts are
+ *   only painted in the visible area. To capture everything we:
+ *   1. Freeze the UI (hide scrollbars, disable pointer events).
+ *   2. Record the current scroll position.
+ *   3. Capture the sticky header + footer once at their natural positions.
+ *   4. Scroll the #scroll-region to position 0, capture the full visible viewport
+ *      slice by slice, advancing by one viewport height each step — this forces
+ *      canvas/SVG elements to be live-painted in the viewport at each step.
+ *   5. Stitch all slices onto a single off-screen canvas (header on top, scrolled
+ *      content slices in order, footer on the bottom).
+ *   6. Restore scroll position and UI, then trigger the download.
+ *
+ * Requires html2canvas (loaded from CDN in <head>).
  */
 function savePageAsPng() {
   toggleViewMenu(false);
-  var btn = document.getElementById('vmenu-snapshot');
-  if (btn) btn.textContent = '⏳ Capturing…';
-
-  // Temporarily expand the scroll-region to its full scroll height so
-  // html2canvas can see all content in a single pass.
-  var scrollEl = document.getElementById('scroll-region');
-  var savedOverflow = '', savedHeight = '';
-  if (scrollEl) {
-    savedOverflow = scrollEl.style.overflow;
-    savedHeight   = scrollEl.style.height;
-    scrollEl.style.overflow = 'visible';
-    scrollEl.style.height   = scrollEl.scrollHeight + 'px';
-  }
-
-  var opts = {
-    scale:           window.devicePixelRatio || 1,
-    useCORS:         true,
-    allowTaint:      true,
-    backgroundColor: getComputedStyle(document.body).backgroundColor || '#0d1117',
-    logging:         false,
-    width:           document.body.scrollWidth,
-    height:          document.body.scrollHeight,
-    windowWidth:     document.body.scrollWidth,
-    windowHeight:    document.body.scrollHeight
-  };
 
   if (typeof html2canvas === 'undefined') {
-    alert('html2canvas not loaded — check your network connection.');
-    if (btn) btn.innerHTML = '<span class="vico">📷</span> Save page as PNG…';
-    if (scrollEl) { scrollEl.style.overflow = savedOverflow; scrollEl.style.height = savedHeight; }
+    alert('html2canvas not loaded — check your network connection and try again.');
     return;
   }
 
-  html2canvas(document.body, opts).then(function(canvas) {
-    // Restore scroll region
-    if (scrollEl) { scrollEl.style.overflow = savedOverflow; scrollEl.style.height = savedHeight; }
-    var ts    = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    var fname = 'oom-watchdog-' + (activeTab || 'dashboard') + '-' + ts + '.png';
-    var link  = document.createElement('a');
-    link.download = fname;
-    link.href     = canvas.toDataURL('image/png');
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  var btn = document.getElementById('vmenu-snapshot');
+  if (btn) btn.textContent = '⏳ Capturing…';
+
+  var scrollEl   = document.getElementById('scroll-region');
+  var headerEl   = document.getElementById('sticky-top');
+  var footerEl   = document.getElementById('sticky-bottom');
+  var bgColor    = getComputedStyle(document.body).backgroundColor || '#0d1117';
+  var dpr        = window.devicePixelRatio || 1;
+
+  // Snapshot of current state we must restore afterwards
+  var savedScrollTop = scrollEl ? scrollEl.scrollTop : 0;
+
+  // Temporarily hide the resize handle (right-edge grip) so it doesn't appear in the image
+  var style = document.createElement('style');
+  style.id = '_png-hide-handles';
+  style.textContent = '.card-resize-handle { display: none !important; } * { cursor: default !important; }';
+  document.head.appendChild(style);
+
+  // Also temporarily hide the View menu dropdown if it's open
+  var ddEl = document.getElementById('view-menu-dropdown');
+  if (ddEl) ddEl.classList.remove('open');
+
+  function restore() {
+    var s = document.getElementById('_png-hide-handles');
+    if (s) s.parentNode.removeChild(s);
+    if (scrollEl) scrollEl.scrollTop = savedScrollTop;
     if (btn) btn.innerHTML = '<span class="vico">📷</span> Save page as PNG…';
+  }
+
+  var h2cOpts = {
+    scale:           dpr,
+    useCORS:         true,
+    allowTaint:      true,
+    backgroundColor: bgColor,
+    logging:         false
+  };
+
+  // ── Step 1: capture the sticky header ──────────────────────────────────────
+  var headerP = headerEl
+    ? html2canvas(headerEl, h2cOpts)
+    : Promise.resolve(null);
+
+  // ── Step 2: capture the sticky footer ──────────────────────────────────────
+  var footerP = footerEl
+    ? html2canvas(footerEl, h2cOpts)
+    : Promise.resolve(null);
+
+  Promise.all([headerP, footerP]).then(function(fixed) {
+    var headerCanvas = fixed[0];
+    var footerCanvas = fixed[1];
+
+    if (!scrollEl) {
+      // No scrollable region — just capture everything and bail
+      return html2canvas(document.body, h2cOpts).then(function(c) {
+        _downloadCanvas(c, btn);
+        restore();
+      });
+    }
+
+    var viewH      = scrollEl.clientHeight;   // visible height of the scroll region
+    var totalH     = scrollEl.scrollHeight;   // full content height
+    var viewW      = scrollEl.clientWidth;
+    var slices     = [];
+    var pos        = 0;
+    var STEP       = viewH;                   // advance one full viewport per step
+
+    // Scroll to top before starting
+    scrollEl.scrollTop = 0;
+
+    // ── Step 3: scroll-and-capture slices ────────────────────────────────────
+    // Each iteration: scroll to `pos`, wait one animation frame so canvases
+    // repaint, then capture the scroll region at that position.
+    function captureSlice() {
+      scrollEl.scrollTop = pos;
+
+      // rAF + 80 ms delay gives canvases time to repaint at the new scroll pos
+      return new Promise(function(resolve) {
+        requestAnimationFrame(function() {
+          setTimeout(function() {
+            html2canvas(scrollEl, Object.assign({}, h2cOpts, {
+              width:        viewW,
+              height:       Math.min(STEP, totalH - pos),
+              windowWidth:  viewW,
+              windowHeight: Math.min(STEP, totalH - pos),
+              scrollX:      0,
+              scrollY:      0
+            })).then(resolve);
+          }, 80);
+        });
+      });
+    }
+
+    function captureAll() {
+      if (pos >= totalH) return Promise.resolve();
+      return captureSlice().then(function(slice) {
+        slices.push({ canvas: slice, pos: pos });
+        pos += STEP;
+        return captureAll();
+      });
+    }
+
+    return captureAll().then(function() {
+      // ── Step 4: stitch everything onto a single canvas ──────────────────
+      var hH = headerCanvas ? Math.round(headerCanvas.height / dpr) : 0;
+      var fH = footerCanvas ? Math.round(footerCanvas.height / dpr) : 0;
+      var cW = viewW;
+
+      // Total content height = sum of all slice logical heights
+      var contentH = slices.reduce(function(acc, s) {
+        return acc + Math.round(s.canvas.height / dpr);
+      }, 0);
+
+      var totalPngH = hH + contentH + fH;
+
+      var out    = document.createElement('canvas');
+      out.width  = Math.round(cW * dpr);
+      out.height = Math.round(totalPngH * dpr);
+      var ctx    = out.getContext('2d');
+      ctx.scale(dpr, dpr);
+      ctx.fillStyle = bgColor;
+      ctx.fillRect(0, 0, cW, totalPngH);
+
+      // Draw header
+      var y = 0;
+      if (headerCanvas) {
+        ctx.drawImage(headerCanvas, 0, y, cW, hH);
+        y += hH;
+      }
+
+      // Draw content slices in order
+      slices.forEach(function(s) {
+        var sh = Math.round(s.canvas.height / dpr);
+        ctx.drawImage(s.canvas, 0, y, cW, sh);
+        y += sh;
+      });
+
+      // Draw footer
+      if (footerCanvas) {
+        ctx.drawImage(footerCanvas, 0, y, cW, fH);
+      }
+
+      restore();
+      _downloadCanvas(out, btn);
+    });
   }).catch(function(err) {
-    if (scrollEl) { scrollEl.style.overflow = savedOverflow; scrollEl.style.height = savedHeight; }
+    restore();
     console.error('[oom-watchdog] savePageAsPng failed:', err);
     alert('Snapshot failed: ' + err.message);
-    if (btn) btn.innerHTML = '<span class="vico">📷</span> Save page as PNG…';
   });
+}
+
+function _downloadCanvas(canvas, btn) {
+  var ts    = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  var fname = 'oom-watchdog-' + (activeTab || 'dashboard') + '-' + ts + '.png';
+  var link  = document.createElement('a');
+  link.download = fname;
+  link.href     = canvas.toDataURL('image/png');
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  if (btn) btn.innerHTML = '<span class="vico">📷</span> Save page as PNG…';
 }
 
 /** Clear persisted card order for all grids and reload the active pane. */
