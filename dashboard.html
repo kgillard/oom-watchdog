@@ -548,36 +548,124 @@
       font-size: 11px; color: var(--muted); margin-top: 2px;
     }
     .gc-collector-bar-wrap { margin-top: 6px; }
-    /* Time scrubber */
+    /* ── Time scrubber ───────────────────────────────────────────────────────── */
     .gc-scrubber-wrap {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 12px 14px; margin-bottom: 14px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 16px 12px;
+      margin-bottom: 14px;
     }
     .gc-scrubber-label {
-      font-size: 11px; color: var(--muted); margin-bottom: 6px;
-      display: flex; justify-content: space-between; align-items: center;
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 10px;
     }
-    .gc-scrubber-label span { font-size: 12px; color: var(--text); font-weight: 600; }
+    .gc-scrubber-label .sc-title {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.7px;
+      color: var(--muted);
+    }
+    .gc-scrubber-label .sc-ts {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: 0.2px;
+    }
+
+    /* Fully custom range slider — reset native appearance first */
     .gc-scrubber {
+      -webkit-appearance: none;
+      appearance: none;
       width: 100%;
-      accent-color: var(--accent);
+      height: 6px;
       cursor: pointer;
-      height: 20px;          /* taller hit target */
-      padding: 4px 0;
-    }
-    /* Cross-browser thumb sizing */
-    .gc-scrubber::-webkit-slider-thumb {
-      width: 20px; height: 20px;
-    }
-    .gc-scrubber::-moz-range-thumb {
-      width: 20px; height: 20px;
+      background: transparent;    /* track drawn via background-image below */
+      outline: none;
       border: none;
-      background: var(--accent);
-      border-radius: 50%;
-      cursor: pointer;
+      display: block;
+      margin: 4px 0 8px;
+      /* Fill: left side = accent, right side = border-colour.
+         --scrub-pct is updated by JS on every scrub event. */
+      background-image: linear-gradient(
+        to right,
+        var(--accent) 0%,
+        var(--accent) var(--scrub-pct, 100%),
+        #2a2d3a      var(--scrub-pct, 100%),
+        #2a2d3a      100%
+      );
+      border-radius: 3px;
     }
-    .gc-scrubber::-webkit-slider-runnable-track { height: 5px; }
-    .gc-scrubber::-moz-range-track              { height: 5px; }
+
+    /* WebKit thumb */
+    .gc-scrubber::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #ffffff;
+      border: 3px solid var(--accent);
+      box-shadow: 0 0 0 0 rgba(59,130,246,0.4);
+      cursor: pointer;
+      transition: box-shadow 0.15s, transform 0.1s;
+      margin-top: -6px;     /* vertically centre on track */
+    }
+    .gc-scrubber::-webkit-slider-thumb:hover {
+      box-shadow: 0 0 0 5px rgba(59,130,246,0.25);
+      transform: scale(1.12);
+    }
+    .gc-scrubber:active::-webkit-slider-thumb,
+    .gc-scrubber:focus::-webkit-slider-thumb {
+      box-shadow: 0 0 0 7px rgba(59,130,246,0.3);
+      transform: scale(1.15);
+    }
+
+    /* WebKit track (background already handled above, but height needed) */
+    .gc-scrubber::-webkit-slider-runnable-track {
+      height: 6px;
+      border-radius: 3px;
+      background: transparent;
+    }
+
+    /* Firefox thumb */
+    .gc-scrubber::-moz-range-thumb {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #ffffff;
+      border: 3px solid var(--accent);
+      box-shadow: 0 0 0 0 rgba(59,130,246,0.4);
+      cursor: pointer;
+      transition: box-shadow 0.15s, transform 0.1s;
+    }
+    .gc-scrubber::-moz-range-thumb:hover {
+      box-shadow: 0 0 0 5px rgba(59,130,246,0.25);
+    }
+
+    /* Firefox track — fill handled via background-image above */
+    .gc-scrubber::-moz-range-track {
+      height: 6px;
+      border-radius: 3px;
+      background: transparent;
+    }
+    .gc-scrubber::-moz-range-progress {
+      height: 6px;
+      border-radius: 3px;
+      background: var(--accent);
+    }
+
+    /* Timestamp bookend row */
+    .gc-scrubber-ticks {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
     .gc-fetch-bar {
       display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 14px;
     }
@@ -1280,12 +1368,12 @@ function gcAnalysisSectionHtml(s, name) {
       // Scrubber (hidden until data loaded)
       '<div class="gc-scrubber-wrap" id="' + s + '-gc-scrubber-wrap" style="display:none">',
         '<div class="gc-scrubber-label">',
-          '<span>Time cursor</span>',
-          '<span id="' + s + '-gc-cursor-ts">—</span>',
+          '<span class="sc-title">Time cursor</span>',
+          '<span class="sc-ts" id="' + s + '-gc-cursor-ts">—</span>',
         '</div>',
         '<input type="range" class="gc-scrubber" id="' + s + '-gc-scrubber" min="0" max="100" value="100"',
           ' oninput="gcScrub(\'' + s + '\',this.value)">',
-        '<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:2px">',
+        '<div class="gc-scrubber-ticks">',
           '<span id="' + s + '-gc-ts-start">—</span>',
           '<span id="' + s + '-gc-ts-end">—</span>',
         '</div>',
@@ -1973,12 +2061,13 @@ function gcRenderHistory(s) {
   if (scrubWrap) scrubWrap.style.display = '';
   if (charts)   charts.style.display   = '';
 
-  // Wire scrubber range
+  // Wire scrubber range + initialise fill to 100% (positioned at live end)
   var scrubber = document.getElementById(s + '-gc-scrubber');
   if (scrubber) {
     scrubber.min   = 0;
     scrubber.max   = records.length - 1;
     scrubber.value = records.length - 1;
+    scrubber.style.setProperty('--scrub-pct', '100%');
   }
 
   // Start/end timestamps
@@ -2024,6 +2113,13 @@ function gcScrub(s, idx) {
 
   var r = h.records[idx];
   var isLive = (idx === h.records.length - 1);
+
+  // ── Update scrubber fill (--scrub-pct CSS custom property) ──────────────────
+  var scrubberEl = document.getElementById(s + '-gc-scrubber');
+  if (scrubberEl && h.records.length > 1) {
+    var pct = (idx / (h.records.length - 1)) * 100;
+    scrubberEl.style.setProperty('--scrub-pct', pct.toFixed(2) + '%');
+  }
 
   // ── Immediate: just update the timestamp label + snapshot bar text ──────────
   var curTs = document.getElementById(s + '-gc-cursor-ts');
