@@ -245,8 +245,10 @@
       transition: box-shadow 0.15s, opacity 0.15s;
       border-radius: var(--radius);
       min-height: 40px;
-      overflow: visible;
+      overflow: hidden;    /* clip content when an explicit height is set via resize */
     }
+    /* When no explicit height is set, let content size the card naturally */
+    .dcard:not(.resized) { overflow: visible; }
     .dcard:active     { cursor: grabbing; }
     .dcard.drag-over  { box-shadow: 0 0 0 2px var(--accent); }
     .dcard.dragging   { opacity: 0.4; }
@@ -307,7 +309,8 @@
                     border-radius: var(--radius); padding: 12px 14px;
                     cursor: grab; user-select: none; position: relative;
                     transition: box-shadow 0.15s, opacity 0.15s;
-                    min-height: 60px; overflow: visible; }
+                    min-height: 60px; overflow: hidden; }
+    .mcard:not(.resized) { overflow: visible; }
     .mcard:active { cursor: grabbing; }
     .mcard.drag-over  { box-shadow: 0 0 0 2px var(--accent); }
     .mcard.dragging   { opacity: 0.4; }
@@ -2833,25 +2836,44 @@ ensureTabs = function() {
 };
 
 // ── Per-card resize (horizontal + vertical) ───────────────────────────────────
-// Each .dcard and .mcard gets a small .card-resize-handle in its bottom-right
-// corner.  Dragging it sets an explicit HEIGHT on the card only.
+// Each .dcard and .mcard gets a small .card-resize-handle (bottom-centre).
+// Dragging it sets an explicit HEIGHT on the card only — width is always
+// owned by the layout container (flex column / CSS grid).
 //
-// Width is intentionally NOT resized:
-//   • .dcard lives in a flex column — width must stay 100% so all sections
-//     remain flush and evenly filling the pane.
-//   • .mcard lives in a CSS grid (auto-fill minmax) — width is owned by the
-//     grid track; overriding it on one card breaks column alignment for the rest.
-//
-// Heights are persisted in localStorage and restored on reload.
+// Features:
+//   • Snap — heights snap to the nearest 8 px grid on release.
+//   • .resized class — applied while a card has an explicit height so CSS
+//     can apply overflow:hidden to stop blank void below content.
+//   • Double-click handle — resets the card to its natural height and clears
+//     the stored size so layout flows freely again.
+//   • Version guard — stored sizes from older format versions ({w,h} objects)
+//     are silently discarded on first read to eliminate ghost blank cards.
+//   • Heights persisted in localStorage; cleared per-card on double-click reset.
 
-var CARD_SIZE_KEY = 'oom-card-sizes';  // localStorage key → JSON object { cardId: h }
+var CARD_SIZE_KEY     = 'oom-card-sizes';   // { cardId: pixelHeight }
+var CARD_SIZE_VER_KEY = 'oom-card-sizes-v'; // version sentinel
+var CARD_SIZE_VER     = '2';               // bump when storage format changes
+
+// Clear stale sizes written by older format versions.
+(function() {
+  try {
+    if (localStorage.getItem(CARD_SIZE_VER_KEY) !== CARD_SIZE_VER) {
+      localStorage.removeItem(CARD_SIZE_KEY);
+      localStorage.setItem(CARD_SIZE_VER_KEY, CARD_SIZE_VER);
+    }
+  } catch(e) {}
+}());
 
 function _loadCardSizes() {
   try { return JSON.parse(localStorage.getItem(CARD_SIZE_KEY) || '{}'); } catch(e) { return {}; }
 }
 function _saveCardSize(cardId, h) {
   var sizes = _loadCardSizes();
-  sizes[cardId] = h;
+  if (h > 0) {
+    sizes[cardId] = h;
+  } else {
+    delete sizes[cardId];
+  }
   try { localStorage.setItem(CARD_SIZE_KEY, JSON.stringify(sizes)); } catch(e) {}
 }
 function _applyCardSizes() {
@@ -2860,10 +2882,22 @@ function _applyCardSizes() {
     var el = document.querySelector('[data-card-id="' + id + '"]');
     if (!el) return;
     var h = sizes[id];
-    // Support both the old {w,h} format and the new plain number format
-    if (typeof h === 'object') h = h.h;
-    if (h > 0) el.style.height = h + 'px';
+    if (typeof h !== 'number' || h <= 0) return;  // discard any non-numeric stale entry
+    el.style.height = h + 'px';
+    el.classList.add('resized');
   });
+}
+
+/** Snap a pixel value to the nearest multiple of snapPx. */
+function _snap(px, snapPx) {
+  return Math.max(40, Math.round(px / snapPx) * snapPx);
+}
+
+function _resetCardHeight(card) {
+  var cardId = card.dataset.cardId;
+  card.style.height = '';
+  card.classList.remove('resized');
+  if (cardId) _saveCardSize(cardId, 0);
 }
 
 function initCardResize() {
@@ -2872,10 +2906,14 @@ function initCardResize() {
     if (card.querySelector('.card-resize-handle')) return;  // already has one
     var handle = document.createElement('div');
     handle.className = 'card-resize-handle';
-    handle.title     = 'Drag to resize';
-    // Prevent the parent card's drag-and-drop from firing when the resize handle
-    // is grabbed — dragstart bubbles up from the handle to the [draggable] card.
+    handle.title     = 'Drag to resize  ·  Double-click to reset';
+    // Prevent the parent card's drag-and-drop on mousedown on this handle.
     handle.addEventListener('dragstart', function(e) { e.preventDefault(); e.stopPropagation(); });
+    // Double-click: reset card to natural height.
+    handle.addEventListener('dblclick', function(e) {
+      e.stopPropagation();
+      _resetCardHeight(card);
+    });
     card.appendChild(handle);
   });
   // Restore previously persisted heights
@@ -2885,15 +2923,16 @@ function initCardResize() {
 // Central resize drag handler — one listener on document so it works even
 // after cards are recreated.
 (function() {
-  var _resizeCard   = null;   // card element being resized
-  var _resizeHandle = null;   // handle element
+  var SNAP_PX     = 8;         // snap grid size in pixels
+  var _resizeCard   = null;    // card element being resized
+  var _resizeHandle = null;    // handle element
   var _startY = 0;
   var _startH = 0;
 
   document.addEventListener('mousedown', function(e) {
     if (!e.target.classList.contains('card-resize-handle')) return;
     e.preventDefault();
-    e.stopPropagation();   // do NOT trigger drag-and-drop on the parent card
+    e.stopPropagation();
     _resizeHandle = e.target;
     _resizeCard   = e.target.parentElement;
     _startY = e.clientY;
@@ -2904,16 +2943,19 @@ function initCardResize() {
 
   document.addEventListener('mousemove', function(e) {
     if (!_resizeCard) return;
+    // Live preview — no snap during drag for smooth feel
     var newH = Math.max(40, _startH + (e.clientY - _startY));
     _resizeCard.style.height = newH + 'px';
+    _resizeCard.classList.add('resized');
   });
 
   document.addEventListener('mouseup', function() {
     if (!_resizeCard) return;
+    // Snap on release
+    var snapped = _snap(parseInt(_resizeCard.style.height, 10) || _resizeCard.offsetHeight, SNAP_PX);
+    _resizeCard.style.height = snapped + 'px';
     var cardId = _resizeCard.dataset.cardId;
-    if (cardId) {
-      _saveCardSize(cardId, parseInt(_resizeCard.style.height, 10) || 0);
-    }
+    if (cardId) _saveCardSize(cardId, snapped);
     if (_resizeHandle) _resizeHandle.classList.remove('resizing');
     document.body.classList.remove('card-resizing');
     _resizeCard   = null;
