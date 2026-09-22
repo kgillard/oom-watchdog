@@ -58,10 +58,10 @@ public class WatchdogConfigTest {
         assertEquals(5, WatchdogConfig.defaults().build().getLeakDetectionWindowSize());
     }
 
-    /** Default dump directory must be {@code ./dumps}. */
+    /** Default dump directory must be {@code ./oom-watchdog}. */
     @Test
     public void testDefaultHeapDumpDirectory() {
-        assertEquals("./dumps", WatchdogConfig.defaults().build().getHeapDumpDirectory());
+        assertEquals("./oom-watchdog", WatchdogConfig.defaults().build().getHeapDumpDirectory());
     }
 
     /** Default dump types must be empty (no dumps unless user opts in). */
@@ -105,13 +105,23 @@ public class WatchdogConfigTest {
         assertEquals(1_000L, cfg.getPollIntervalMs());
     }
 
-    /** Custom dump directory must be stored correctly. */
+    /** Custom dump directory must have oom-watchdog appended automatically. */
     @Test
     public void testCustomHeapDumpDirectory() {
         WatchdogConfig cfg = WatchdogConfig.defaults()
                 .heapDumpDirectory("/var/dumps")
                 .build();
-        assertEquals("/var/dumps", cfg.getHeapDumpDirectory());
+        assertEquals("/var/dumps" + java.io.File.separator + "oom-watchdog",
+                cfg.getHeapDumpDirectory());
+    }
+
+    /** Path already ending with oom-watchdog must not be double-appended. */
+    @Test
+    public void testCustomHeapDumpDirectoryAlreadyOomWatchdog() {
+        WatchdogConfig cfg = WatchdogConfig.defaults()
+                .heapDumpDirectory("/var/log/oom-watchdog")
+                .build();
+        assertEquals("/var/log/oom-watchdog", cfg.getHeapDumpDirectory());
     }
 
     /** Custom dump types set via {@link Set} must be stored and returned. */

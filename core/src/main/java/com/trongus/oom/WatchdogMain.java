@@ -551,7 +551,10 @@ public final class WatchdogMain {
           + "  --gc-dump-threshold <0.0-1.0> GC-overhead ratio that triggers an immediate dump (default: disabled)\n"
           + "  --heap-dump-threshold <0.0-1.0> Heap ratio that triggers an immediate dump (default: disabled)\n"
           + "  --poll-ms        <ms>         Poll interval in milliseconds (default: 5000)\n"
-          + "  --dump-dir       <path>       Dump output directory (default: ./dumps)\n"
+          + "  --dump-dir       <path>       Dump output directory parent (default: ./oom-watchdog)\n"
+          + "                                An 'oom-watchdog' subdirectory is appended automatically\n"
+          + "                                if the path does not already end with 'oom-watchdog'.\n"
+          + "                                e.g. --dump-dir /var/log → writes to /var/log/oom-watchdog\n"
           + "  --dump-types     <types>      Comma-separated dump types at CRITICAL:\n"
           + "                                 HEAP           – .hprof heap snapshot\n"
           + "                                 CORE           – OS core/system dump (gcore)\n"
@@ -643,7 +646,7 @@ public final class WatchdogMain {
         long pollMs = 5_000L;
 
         /** Target output directory path for diagnostic dump files. */
-        String dumpDir = "./dumps";
+        String dumpDir = "./oom-watchdog";
 
         /** Set of diagnostic dump types enabled for execution at {@code CRITICAL} risk level. */
         Set<DumpType> dumpTypes = EnumSet.noneOf(DumpType.class);
@@ -799,8 +802,8 @@ public final class WatchdogMain {
             }
             // Validate dump directory is non-blank
             if (c.dumpDir == null || c.dumpDir.trim().isEmpty()) {
-                System.err.println("[OomWatchdog] dump-dir must not be blank; using default ./dumps.");
-                c.dumpDir = "./dumps";
+                System.err.println("[OomWatchdog] dump-dir must not be blank; using default ./oom-watchdog.");
+                c.dumpDir = "./oom-watchdog";
             }
             return c;
         }

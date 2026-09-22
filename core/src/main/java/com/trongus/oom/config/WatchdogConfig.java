@@ -223,7 +223,7 @@ public final class WatchdogConfig {
         private double          gcOverheadThreshold     = 0.50;
         private int             leakDetectionWindowSize = 5;
         private long            pollIntervalMs          = 5_000L;
-        private String          heapDumpDirectory       = "./dumps";
+        private String          heapDumpDirectory       = "./oom-watchdog";
         private Set<DumpType>   dumpTypes               = EnumSet.noneOf(DumpType.class);
         private String          qradarHost              = "";
         private int             qradarPort              = 514;
@@ -282,10 +282,36 @@ public final class WatchdogConfig {
         /**
          * Sets the directory path where diagnostic dump files are written.
          *
+         * <p>If the supplied path does not already end with {@code oom-watchdog}
+         * as its last path segment, that subdirectory is appended automatically.
+         * This ensures dump files are always isolated in a dedicated directory
+         * (e.g. {@code /var/log} becomes {@code /var/log/oom-watchdog}) rather
+         * than mixed in with other content in the configured parent.
+         *
          * @param v non-null, non-blank directory path
          * @return this builder (fluent API)
          */
-        public Builder heapDumpDirectory(String v)       { this.heapDumpDirectory = v;        return this; }
+        public Builder heapDumpDirectory(String v) {
+            this.heapDumpDirectory = appendOomSubdirIfNeeded(v);
+            return this;
+        }
+
+        /**
+         * Appends {@code /oom-watchdog} to {@code path} unless the last path
+         * segment is already {@code oom-watchdog} (case-insensitive).
+         */
+        private static String appendOomSubdirIfNeeded(String path) {
+            if (path == null || path.trim().isEmpty()) return path;
+            String p = path.trim();
+            // Normalise separators for comparison only; keep originals for the result
+            String normalised = p.replace('\\', '/').replaceAll("/+$", "");
+            int lastSlash = normalised.lastIndexOf('/');
+            String lastSegment = lastSlash >= 0 ? normalised.substring(lastSlash + 1) : normalised;
+            if ("oom-watchdog".equalsIgnoreCase(lastSegment)) {
+                return p;   // already ends with oom-watchdog — leave as-is
+            }
+            return p + java.io.File.separator + "oom-watchdog";
+        }
 
         /**
          * Sets the dump types to produce when a {@code CRITICAL} threshold is reached.

@@ -57,16 +57,20 @@ public class CompositeDumpServiceTest {
 
     @After
     public void tearDown() throws IOException {
-        // Best-effort cleanup of files written by strategies
-        if (tempDumpDir != null && Files.exists(tempDumpDir)) {
-            File[] files = tempDumpDir.toFile().listFiles();
-            if (files != null) {
-                for (File f : files) {
-                    f.delete();
-                }
+        // Best-effort recursive cleanup — the service now creates an oom-watchdog
+        // subdirectory inside the configured path, so a flat delete is not enough.
+        deleteRecursive(tempDumpDir);
+    }
+
+    private static void deleteRecursive(Path root) throws IOException {
+        if (root == null || !Files.exists(root)) return;
+        File[] children = root.toFile().listFiles();
+        if (children != null) {
+            for (File child : children) {
+                deleteRecursive(child.toPath());
             }
-            Files.deleteIfExists(tempDumpDir);
         }
+        Files.deleteIfExists(root);
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────
@@ -181,6 +185,8 @@ public class CompositeDumpServiceTest {
 
     /**
      * Dump files must be created inside the configured dump directory.
+     * The effective directory is {@code tempDumpDir/oom-watchdog} because the
+     * auto-append logic appends an {@code oom-watchdog} subdirectory.
      */
     @Test
     public void testFilesCreatedInConfiguredDirectory() throws IOException {
@@ -191,13 +197,18 @@ public class CompositeDumpServiceTest {
         // Use the canonical path for comparison: on macOS /var is a symlink to /private/var,
         // and CompositeDumpService.buildPath() canonicalises the dump directory to prevent
         // path-traversal attacks, so we must compare against the same canonical form.
-        String canonicalDumpDir = tempDumpDir.toFile().getCanonicalPath();
-        assertTrue("dump file should be inside temp dump dir",
-                path.startsWith(canonicalDumpDir));
+        // Files land in tempDumpDir/oom-watchdog (auto-appended subdirectory).
+        String canonicalEffectiveDir = tempDumpDir.resolve("oom-watchdog").toFile().getCanonicalPath();
+        assertTrue("dump file should be inside oom-watchdog subdirectory",
+                path.startsWith(canonicalEffectiveDir));
     }
 
     /**
      * If the dump directory does not yet exist, the service must create it.
+     * The effective directory is {@code nonExistent/oom-watchdog} because the
+     * auto-append logic in {@link WatchdogConfig.Builder#heapDumpDirectory} always
+     * appends an {@code oom-watchdog} subdirectory unless the path already ends
+     * with that name.
      */
     @Test
     public void testDumpDirectoryCreatedIfMissing() throws IOException {
@@ -210,13 +221,11 @@ public class CompositeDumpServiceTest {
         CompositeDumpService svc = new CompositeDumpService(config);
         svc.dump(buildSnapshot(), Collections.singletonList(DumpType.THREAD));
 
-        assertTrue("dump directory should be created", Files.exists(nonExistent));
+        // The effective dump directory is nonExistent/oom-watchdog
+        Path effectiveDir = nonExistent.resolve("oom-watchdog");
+        assertTrue("dump directory should be created", Files.exists(effectiveDir));
         // cleanup
-        File[] files = nonExistent.toFile().listFiles();
-        if (files != null) {
-            for (File f : files) f.delete();
-        }
-        Files.deleteIfExists(nonExistent);
+        deleteRecursive(nonExistent);
     }
 
     // ── idempotency ───────────────────────────────────────────────────────────
