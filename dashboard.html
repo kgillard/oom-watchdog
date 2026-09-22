@@ -2464,8 +2464,22 @@ function gcDrawCanvas(canvas, data, cursorIdx, lineColor, fillArea, drawGrid, cu
   var pad   = (maxV - minV) * 0.1;
   var yMin  = Math.max(0, minV - pad);
   var yMax  = maxV + pad;
-  var xPad  = drawGrid ? 32 : 0;  // left margin for y-axis labels
-  var bPad  = drawGrid ? 16 : 0;  // bottom margin for x-axis ticks
+  var bPad  = drawGrid ? 14 : 0;  // bottom margin for x-axis ticks
+
+  // ── Measure the widest y-axis label so xPad is always wide enough ──────────
+  var LABEL_FONT = '9px -apple-system, system-ui, sans-serif';
+  var xPad = 0;
+  if (drawGrid) {
+    ctx.font = LABEL_FONT;
+    var steps = 4;
+    for (var mi = 0; mi <= steps; mi++) {
+      var mv  = yMin + (yMax - yMin) * mi / steps;
+      var lbl = mv.toFixed(1) + (unit || '');
+      var tw  = ctx.measureText(lbl).width;
+      if (tw > xPad) xPad = tw;
+    }
+    xPad = Math.ceil(xPad) + 6;   // 6 px breathing room between label and plot area
+  }
 
   function px(i) { return xPad + (i / (n - 1)) * (W - xPad); }
   function py(v) { return H - bPad - ((v - yMin) / (yMax - yMin)) * (H - bPad - 4); }
@@ -2476,15 +2490,16 @@ function gcDrawCanvas(canvas, data, cursorIdx, lineColor, fillArea, drawGrid, cu
   if (drawGrid) {
     ctx.strokeStyle = 'rgba(255,255,255,0.06)';
     ctx.lineWidth   = 1;
-    ctx.font        = '9px -apple-system, system-ui, sans-serif';
+    ctx.font        = LABEL_FONT;
     ctx.fillStyle   = 'rgba(170,175,200,0.6)';
-    ctx.textAlign   = 'right';
+    ctx.textAlign   = 'left';
     var steps = 4;
     for (var gi = 0; gi <= steps; gi++) {
-      var gv = yMin + (yMax - yMin) * gi / steps;
-      var gy = py(gv);
+      var gv  = yMin + (yMax - yMin) * gi / steps;
+      var gy  = py(gv);
+      var lbl = gv.toFixed(1) + (unit || '');
       ctx.beginPath(); ctx.moveTo(xPad, gy); ctx.lineTo(W, gy); ctx.stroke();
-      ctx.fillText(gv.toFixed(1) + (unit || ''), xPad - 2, gy + 3);
+      ctx.fillText(lbl, 0, gy + 3);
     }
   }
 
