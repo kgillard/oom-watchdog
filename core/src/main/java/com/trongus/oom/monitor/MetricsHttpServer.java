@@ -165,7 +165,7 @@ import java.util.logging.Logger;
  * they respond with {@code 503 Service Unavailable}.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.13.3
+ * @version 1.7.13.12
  * @since 1.7.3
  * @see TlsConfig
  * @see GcHistoryStore
@@ -557,6 +557,28 @@ public final class MetricsHttpServer {
                     return;
                 }
                 path = collector.triggerRemoteDump(dumpType, outputPath);
+                // Verify the file actually landed on disk. triggerRemoteDump()
+                // can return a path even when the underlying operation only
+                // partially succeeded (e.g. the JVM wrote to a different
+                // location, the path is a template that was never expanded, or
+                // the signal was delivered but the file was not yet flushed).
+                if (path != null && !path.startsWith("ERROR:")) {
+                    java.io.File dumpFile = new java.io.File(path);
+                    if (!dumpFile.exists()) {
+                        WatchdogLogger.warning(LOG,
+                                "Dump file [{0}] not found on disk after triggerRemoteDump for target [{1}]. " +
+                                "The JVM may write to a different path or the flush is still in progress.",
+                                path, targetLabel);
+                        // Surface as a warning in the response rather than silently
+                        // claiming success — the operator can then check the target JVM log.
+                        send(ex, 200, "application/json; charset=UTF-8",
+                                "{\"ok\": true, \"target\": \"" + escapeJson(targetLabel) + "\", " +
+                                "\"path\": \"" + escapeJson(path) + "\", " +
+                                "\"warning\": \"Dump file not found at reported path — " +
+                                "the JVM may write to a different location or the flush is still in progress\"}");
+                        return;
+                    }
+                }
             // Priority 3: Self dump — watchdog's own JVM.
             } else {
                 path = watchdog.triggerDump(dumpType);

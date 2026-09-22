@@ -223,6 +223,8 @@ public final class CompositeDumpService implements HeapDumpService {
 
     /**
      * Builds the suggested output file path for a dump of the given type.
+     * Visible so that {@link com.trongus.oom.monitor.OomWatchdog} can obtain
+     * the path for a remote dump without executing the dump locally.
      *
      * <p>The path pattern is:
      * {@code <dumpDirectory>/oom_<type>_<processName>_<yyyyMMdd_HHmmss_SSS><ext>}
@@ -235,11 +237,6 @@ public final class CompositeDumpService implements HeapDumpService {
      *                 in the file name
      * @param type     the dump type being produced; determines the file extension
      * @return suggested absolute file path (the receiving strategy may override it)
-     */
-    /**
-     * Builds the suggested output file path for a dump of the given type.
-     * Package-visible so that {@link com.trongus.oom.monitor.OomWatchdog} can obtain
-     * the path for a remote dump without executing the dump locally.
      */
     public String buildOutputPath(JvmSnapshot snapshot, DumpType type) {
         // Format timestamp with millisecond precision to avoid name collisions on rapid retriggers.

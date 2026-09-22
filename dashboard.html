@@ -409,6 +409,7 @@
     .dump-result    { margin-top: 7px; font-size: 12px; font-family: monospace;
                       padding: 6px 10px; border-radius: 6px; word-break: break-all; display: none; }
     .dump-result.ok   { background: #051409; border: 1px solid var(--ok);   color: #4ade80; display: block; }
+    .dump-result.warn { background: #1a1200; border: 1px solid var(--warn);  color: #fbbf24; display: block; }
     .dump-result.err  { background: #1c0505; border: 1px solid var(--crit); color: #f87171; display: block; }
     .dump-result.busy { background: #0f172a; border: 1px solid var(--muted); color: var(--muted); display: block; }
 
@@ -1311,6 +1312,15 @@ function renderPane(name) {
   if (!t || !t.latest) return;
   var d = t.latest;
   var s = slugify(name);
+  // Guard: pane must exist in the DOM before we try to populate it.
+  // If it's missing (e.g. a slug collision prevented ensureTabs() from
+  // creating it) log a warning and bail rather than silently no-op.
+  if (!document.getElementById('pane-' + s)) {
+    console.warn('[oom-watchdog] renderPane: pane element "pane-' + s +
+                 '" not found for target "' + name + '" (slug "' + s + '"). ' +
+                 'ensureTabs() may not have run yet or a slug collision occurred.');
+    return;
+  }
 
   var heapPct    = parseFloat(d.heapUsedPct)    || 0;
   var gcPct      = parseFloat(d.gcOverheadPct)  || 0;
@@ -1658,7 +1668,27 @@ function fmtUptime(ms) {
 }
 function fmt1(v) { return (parseFloat(v) || 0).toFixed(1); }
 function fmt2(v) { return (parseFloat(v) || 0).toFixed(2); }
-function slugify(s) { return String(s).replace(/[^A-Za-z0-9]/g, '_'); }
+// slugify — maps a target name to a safe DOM-id fragment.
+// Two different names that normalise to the same base (e.g. "my-app" and
+// "my_app" both → "my_app") get a disambiguating numeric suffix on the
+// second registration (_2, _3 …).  The same name always returns the same
+// slug for the lifetime of the page.
+var _slugRegistry = {};   // name  → assigned slug
+var _slugCounts   = {};   // base  → highest counter used so far
+function slugify(name) {
+  name = String(name);
+  if (_slugRegistry[name] !== undefined) return _slugRegistry[name];
+  var base = name.replace(/[^A-Za-z0-9]/g, '_');
+  var slug = base;
+  if (_slugCounts[base] === undefined) {
+    _slugCounts[base] = 1;           // first user of this base, no suffix
+  } else {
+    _slugCounts[base] += 1;
+    slug = base + '_' + _slugCounts[base];
+  }
+  _slugRegistry[name] = slug;
+  return slug;
+}
 function esc(s) {
   return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
                         .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -1677,9 +1707,16 @@ function requestDump(slug, type, encoded) {
     .then(function(res) {
       if (resultEl) {
         if (res.body.ok) {
-          resultEl.className   = 'dump-result ok';
-          resultEl.textContent = '\u2714 ' + type.charAt(0).toUpperCase() + type.slice(1) +
-                                 ' dump written on server: ' + (res.body.path || '');
+          if (res.body.warning) {
+            resultEl.className   = 'dump-result warn';
+            resultEl.textContent = '\u26a0 ' + type.charAt(0).toUpperCase() + type.slice(1) +
+                                   ' dump requested (path: ' + (res.body.path || '') + '). ' +
+                                   'Warning: ' + res.body.warning;
+          } else {
+            resultEl.className   = 'dump-result ok';
+            resultEl.textContent = '\u2714 ' + type.charAt(0).toUpperCase() + type.slice(1) +
+                                   ' dump written on server: ' + (res.body.path || '');
+          }
         } else {
           resultEl.className   = 'dump-result err';
           resultEl.textContent = '\u2716 ' + (res.body.error || 'Unknown error');

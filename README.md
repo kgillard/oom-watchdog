@@ -3,22 +3,22 @@
 > **Preemptively detect and alert on JVM Out-of-Memory conditions — before the process crashes.**
 
 [![Build](https://img.shields.io/badge/build-passing-brightgreen)]()
-[![Tests](https://img.shields.io/badge/tests-244%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-267%20passing-brightgreen)]()
 [![Security Audit](https://img.shields.io/badge/security%20audit-4%20passes%20clean-brightgreen)]()
 [![JDK](https://img.shields.io/badge/JDK-8%20%E2%80%93%2026%2B-blue)]()
 [![Vendors](https://img.shields.io/badge/JVM-HotSpot%20%7C%20OpenJ9%20%7C%20GraalVM-blue)]()
-[![Release](https://img.shields.io/badge/release-v1.7.13.11-blue)](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.13.11)
+[![Release](https://img.shields.io/badge/release-v1.7.13.12-blue)](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.13.12)
 
 ---
 
 ## Download
 
-Pre-built JARs are available in the [v1.7.11.5 release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.13.11):
+Pre-built JARs are available in the [v1.7.11.5 release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.13.12):
 
 | Artefact | Description | Size |
 |----------|-------------|------|
-| [`oom-watchdog.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.7.13.11/oom-watchdog.jar) | Fat JAR — monitoring agent + CLI entry point | ~157 KB |
-| [`test-harness.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.7.13.11/test-harness.jar) | Fat JAR — interactive OOM test harness | ~171 KB |
+| [`oom-watchdog.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.7.13.12/oom-watchdog.jar) | Fat JAR — monitoring agent + CLI entry point | ~157 KB |
+| [`test-harness.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.7.13.12/test-harness.jar) | Fat JAR — interactive OOM test harness | ~171 KB |
 
 ---
 
@@ -49,7 +49,7 @@ OOM Watchdog provides real-time health monitoring, per-process logging named aft
 ```bash
 # Download the release JAR or self-extracting installer
 curl -L -o oom-watchdog.jar \
-  https://github.com/kgillard/oom-watchdog/releases/download/v1.7.13.11/oom-watchdog.jar
+  https://github.com/kgillard/oom-watchdog/releases/download/v1.7.13.12/oom-watchdog.jar
 
 # Run in multi-target daemon mode (monitors external JVMs over JMX)
 java -jar oom-watchdog.jar --daemon --targets-file /etc/oom-watchdog/targets.properties
@@ -1446,7 +1446,7 @@ oom-watchdog/
 │       ├── DynamicOomClassGenerator.java
 │       ├── BuiltInHeapExhauster.java
 │       └── HarnessAlertRecorder.java
-└── oom-watchdog-tests/              JUnit 4 test suite (244 tests)
+└── oom-watchdog-tests/              JUnit 4 test suite (267 tests)
 ```
 
 ---

@@ -12,6 +12,7 @@ import com.trongus.oom.tests.integration.QRadarPipelineTest;
 import com.trongus.oom.tests.integration.RemoteDumpRoutingTest;
 import com.trongus.oom.tests.model.JvmSnapshotTest;
 import com.trongus.oom.tests.model.OomRiskLevelTest;
+import com.trongus.oom.tests.monitor.GcHistoryStoreTest;
 import com.trongus.oom.tests.monitor.ThresholdRiskAssessorTest;
 import com.trongus.oom.tests.platform.JvmPlatformTest;
 import com.trongus.oom.tests.remote.TargetDescriptorTest;
@@ -39,7 +40,8 @@ import org.junit.runners.Suite;
  *   <li><strong>alert</strong> – {@link AlertFormatterTest}, {@link FileLogAlertChannelTest},
  *       {@link QRadarAlertChannelTest}</li>
  *   <li><strong>collector</strong> – {@link MxBeanDiagnosticsCollectorTest}</li>
- *   <li><strong>monitor</strong> – {@link ThresholdRiskAssessorTest}</li>
+ *   <li><strong>monitor</strong> – {@link ThresholdRiskAssessorTest},
+ *       {@link GcHistoryStoreTest}</li>
  *   <li><strong>platform</strong> – {@link JvmPlatformTest}</li>
  *   <li><strong>remote</strong> – {@link TargetDescriptorTest}, {@link TargetRegistryTest},
  *       {@link WatchdogDaemonTest}</li>
@@ -48,7 +50,7 @@ import org.junit.runners.Suite;
  * </ul>
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.13.0
+ * @version 1.7.13.12
  * @since 1.0.0
  */
 @RunWith(Suite.class)
@@ -69,6 +71,7 @@ import org.junit.runners.Suite;
     MxBeanDiagnosticsCollectorTest.class,
     // monitor
     ThresholdRiskAssessorTest.class,
+    GcHistoryStoreTest.class,
     // platform
     JvmPlatformTest.class,
     // remote

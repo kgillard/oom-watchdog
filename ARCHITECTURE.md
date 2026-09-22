@@ -96,31 +96,49 @@ classDiagram
         -AtomicBoolean dumpTakenThisEpisode
         -AtomicReference~OomRiskLevel~ lastLevel
         -AtomicReference~JvmSnapshot~ lastSnapshot
+        -GcHistoryStore gcHistoryStore
+        -String gcHistoryTarget
         +OomWatchdog(WatchdogConfig, JvmDiagnosticsCollector, RiskAssessor, List, HeapDumpService)
         +start()
         +stop()
         +getLastRiskLevel() OomRiskLevel
         +getLastSnapshot() JvmSnapshot
+        +setGcHistoryStore(GcHistoryStore, String)
         -poll()
         -checkDumpThresholds(JvmSnapshot)
+    }
+
+    class GcHistoryStore {
+        -Path baseDir
+        -int maxLines
+        -ConcurrentHashMap~String,Object~ locks
+        +GcHistoryStore()
+        +GcHistoryStore(Path, int)
+        +record(String, JvmSnapshot)
+        +readHistory(String, int) String
+        +availableTargets() List~String~
+        +buildLine(JvmSnapshot) String
+        +slugify(String) String
     }
 
     class MetricsHttpServer {
         -OomWatchdog selfWatchdog
         -Map~String,OomWatchdog~ remoteWatchdogs
+        -GcHistoryStore gcHistory
         -int port
         -boolean bindAll
         -TlsConfig tlsConfig
         -AtomicReference~SSLContext~ sslContextRef
         +MetricsHttpServer(OomWatchdog, int, boolean, TlsConfig)
-        +MetricsHttpServer(OomWatchdog, Map, int, boolean, TlsConfig)
+        +MetricsHttpServer(OomWatchdog, Map, Map, Map, int, boolean, TlsConfig)
         +start()
         +stop()
+        +recordSnapshot(String, JvmSnapshot)
         ~resolveBindAddress(boolean, int) InetSocketAddress
         -buildSslContext() SSLContext
         -generateSelfSignedKeystore(char[]) KeyStore
         -buildLiveJson(JvmSnapshot, String) String
-        -buildSnapshotJson(JvmSnapshot, String) String
+        -buildSnapshotJsonWithDumpApi(JvmSnapshot, String, String) String
     }
 
     class TlsConfig {
@@ -445,6 +463,8 @@ classDiagram
     JvmSnapshot --> OomRiskLevel
     MetricsHttpServer --> OomWatchdog
     MetricsHttpServer --> TlsConfig
+    MetricsHttpServer --> GcHistoryStore
+    OomWatchdog --> GcHistoryStore
     TlsConfig --> Mode
     WatchdogDaemon --> MetricsHttpServer
 ```
@@ -461,6 +481,7 @@ sequenceDiagram
     participant ASS as ThresholdRiskAssessor
     participant DUMP as CompositeDumpService
     participant CH as AlertChannel(s)
+    participant GCH as GcHistoryStore
 
     Scheduler->>WD: poll() [every pollIntervalMs]
     WD->>COL: collect()
@@ -491,6 +512,10 @@ sequenceDiagram
     end
 
     WD->>WD: lastLevel.set(riskLevel)
+    opt gcHistoryStore configured
+        WD->>GCH: record(targetName, assessed)
+        Note over GCH: appends JSON line to .jsonl ring-buffer
+    end
 ```
 
 ---
@@ -523,7 +548,7 @@ flowchart TD
 ## Module Structure
 
 ```
-oom-watchdog/                  Maven multi-module root (v1.7.13.11)
+oom-watchdog/                  Maven multi-module root (v1.7.13.12)
 ├── core/                      oom-watchdog.jar  (fat jar via maven-shade-plugin)
 │   └── src/main/java/com/trongus/oom/
 │       ├── WatchdogMain.java  CLI entry point (local + daemon modes)
@@ -544,7 +569,8 @@ oom-watchdog/                  Maven multi-module root (v1.7.13.11)
 │       ├── model/             JvmSnapshot (immutable value object, targetName)
 │       │                      + OomRiskLevel enum
 │       ├── monitor/           OomWatchdog + RiskAssessor (interface)
-│       │                      + ThresholdRiskAssessor
+│       │                      + ThresholdRiskAssessor + GcHistoryStore
+│       │                      + MetricsHttpServer + TlsConfig
 │       ├── platform/          JvmPlatform (static detection, all fields final)
 │       ├── remote/            TargetDescriptor, TargetRegistry,
 │       │                      JmxDiagnosticsCollector, WatchdogDaemon
@@ -578,7 +604,7 @@ oom-watchdog/                  Maven multi-module root (v1.7.13.11)
         ├── alert/             AlertFormatterTest, FileLogAlertChannelTest,
         │                      QRadarAlertChannelTest
         ├── collector/         MxBeanDiagnosticsCollectorTest
-        ├── monitor/           ThresholdRiskAssessorTest
+        ├── monitor/           ThresholdRiskAssessorTest, GcHistoryStoreTest
         ├── platform/          JvmPlatformTest
         ├── remote/            TargetDescriptorTest, TargetRegistryTest,
         │                      WatchdogDaemonTest
@@ -698,8 +724,8 @@ Pass 5 identified and fixed 4 issues in the remote JMX monitoring subsystem.
 
 ## Release Artefacts
 
-The v1.7.13.11 release publishes two executable fat JARs built with `maven-shade-plugin`.
-Both will be attached to the [GitHub release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.13.11).
+The v1.7.13.12 release publishes two executable fat JARs built with `maven-shade-plugin`.
+Both will be attached to the [GitHub release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.13.12).
 
 | Artefact | Main class | Contents | Size (approx) |
 |----------|-----------|----------|---------------|
