@@ -522,8 +522,25 @@
     }
     .gc-scrubber-label span { font-size: 12px; color: var(--text); font-weight: 600; }
     .gc-scrubber {
-      width: 100%; accent-color: var(--accent); cursor: pointer;
+      width: 100%;
+      accent-color: var(--accent);
+      cursor: pointer;
+      height: 20px;          /* taller hit target */
+      padding: 4px 0;
     }
+    /* Cross-browser thumb sizing */
+    .gc-scrubber::-webkit-slider-thumb {
+      width: 20px; height: 20px;
+    }
+    .gc-scrubber::-moz-range-thumb {
+      width: 20px; height: 20px;
+      border: none;
+      background: var(--accent);
+      border-radius: 50%;
+      cursor: pointer;
+    }
+    .gc-scrubber::-webkit-slider-runnable-track { height: 5px; }
+    .gc-scrubber::-moz-range-track              { height: 5px; }
     .gc-fetch-bar {
       display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 14px;
     }
@@ -1922,6 +1939,9 @@ function gcRenderHistory(s) {
 
 // ── Scrubber interaction ──────────────────────────────────────────────────────
 
+// Pending rAF handles — one per target slug so rapid moves coalesce.
+var _gcScrubRaf = {};
+
 function gcScrub(s, idx) {
   idx = parseInt(idx, 10);
   var h = _gcHistory[s];
@@ -1932,11 +1952,10 @@ function gcScrub(s, idx) {
   var r = h.records[idx];
   var isLive = (idx === h.records.length - 1);
 
-  // Update cursor timestamp
+  // ── Immediate: just update the timestamp label + snapshot bar text ──────────
   var curTs = document.getElementById(s + '-gc-cursor-ts');
   if (curTs) curTs.textContent = fmtTs(r.ts);
 
-  // Show/hide snapshot bar
   var snapBar = document.getElementById(s + '-gc-snapshot-bar');
   if (snapBar) {
     snapBar.style.display = isLive ? 'none' : '';
@@ -1949,15 +1968,23 @@ function gcScrub(s, idx) {
     }
   }
 
-  // Redraw all charts with cursor overlay (highlight point at idx)
-  var records = h.records;
-  gcDrawToCanvas(s + '-hchart-heap-canvas',    records.map(function(rec){ return rec.heap    || 0; }), '%',  'var(--crit)',   s + '-hchart-heap-cur',    (r.heap||0).toFixed(1)+'%',    idx);
-  gcDrawToCanvas(s + '-hchart-gc-canvas',      records.map(function(rec){ return rec.gc      || 0; }), '%',  'var(--warn)',   s + '-hchart-gc-cur',      (r.gc||0).toFixed(3)+'%',      idx);
-  gcDrawToCanvas(s + '-hchart-nursery-canvas', records.map(function(rec){ return rec.nursery || 0; }), '%',  'var(--accent)', s + '-hchart-nursery-cur', (r.nursery||0).toFixed(1)+'%', idx);
-  gcDrawToCanvas(s + '-hchart-nonheap-canvas', records.map(function(rec){ return rec.nonHeapMB||0; }), 'MB', '#a855f7',       s + '-hchart-nonheap-cur', (r.nonHeapMB||0).toFixed(1)+' MB', idx);
-  var postGc = records.map(function(rec){ return rec.postGcHeapMB > 0 ? rec.postGcHeapMB : 0; });
-  gcDrawToCanvas(s + '-hchart-postGc-canvas',  postGc, 'MB', '#f59e0b', s + '-hchart-postGc-cur', postGc[idx].toFixed(1)+' MB', idx);
-  gcDrawCollectorHistory(s + '-hchart-coll-canvas', records, idx);
+  // ── Deferred: canvas redraws coalesced into one animation frame ─────────────
+  if (_gcScrubRaf[s]) cancelAnimationFrame(_gcScrubRaf[s]);
+  _gcScrubRaf[s] = requestAnimationFrame(function() {
+    _gcScrubRaf[s] = null;
+    var h2 = _gcHistory[s];
+    if (!h2 || !h2.records) return;
+    var curIdx = h2.cursor;
+    var r2 = h2.records[curIdx];
+    var records = h2.records;
+    gcDrawToCanvas(s + '-hchart-heap-canvas',    records.map(function(rec){ return rec.heap    || 0; }), '%',  'var(--crit)',   s + '-hchart-heap-cur',    (r2.heap||0).toFixed(1)+'%',    curIdx);
+    gcDrawToCanvas(s + '-hchart-gc-canvas',      records.map(function(rec){ return rec.gc      || 0; }), '%',  'var(--warn)',   s + '-hchart-gc-cur',      (r2.gc||0).toFixed(3)+'%',      curIdx);
+    gcDrawToCanvas(s + '-hchart-nursery-canvas', records.map(function(rec){ return rec.nursery || 0; }), '%',  'var(--accent)', s + '-hchart-nursery-cur', (r2.nursery||0).toFixed(1)+'%', curIdx);
+    gcDrawToCanvas(s + '-hchart-nonheap-canvas', records.map(function(rec){ return rec.nonHeapMB||0; }), 'MB', '#a855f7',       s + '-hchart-nonheap-cur', (r2.nonHeapMB||0).toFixed(1)+' MB', curIdx);
+    var postGc = records.map(function(rec){ return rec.postGcHeapMB > 0 ? rec.postGcHeapMB : 0; });
+    gcDrawToCanvas(s + '-hchart-postGc-canvas',  postGc, 'MB', '#f59e0b', s + '-hchart-postGc-cur', postGc[curIdx].toFixed(1)+' MB', curIdx);
+    gcDrawCollectorHistory(s + '-hchart-coll-canvas', records, curIdx);
+  });
 }
 
 function gcLiveJump(s) {
