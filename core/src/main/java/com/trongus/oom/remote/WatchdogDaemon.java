@@ -251,8 +251,11 @@ public final class WatchdogDaemon implements Closeable {
                 watchdog.setGcHistoryStore(gcHistoryStore, target.getName());
 
                 watchdog.start();
-                WatchdogLogger.info(LOG, "Started watchdog for target [{0}] (JMX: {1})",
-                        logSafeName, logSafeUrl);
+                WatchdogLogger.info(LOG,
+                        "Started watchdog for target [{0}] (JMX: {1}) dump-dir=[{2}] dump-types={3}",
+                        logSafeName, logSafeUrl,
+                        targetConfig.getHeapDumpDirectory(),
+                        targetConfig.getDumpTypes().isEmpty() ? "(none)" : targetConfig.getDumpTypes().toString());
 
             } catch (Exception e) {
                 // Sanitise again in the catch block since logSafeName may not be in scope

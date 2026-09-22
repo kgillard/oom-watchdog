@@ -466,8 +466,14 @@ public final class WatchdogMain {
             }
         } else {
             for (TargetDescriptor t : targets) {
-                System.out.printf( "║    \u2022 %-18s (warn=%.0f%% crit=%.0f%%)%n",
-                        t.getName(), t.getWarnThreshold() * 100, t.getCritThreshold() * 100);
+                String dumpDir   = t.getDumpDirectory() != null ? t.getDumpDirectory()
+                                 : config.getHeapDumpDirectory();
+                String dumpTypes = t.getDumpTypes().isEmpty()
+                                 ? (config.getDumpTypes().isEmpty() ? "(none)" : config.getDumpTypes().toString())
+                                 : t.getDumpTypes().toString();
+                System.out.printf( "║    \u2022 %-18s warn=%.0f%% crit=%.0f%% dump-dir=%s types=%s%n",
+                        t.getName(), t.getWarnThreshold() * 100, t.getCritThreshold() * 100,
+                        dumpDir, dumpTypes);
             }
         }
         System.out.printf( "║  Log level               : %s%n",      config.getLogLevel().getName());

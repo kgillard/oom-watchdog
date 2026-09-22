@@ -129,10 +129,15 @@ public final class CompositeDumpService implements HeapDumpService {
         List<String> results = new ArrayList<>();
 
         // Ensure the output directory exists before attempting any dump
+        String dumpDir = config.getHeapDumpDirectory();
+        WatchdogLogger.info(LOG, "Dump triggered for [{0}]: types={1} dir=[{2}]",
+                snapshot.getTargetName() != null ? snapshot.getTargetName() : "self",
+                types, dumpDir);
         try {
-            Files.createDirectories(Paths.get(config.getHeapDumpDirectory()));
+            Files.createDirectories(Paths.get(dumpDir));
         } catch (Exception e) {
-            WatchdogLogger.warning(LOG, e, "Cannot create dump directory: {0}", e.getMessage());
+            WatchdogLogger.warning(LOG, e, "Cannot create dump directory [{0}]: {1}",
+                    dumpDir, e.getMessage());
             return results;
         }
 
