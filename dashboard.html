@@ -244,6 +244,9 @@
       user-select: none;
       transition: box-shadow 0.15s, opacity 0.15s;
       border-radius: var(--radius);
+      min-width: 220px;
+      min-height: 40px;
+      overflow: visible;
     }
     .dcard:active     { cursor: grabbing; }
     .dcard.drag-over  { box-shadow: 0 0 0 2px var(--accent); }
@@ -263,6 +266,37 @@
     }
     .dcard:hover::before { opacity: 0.55; }
 
+    /* ── Per-card resize handle ──────────────────────────────────────────────── */
+    /* Small triangular grip injected into each card via JS (.card-resize-handle) */
+    .card-resize-handle {
+      position: absolute;
+      bottom: 0; right: 0;
+      width: 16px; height: 16px;
+      cursor: se-resize;
+      z-index: 10;
+      /* Two-line corner indicator, drawn with SVG-like borders */
+      background: transparent;
+      border-bottom: 2px solid var(--muted);
+      border-right:  2px solid var(--muted);
+      border-bottom-right-radius: var(--radius);
+      opacity: 0;
+      transition: opacity 0.15s, border-color 0.15s;
+    }
+    /* Show handle on card hover OR during active resize */
+    .dcard:hover  .card-resize-handle,
+    .mcard:hover  .card-resize-handle,
+    .card-resize-handle.resizing {
+      opacity: 0.7;
+    }
+    .card-resize-handle:hover,
+    .card-resize-handle.resizing {
+      border-color: var(--accent);
+      opacity: 1;
+    }
+    /* Suppress text selection and cursor change body-wide while resizing */
+    body.card-resizing,
+    body.card-resizing * { user-select: none !important; cursor: se-resize !important; }
+
     /* ── Metric cards grid ───────────────────────────────────────────────────── */
     .metric-grid {
       display: grid;
@@ -272,7 +306,9 @@
     }
     .mcard        { background: var(--surface); border: 1px solid var(--border);
                     border-radius: var(--radius); padding: 12px 14px;
-                    cursor: grab; user-select: none; position: relative; transition: box-shadow 0.15s, opacity 0.15s; }
+                    cursor: grab; user-select: none; position: relative;
+                    transition: box-shadow 0.15s, opacity 0.15s;
+                    min-width: 150px; min-height: 60px; overflow: visible; }
     .mcard:active { cursor: grabbing; }
     .mcard.drag-over  { box-shadow: 0 0 0 2px var(--accent); }
     .mcard.dragging   { opacity: 0.4; }
@@ -2697,7 +2733,106 @@ ensureTabs = function() {
     restoreCardOrder(grid, '.mcard');
     initCardDrag(grid, '.mcard');
   });
+  // Inject resize handles into any card that doesn't already have one
+  initCardResize();
 };
+
+// ── Per-card resize (horizontal + vertical) ───────────────────────────────────
+// Each .dcard and .mcard gets a small .card-resize-handle in its bottom-right
+// corner.  Dragging it sets explicit width + height on the card, stored in
+// localStorage keyed by data-card-id so they survive page reloads.
+//
+// Resizing a .dcard (section card) adds an explicit height; the card is already
+// full-width in the flex column so horizontal resize is most useful for .mcard.
+// Both dimensions are always tracked so the user has full control.
+
+var CARD_SIZE_KEY = 'oom-card-sizes';  // localStorage key → JSON object
+
+function _loadCardSizes() {
+  try { return JSON.parse(localStorage.getItem(CARD_SIZE_KEY) || '{}'); } catch(e) { return {}; }
+}
+function _saveCardSize(cardId, w, h) {
+  var sizes = _loadCardSizes();
+  sizes[cardId] = { w: w, h: h };
+  try { localStorage.setItem(CARD_SIZE_KEY, JSON.stringify(sizes)); } catch(e) {}
+}
+function _applyCardSizes() {
+  var sizes = _loadCardSizes();
+  Object.keys(sizes).forEach(function(id) {
+    var el = document.querySelector('[data-card-id="' + id + '"]');
+    if (!el) return;
+    var s = sizes[id];
+    if (s.w > 0) el.style.width  = s.w + 'px';
+    if (s.h > 0) el.style.height = s.h + 'px';
+  });
+}
+
+function initCardResize() {
+  // Inject a resize handle into every .dcard and .mcard that doesn't already have one.
+  document.querySelectorAll('.dcard, .mcard').forEach(function(card) {
+    if (card.querySelector('.card-resize-handle')) return;  // already has one
+    var handle = document.createElement('div');
+    handle.className = 'card-resize-handle';
+    handle.title     = 'Drag to resize';
+    // Prevent the parent card's drag-and-drop from firing when the resize handle
+    // is grabbed — dragstart bubbles up from the handle to the [draggable] card.
+    handle.addEventListener('dragstart', function(e) { e.preventDefault(); e.stopPropagation(); });
+    card.appendChild(handle);
+  });
+  // Restore previously persisted sizes
+  _applyCardSizes();
+}
+
+// Central resize drag handler — one listener on document so it works even
+// after cards are recreated.
+(function() {
+  var _resizeCard   = null;   // card element being resized
+  var _resizeHandle = null;   // handle element
+  var _startX = 0, _startY = 0;
+  var _startW = 0, _startH = 0;
+
+  document.addEventListener('mousedown', function(e) {
+    if (!e.target.classList.contains('card-resize-handle')) return;
+    e.preventDefault();
+    e.stopPropagation();   // do NOT trigger drag-and-drop on the parent card
+    _resizeHandle = e.target;
+    _resizeCard   = e.target.parentElement;
+    _startX = e.clientX;
+    _startY = e.clientY;
+    _startW = _resizeCard.offsetWidth;
+    _startH = _resizeCard.offsetHeight;
+    _resizeHandle.classList.add('resizing');
+    document.body.classList.add('card-resizing');
+  });
+
+  document.addEventListener('mousemove', function(e) {
+    if (!_resizeCard) return;
+    var newW = Math.max(
+      parseInt(_resizeCard.style.minWidth  || '0', 10) || 100,
+      _startW + (e.clientX - _startX)
+    );
+    var newH = Math.max(
+      parseInt(_resizeCard.style.minHeight || '0', 10) || 40,
+      _startH + (e.clientY - _startY)
+    );
+    _resizeCard.style.width  = newW + 'px';
+    _resizeCard.style.height = newH + 'px';
+  });
+
+  document.addEventListener('mouseup', function() {
+    if (!_resizeCard) return;
+    var cardId = _resizeCard.dataset.cardId;
+    if (cardId) {
+      _saveCardSize(cardId,
+        parseInt(_resizeCard.style.width,  10) || 0,
+        parseInt(_resizeCard.style.height, 10) || 0);
+    }
+    if (_resizeHandle) _resizeHandle.classList.remove('resizing');
+    document.body.classList.remove('card-resizing');
+    _resizeCard   = null;
+    _resizeHandle = null;
+  });
+}());
 
 // ── Alert panel vertical resize ───────────────────────────────────────────────
 (function() {

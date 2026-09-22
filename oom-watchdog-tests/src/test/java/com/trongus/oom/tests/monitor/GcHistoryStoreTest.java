@@ -32,7 +32,7 @@ import static org.junit.Assert.*;
  * <p>Each test creates its own temporary directory so tests are fully isolated.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.13.12
+ * @version 1.7.13.13
  * @since 1.7.13.12
  * @see GcHistoryStore
  */

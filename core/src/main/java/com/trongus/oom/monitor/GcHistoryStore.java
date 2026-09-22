@@ -54,7 +54,7 @@ import java.util.logging.Logger;
  * parallel; concurrent writes to the same target are serialised.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.13.12
+ * @version 1.7.13.13
  * @since 1.7.13.2
  * @see MetricsHttpServer
  */

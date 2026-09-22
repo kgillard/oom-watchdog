@@ -456,8 +456,8 @@ public final class WatchdogMain {
             System.out.printf( "║  ⚠ TEST OVERRIDE          : warn=%.0f%% crit=%.0f%% applied to ALL targets%n",
                     config.getWarningHeapThreshold()  * 100,
                     config.getCriticalHeapThreshold() * 100);
-            System.out.println("║    (per-target thresholds ignored; dumps suppressed)            ║");
-            System.out.println("║    Use only to verify LEEF syslog delivery — NOT for production ║");
+            System.out.printf( "║    (per-target thresholds ignored; dumps suppressed)%n");
+            System.out.printf( "║    Use only to verify LEEF syslog delivery — NOT for production%n");
             for (TargetDescriptor t : targets) {
                 System.out.printf( "║    \u2022 %-18s (warn=%.0f%% crit=%.0f%% OVERRIDDEN)%n",
                         t.getName(),
