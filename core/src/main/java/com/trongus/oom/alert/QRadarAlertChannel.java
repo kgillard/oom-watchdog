@@ -80,7 +80,7 @@ import java.util.logging.Logger;
  * (guaranteed delivery) via the constructor.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.13.23
+ * @version 1.7.13.24
  * @since 1.0.0
  * @see AlertChannel
  * @see com.trongus.oom.model.JvmSnapshot
@@ -112,6 +112,16 @@ public final class QRadarAlertChannel implements AlertChannel {
     private final String    localHostname;
 
     /**
+     * {@code true} when {@link #qradarHost} resolves to an IP address assigned to a local
+     * network interface on this machine (including both loopback and the host's own NIC IPs).
+     * Linux routes all same-host UDP through the loopback path regardless of which local IP
+     * is used as destination, so UDP datagrams never appear on the physical NIC and QRadar
+     * never receives them. TCP is used automatically in this case.
+     * @since 1.7.13.24
+     */
+    private final boolean localDestination;
+
+    /**
      * Constructs a channel targeting a specific QRadar syslog receiver.
      *
      * @param qradarHost hostname or IP address of the QRadar syslog receiver
@@ -119,10 +129,19 @@ public final class QRadarAlertChannel implements AlertChannel {
      * @param transport  syslog transport protocol ({@link Transport#UDP} or {@link Transport#TCP})
      */
     public QRadarAlertChannel(String qradarHost, int qradarPort, Transport transport) {
-        this.qradarHost = qradarHost;
-        this.qradarPort = qradarPort;
-        this.transport  = transport;
-        this.localHostname = resolveLocalHostname();
+        this.qradarHost       = qradarHost;
+        this.qradarPort       = qradarPort;
+        this.transport        = transport;
+        this.localHostname    = resolveLocalHostname();
+        this.localDestination = isLocalAddress(qradarHost);
+        if (this.localDestination && transport == Transport.UDP) {
+            WatchdogLogger.warning(LOG,
+                    "QRadar host [{0}] is a local interface address. Linux routes same-host UDP " +
+                    "through the loopback path — datagrams never reach the physical NIC and " +
+                    "QRadar will not receive them. Switching to TCP automatically. " +
+                    "Add --qradar-tcp to your command line to suppress this warning.",
+                    qradarHost);
+        }
     }
 
     /**
@@ -157,7 +176,11 @@ public final class QRadarAlertChannel implements AlertChannel {
                 payload.length, qradarHost, qradarPort, transport, leefMessage);
 
         try {
-            if (transport == Transport.UDP) {
+            // On same-host deployments Linux routes UDP to local IPs through the kernel
+            // loopback path — the packet never reaches the physical NIC and QRadar (which
+            // listens on the physical interface) never receives it. Fall back to TCP, which
+            // uses a proper socket pair that QRadar's ecs syslog listener accepts.
+            if (transport == Transport.UDP && !localDestination) {
                 sendUdp(payload);
             } else {
                 sendTcp(payload);
@@ -396,6 +419,35 @@ public final class QRadarAlertChannel implements AlertChannel {
         } catch (Exception e) {
             return "localhost";
         }
+    }
+
+    /**
+     * Returns {@code true} if {@code host} resolves to any IP address currently assigned
+     * to a local network interface on this machine (loopback or any NIC).
+     *
+     * <p>Linux routes UDP packets whose destination is a local address entirely through the
+     * kernel without ever touching the physical NIC, so {@code tcpdump} on the NIC sees
+     * nothing and QRadar never receives the datagram. This check is used to switch
+     * automatically to TCP for same-host deployments.
+     *
+     * @param host hostname or IP string to test
+     * @return {@code true} if the host resolves to a local interface address
+     * @since 1.7.13.24
+     */
+    private static boolean isLocalAddress(String host) {
+        try {
+            InetAddress target = InetAddress.getByName(host);
+            if (target.isLoopbackAddress()) return true;
+            Enumeration<NetworkInterface> ifaces = NetworkInterface.getNetworkInterfaces();
+            while (ifaces != null && ifaces.hasMoreElements()) {
+                NetworkInterface iface = ifaces.nextElement();
+                Enumeration<InetAddress> iaddrs = iface.getInetAddresses();
+                while (iaddrs.hasMoreElements()) {
+                    if (iaddrs.nextElement().equals(target)) return true;
+                }
+            }
+        } catch (Exception ignored) { /* treat as non-local */ }
+        return false;
     }
 
     /**

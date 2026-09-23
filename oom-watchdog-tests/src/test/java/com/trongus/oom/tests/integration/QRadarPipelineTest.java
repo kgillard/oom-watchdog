@@ -12,29 +12,36 @@ import com.trongus.oom.monitor.RiskAssessor;
 import org.junit.After;
 import org.junit.Test;
 
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
+import java.io.InputStream;
 import java.net.InetAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.Assert.*;
 
 /**
- * End-to-end integration test: OomWatchdog → QRadarAlertChannel → UDP datagram.
+ * End-to-end integration test: OomWatchdog → QRadarAlertChannel → TCP syslog frame.
  *
  * <p>Verifies that when {@link OomWatchdog} assesses a WARNING or CRITICAL snapshot
- * it actually transmits a well-formed LEEF 2.0 syslog event over UDP — the same
- * path events must travel to reach QRadar in production.
+ * it actually transmits a well-formed LEEF 2.0 syslog event — the same path events
+ * travel to reach QRadar in production.
  *
- * <p>A real loopback UDP socket is bound to capture the datagram; no network
- * or QRadar installation is required.
+ * <p>{@link QRadarAlertChannel} automatically switches from UDP to TCP when the
+ * destination resolves to a local interface address (loopback or host NIC), because
+ * Linux routes same-host UDP through the kernel loopback path without touching the
+ * physical NIC. A real loopback TCP server socket is bound to capture the frame;
+ * no network or QRadar installation is required.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.13.0
+ * @version 1.7.13.24
  * @since 1.7.10
  */
 public class QRadarPipelineTest {
@@ -50,42 +57,38 @@ public class QRadarPipelineTest {
         }
     }
 
-    // ── stubs ─────────────────────────────────────────────────────────────────
+    // ── collectors / assessors / services ────────────────────────────────────
 
-    private static JvmDiagnosticsCollector criticalCollector() {
-        return new JvmDiagnosticsCollector() {
-            @Override
-            public JvmSnapshot collect() {
-                return new JvmSnapshot.Builder()
-                        .processName("test-jvm@localhost")
-                        .targetName("test-target")
-                        .timestampMs(System.currentTimeMillis())
-                        .heapUsedBytes(93L * MB)
-                        .heapMaxBytes(100L * MB)
-                        .heapUsedRatio(0.93)
-                        .heapCommittedBytes(100L * MB)
-                        .nonHeapUsedBytes(64L * MB)
-                        .nonHeapMaxBytes(-1L)
-                        .totalGcTimeMs(500L)
-                        .jvmUptimeMs(60_000L)
-                        .gcOverheadRatio(0.02)
-                        .postGcHeapUsedBytes(-1L)
-                        .postGcHeapGrowthRatePerMs(Double.NaN)
-                        .riskLevel(OomRiskLevel.CRITICAL)
-                        .critThreshold(0.90)
-                        .diagnosisNotes("[Assessment] CRITICAL – OOM imminent.")
-                        .leefCategory("JVM_OOM_Test")
-                        .leefTags("env=test,suite=integration")
-                        .poolUsedBytes(Collections.<String, Long>emptyMap())
-                        .gcCollectionCounts(Collections.<String, Long>emptyMap())
-                        .gcCollectionTimesMs(Collections.<String, Long>emptyMap())
-                        .build();
-            }
-        };
+    /** Returns a CRITICAL snapshot on every collect(). */
+    private JvmDiagnosticsCollector criticalCollector() {
+        return () -> new JvmSnapshot.Builder()
+                .targetName("test-target")
+                .processName("test-jvm@localhost")
+                .timestampMs(System.currentTimeMillis())
+                .heapUsedBytes(93L * MB)
+                .heapMaxBytes(100L * MB)
+                .heapUsedRatio(0.93)
+                .critThreshold(0.90)
+                .heapCommittedBytes(100L * MB)
+                .nonHeapUsedBytes(64L * MB)
+                .nonHeapMaxBytes(-1L)
+                .totalGcTimeMs(500L)
+                .jvmUptimeMs(25_000L)
+                .gcOverheadRatio(0.02)
+                .postGcHeapUsedBytes(-1L)
+                .postGcHeapGrowthRatePerMs(Double.NaN)
+                .riskLevel(OomRiskLevel.CRITICAL)
+                .diagnosisNotes("[Assessment] CRITICAL – OOM imminent.")
+                .leefCategory("JVM_OOM_Test")
+                .leefTags("env=test,suite=integration")
+                .poolUsedBytes(Collections.<String, Long>emptyMap())
+                .gcCollectionCounts(Collections.<String, Long>emptyMap())
+                .gcCollectionTimesMs(Collections.<String, Long>emptyMap())
+                .build();
     }
 
-    /** Pass-through assessor — snapshot already carries the desired risk level. */
-    private static RiskAssessor passThroughAssessor() {
+    /** Pass-through assessor: returns the snapshot unchanged. */
+    private RiskAssessor passThroughAssessor() {
         return snap -> snap;
     }
 
@@ -94,22 +97,49 @@ public class QRadarPipelineTest {
         return (snap, types) -> Collections.emptyList();
     }
 
+    // ── TCP capture helper ────────────────────────────────────────────────────
+
+    /**
+     * Binds a TCP server on loopback, creates the channel (which auto-upgrades to TCP
+     * for local destinations), runs the supplied action, and returns the first frame received.
+     */
+    private String captureOneTcpFrame(ThrowingRunnable action) throws Exception {
+        ExecutorService ex = Executors.newSingleThreadExecutor();
+        try (ServerSocket server = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
+            server.setSoTimeout(5_000);
+            Future<String> receiver = ex.submit(() -> {
+                try (Socket conn = server.accept();
+                     InputStream in = conn.getInputStream()) {
+                    byte[] buf = new byte[65_536];
+                    int n = in.read(buf);
+                    return n > 0 ? new String(buf, 0, n, StandardCharsets.UTF_8) : "";
+                }
+            });
+            action.run(server.getLocalPort());
+            return receiver.get();
+        } finally {
+            ex.shutdownNow();
+        }
+    }
+
+    @FunctionalInterface
+    interface ThrowingRunnable {
+        void run(int port) throws Exception;
+    }
+
     // ── tests ─────────────────────────────────────────────────────────────────
 
     /**
      * Full pipeline: OomWatchdog polls → CRITICAL snapshot → QRadarAlertChannel
-     * transmits a UDP datagram → datagram received and parsed as valid LEEF 2.0.
+     * transmits a TCP syslog frame → frame received and parsed as valid LEEF 2.0.
      */
     @Test
     public void testCriticalEventReachesQRadarViaPipeline() throws Exception {
-        try (DatagramSocket server = new DatagramSocket(0, InetAddress.getLoopbackAddress())) {
-            server.setSoTimeout(5_000);
-            int port = server.getLocalPort();
-
+        String leef = captureOneTcpFrame(port -> {
             QRadarAlertChannel qradar = new QRadarAlertChannel(
                     InetAddress.getLoopbackAddress().getHostAddress(),
                     port,
-                    QRadarAlertChannel.Transport.UDP);
+                    QRadarAlertChannel.Transport.UDP); // auto-upgrades to TCP for local dest
 
             WatchdogConfig config = WatchdogConfig.defaults()
                     .pollIntervalMs(100L)
@@ -124,47 +154,39 @@ public class QRadarPipelineTest {
                     passThroughAssessor(),
                     Collections.singletonList(qradar),
                     noopDumpService());
-
             watchdog.start();
+        });
+        if (watchdog != null) watchdog.stop();
 
-            // Receive the first datagram (must arrive within 5 s)
-            byte[] buf = new byte[65_536];
-            DatagramPacket pkt = new DatagramPacket(buf, buf.length);
-            server.receive(pkt);    // throws SocketTimeoutException if nothing arrives
-            watchdog.stop();
+        // ── LEEF 2.0 structure ────────────────────────────────────────────
+        assertTrue("Payload must start with RFC 3164 syslog priority",
+                leef.startsWith("<"));
+        assertTrue("Payload must contain LEEF:2.0 header",
+                leef.contains("LEEF:2.0|IBM|OomWatchdog|"));
+        assertTrue("EventID must reflect CRITICAL risk level",
+                leef.contains("OOM_CRITICAL"));
 
-            String leef = new String(pkt.getData(), 0, pkt.getLength(), StandardCharsets.UTF_8);
-
-            // ── LEEF 2.0 structure ────────────────────────────────────────────
-            assertTrue("Payload must start with RFC 3164 syslog priority",
-                    leef.startsWith("<"));
-            assertTrue("Payload must contain LEEF:2.0 header",
-                    leef.contains("LEEF:2.0|IBM|OomWatchdog|"));
-            assertTrue("EventID must reflect CRITICAL risk level",
-                    leef.contains("OOM_CRITICAL"));
-
-            // ── LEEF attributes ───────────────────────────────────────────────
-            assertTrue("sev=9 must be present for CRITICAL",
-                    leef.contains("sev=9"));
-            assertTrue("cat must use leef-category override",
-                    leef.contains("cat=JVM_OOM_Test"));
-            assertTrue("tags attribute must be present",
-                    leef.contains("tags=env=test,suite=integration"));
-            assertTrue("targetJvm attribute must be present",
-                    leef.contains("targetJvm=test-target"));
-            assertTrue("heapPct must be present",
-                    leef.contains("heapPct="));
-            assertTrue("critThresholdPct=90.0 must be present",
-                    leef.contains("critThresholdPct=90.0"));
-            assertTrue("heapMarginPct must be present (heap 93% - crit 90% = -3.0%)",
-                    leef.contains("heapMarginPct=-3.0"));
-            assertTrue("riskLevel=CRITICAL must be present",
-                    leef.contains("riskLevel=CRITICAL"));
-            assertTrue("dumpTaken=false must be present (no dump configured)",
-                    leef.contains("dumpTaken=false"));
-            assertTrue("msg= attribute must be present",
-                    leef.contains("msg="));
-        }
+        // ── LEEF attributes ───────────────────────────────────────────────
+        assertTrue("sev=9 must be present for CRITICAL",
+                leef.contains("sev=9"));
+        assertTrue("cat must use leef-category override",
+                leef.contains("cat=JVM_OOM_Test"));
+        assertTrue("tags attribute must be present",
+                leef.contains("tags=env=test,suite=integration"));
+        assertTrue("targetJvm attribute must be present",
+                leef.contains("targetJvm=test-target"));
+        assertTrue("heapPct must be present",
+                leef.contains("heapPct="));
+        assertTrue("critThresholdPct=90.0 must be present",
+                leef.contains("critThresholdPct=90.0"));
+        assertTrue("heapMarginPct must be present (heap 93% - crit 90% = -3.0%)",
+                leef.contains("heapMarginPct=-3.0"));
+        assertTrue("riskLevel=CRITICAL must be present",
+                leef.contains("riskLevel=CRITICAL"));
+        assertTrue("dumpTaken=false must be present (no dump configured)",
+                leef.contains("dumpTaken=false"));
+        assertTrue("msg= attribute must be present",
+                leef.contains("msg="));
     }
 
     /**
@@ -172,14 +194,11 @@ public class QRadarPipelineTest {
      */
     @Test
     public void testWarningEventReachesQRadarViaPipeline() throws Exception {
-        try (DatagramSocket server = new DatagramSocket(0, InetAddress.getLoopbackAddress())) {
-            server.setSoTimeout(5_000);
-            int port = server.getLocalPort();
-
+        String leef = captureOneTcpFrame(port -> {
             QRadarAlertChannel qradar = new QRadarAlertChannel(
                     InetAddress.getLoopbackAddress().getHostAddress(),
                     port,
-                    QRadarAlertChannel.Transport.UDP);
+                    QRadarAlertChannel.Transport.UDP); // auto-upgrades to TCP for local dest
 
             WatchdogConfig config = WatchdogConfig.defaults()
                     .pollIntervalMs(100L)
@@ -216,21 +235,14 @@ public class QRadarPipelineTest {
                     passThroughAssessor(),
                     Collections.singletonList(qradar),
                     noopDumpService());
-
             watchdog.start();
+        });
+        if (watchdog != null) watchdog.stop();
 
-            byte[] buf = new byte[65_536];
-            DatagramPacket pkt = new DatagramPacket(buf, buf.length);
-            server.receive(pkt);
-            watchdog.stop();
-
-            String leef = new String(pkt.getData(), 0, pkt.getLength(), StandardCharsets.UTF_8);
-
-            assertTrue("LEEF:2.0 header must be present", leef.contains("LEEF:2.0|IBM|OomWatchdog|"));
-            assertTrue("EventID must reflect WARNING risk level", leef.contains("OOM_WARNING"));
-            assertTrue("sev=5 must be present for WARNING", leef.contains("sev=5"));
-            assertTrue("riskLevel=WARNING must be present",  leef.contains("riskLevel=WARNING"));
-        }
+        assertTrue("LEEF:2.0 header must be present", leef.contains("LEEF:2.0|IBM|OomWatchdog|"));
+        assertTrue("EventID must reflect WARNING risk level", leef.contains("OOM_WARNING"));
+        assertTrue("sev=5 must be present for WARNING", leef.contains("sev=5"));
+        assertTrue("riskLevel=WARNING must be present",  leef.contains("riskLevel=WARNING"));
     }
 
     /**
@@ -239,15 +251,15 @@ public class QRadarPipelineTest {
      */
     @Test
     public void testOkLevelProducesNoQRadarEvent() throws Exception {
-        try (DatagramSocket server = new DatagramSocket(0, InetAddress.getLoopbackAddress())) {
-            // Short timeout — we expect nothing to arrive
+        ExecutorService ex = Executors.newSingleThreadExecutor();
+        try (ServerSocket server = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
             server.setSoTimeout(400);
             int port = server.getLocalPort();
 
             QRadarAlertChannel qradar = new QRadarAlertChannel(
                     InetAddress.getLoopbackAddress().getHostAddress(),
                     port,
-                    QRadarAlertChannel.Transport.UDP);
+                    QRadarAlertChannel.Transport.UDP); // auto-upgrades to TCP for local dest
 
             WatchdogConfig config = WatchdogConfig.defaults()
                     .pollIntervalMs(100L)
@@ -282,24 +294,24 @@ public class QRadarPipelineTest {
                     passThroughAssessor(),
                     Collections.singletonList(qradar),
                     noopDumpService());
-
             watchdog.start();
 
             // Let a few poll cycles run
             TimeUnit.MILLISECONDS.sleep(300L);
             watchdog.stop();
 
-            // Attempt to receive — must time out (SocketTimeoutException expected)
-            byte[] buf = new byte[65_536];
-            DatagramPacket pkt = new DatagramPacket(buf, buf.length);
-            boolean received = false;
+            // Attempt to accept a connection — must time out
+            boolean connected = false;
             try {
-                server.receive(pkt);
-                received = true;
-            } catch (java.net.SocketTimeoutException expected) {
-                // correct: no datagram should arrive for an OK level
+                Future<Boolean> f = ex.submit(() -> { server.accept(); return true; });
+                f.get(400, TimeUnit.MILLISECONDS);
+                connected = true;
+            } catch (Exception expected) {
+                // correct: no connection should arrive for an OK level
             }
-            assertFalse("No QRadar event should be sent when risk level is OK", received);
+            assertFalse("No QRadar event should be sent when risk level is OK", connected);
+        } finally {
+            ex.shutdownNow();
         }
     }
 }
