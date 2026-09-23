@@ -80,7 +80,7 @@ import java.util.logging.Logger;
  * (guaranteed delivery) via the constructor.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.13.26
+ * @version 1.7.13.27
  * @since 1.0.0
  * @see AlertChannel
  * @see com.trongus.oom.model.JvmSnapshot
@@ -112,6 +112,17 @@ public final class QRadarAlertChannel implements AlertChannel {
     private final String    localHostname;
 
     /**
+     * The effective TCP destination hostname or IP used when {@link #localDestination} is
+     * {@code true}.  When {@link #qradarHost} resolves to a loopback address, QRadar's
+     * {@code ecs} syslog listener is typically bound to the machine's real NIC IP, not to
+     * {@code 127.0.0.1}.  This field holds the first non-loopback IPv4 address found on
+     * any up interface (falling back to {@link #qradarHost} if none can be resolved), so
+     * the TCP connection actually reaches the syslog listener.
+     * @since 1.7.13.27
+     */
+    private final String    effectiveTcpHost;
+
+    /**
      * {@code true} when {@link #qradarHost} resolves to an IP address assigned to a local
      * network interface on this machine (including both loopback and the host's own NIC IPs).
      * Linux routes all same-host UDP through the loopback path regardless of which local IP
@@ -134,13 +145,27 @@ public final class QRadarAlertChannel implements AlertChannel {
         this.transport        = transport;
         this.localHostname    = resolveLocalHostname();
         this.localDestination = isLocalAddress(qradarHost);
-        if (this.localDestination && transport == Transport.UDP) {
-            WatchdogLogger.warning(LOG,
-                    "QRadar host [{0}] is a local interface address. Linux routes same-host UDP " +
-                    "through the loopback path — datagrams never reach the physical NIC and " +
-                    "QRadar will not receive them. Switching to TCP automatically. " +
-                    "Add --qradar-tcp to your command line to suppress this warning.",
-                    qradarHost);
+        if (this.localDestination) {
+            // When the configured qradar-host is a loopback address (e.g. 127.0.0.1), QRadar's
+            // ecs syslog listener is bound to the real NIC IP, not to the loopback interface.
+            // Resolve the machine's first non-loopback IPv4 address and use it as the TCP
+            // destination so the connection actually reaches the ecs listener.
+            InetAddress realNic = resolveNonLoopbackAddress(false);
+            this.effectiveTcpHost = (realNic != null) ? realNic.getHostAddress() : qradarHost;
+            if (transport == Transport.UDP) {
+                WatchdogLogger.warning(LOG,
+                        "QRadar host [{0}] is a local interface address. Linux routes same-host UDP " +
+                        "through the loopback path — datagrams never reach the physical NIC and " +
+                        "QRadar will not receive them. Switching to TCP automatically to [{1}]. " +
+                        "Add --qradar-tcp to your command line to suppress this warning.",
+                        qradarHost, this.effectiveTcpHost);
+            } else {
+                WatchdogLogger.config(LOG,
+                        "QRadar host [{0}] is local; using real NIC address [{1}] as TCP destination " +
+                        "to reach the ecs syslog listener.", qradarHost, this.effectiveTcpHost);
+            }
+        } else {
+            this.effectiveTcpHost = qradarHost;
         }
     }
 
@@ -163,9 +188,15 @@ public final class QRadarAlertChannel implements AlertChannel {
     public void alert(JvmSnapshot snapshot) {
         String target = snapshot.getTargetName() != null ? snapshot.getTargetName()
                       : snapshot.getProcessName() != null ? snapshot.getProcessName() : "unknown";
+
+        // Determine the actual transport used: local destinations always use TCP regardless
+        // of the configured transport, to avoid Linux loopback routing swallowing UDP.
+        boolean useTcp = (transport == Transport.TCP) || localDestination;
+        String  actualTransport = useTcp ? "TCP" : "UDP";
+
         WatchdogLogger.fine(LOG,
                 "Building LEEF event: target=[{0}] riskLevel=[{1}] destination=[{2}:{3}/{4}]",
-                target, snapshot.getRiskLevel(), qradarHost, qradarPort, transport);
+                target, snapshot.getRiskLevel(), effectiveTcpHost, qradarPort, actualTransport);
 
         String leefMessage = buildLeefMessage(snapshot);
         byte[] payload     = leefMessage.getBytes(StandardCharsets.UTF_8);
@@ -173,25 +204,26 @@ public final class QRadarAlertChannel implements AlertChannel {
         // Log at INFO so operators can confirm LEEF events are being sent without
         // needing FINEST level — critical for troubleshooting QRadar delivery.
         WatchdogLogger.info(LOG, "LEEF payload ({0} bytes) \u2192 {1}:{2}/{3}: {4}",
-                payload.length, qradarHost, qradarPort, transport, leefMessage);
+                payload.length, effectiveTcpHost, qradarPort, actualTransport, leefMessage);
 
         try {
             // On same-host deployments Linux routes UDP to local IPs through the kernel
             // loopback path — the packet never reaches the physical NIC and QRadar (which
-            // listens on the physical interface) never receives it. Fall back to TCP, which
-            // uses a proper socket pair that QRadar's ecs syslog listener accepts.
-            if (transport == Transport.UDP && !localDestination) {
-                sendUdp(payload);
+            // listens on the physical interface) never receives it. Fall back to TCP directed
+            // at the real NIC IP so the ecs syslog listener actually receives the event.
+            if (useTcp) {
+                sendTcp(payload, effectiveTcpHost);
             } else {
-                sendTcp(payload);
+                sendUdp(payload);
             }
             WatchdogLogger.info(LOG,
                     "LEEF event sent: target=[{0}] riskLevel=[{1}] destination=[{2}:{3}/{4}] bytes={5}",
-                    target, snapshot.getRiskLevel(), qradarHost, qradarPort, transport, payload.length);
+                    target, snapshot.getRiskLevel(), effectiveTcpHost, qradarPort, actualTransport,
+                    payload.length);
         } catch (IOException e) {
             WatchdogLogger.warning(LOG, e,
                     "Failed to send LEEF event to [{0}:{1}/{2}] for target [{3}]: {4}",
-                    qradarHost, qradarPort, transport, target, e.getMessage());
+                    effectiveTcpHost, qradarPort, actualTransport, target, e.getMessage());
         }
     }
 
@@ -373,14 +405,16 @@ public final class QRadarAlertChannel implements AlertChannel {
     /**
      * Sends a LEEF payload over TCP using a newline frame delimiter (RFC 6587).
      *
-     * @param payload UTF-8 encoded syslog message bytes
+     * @param payload  UTF-8 encoded syslog message bytes
+     * @param destHost hostname or IP to connect to (may differ from {@link #qradarHost} when
+     *                 {@link #localDestination} is {@code true} and the real NIC address was resolved)
      * @throws IOException if connection or write fails
      */
-    private void sendTcp(byte[] payload) throws IOException {
+    private void sendTcp(byte[] payload, String destHost) throws IOException {
         // Use an explicit connect timeout and SO_TIMEOUT to prevent the watchdog
         // poll thread from blocking indefinitely on a slow or unreachable QRadar host.
         try (Socket socket = new Socket()) {
-            socket.connect(new InetSocketAddress(qradarHost, qradarPort), TCP_TIMEOUT_MS);
+            socket.connect(new InetSocketAddress(destHost, qradarPort), TCP_TIMEOUT_MS);
             socket.setSoTimeout(TCP_TIMEOUT_MS);
             OutputStream out = socket.getOutputStream();
             out.write(payload);

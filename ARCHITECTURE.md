@@ -220,11 +220,12 @@ classDiagram
         -Transport transport
         -String localHostname
         -boolean localDestination
+        -String effectiveTcpHost
         +QRadarAlertChannel(String, int, Transport)
         +alert(JvmSnapshot)
         +channelName() String
         -sendUdp(byte[]) void
-        -sendTcp(byte[]) void
+        -sendTcp(byte[], String) void
         -resolveNonLoopbackAddress(boolean) InetAddress
         -isLocalAddress(String) boolean
     }
@@ -556,7 +557,7 @@ flowchart TD
 ## Module Structure
 
 ```
-oom-watchdog/                  Maven multi-module root (v1.7.13.26)
+oom-watchdog/                  Maven multi-module root (v1.7.13.27)
 ├── core/                      oom-watchdog.jar  (fat jar via maven-shade-plugin)
 │   └── src/main/java/com/trongus/oom/
 │       ├── WatchdogMain.java  CLI entry point (local + daemon modes)
@@ -732,8 +733,8 @@ Pass 5 identified and fixed 4 issues in the remote JMX monitoring subsystem.
 
 ## Release Artefacts
 
-The v1.7.13.26 release publishes two executable fat JARs built with `maven-shade-plugin`.
-Both will be attached to the [GitHub release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.13.26).
+The v1.7.13.27 release publishes two executable fat JARs built with `maven-shade-plugin`.
+Both will be attached to the [GitHub release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.13.27).
 
 | Artefact | Main class | Contents | Size (approx) |
 |----------|-----------|----------|---------------|

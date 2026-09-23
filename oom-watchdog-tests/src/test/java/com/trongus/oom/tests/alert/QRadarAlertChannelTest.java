@@ -29,7 +29,7 @@ import static org.junit.Assert.*;
  * touching the physical NIC.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.13.26
+ * @version 1.7.13.27
  * @since 1.7.1
  */
 public class QRadarAlertChannelTest {
@@ -70,12 +70,16 @@ public class QRadarAlertChannelTest {
 
     // ── helper: capture one TCP syslog frame sent by the channel ─────────────
     // QRadarAlertChannel automatically uses TCP when the destination is a local
-    // interface address (loopback or host NIC) because Linux routes same-host
-    // UDP entirely through the kernel — tcpdump on the NIC sees nothing.
+    // interface address (loopback or host NIC), directing the connection to the
+    // machine's real NIC IP so the ecs syslog listener receives it.
+    // The test ServerSocket therefore binds to all interfaces (0.0.0.0) so it
+    // accepts connections regardless of which local IP the channel resolves.
 
     private String captureLeef(JvmSnapshot snap) throws Exception {
         ExecutorService ex = Executors.newSingleThreadExecutor();
-        try (ServerSocket server = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
+        // Bind on all interfaces so the channel's TCP connect to the resolved real
+        // NIC address (not loopback) is accepted by this test server socket.
+        try (ServerSocket server = new ServerSocket(0, 1, InetAddress.getByName("0.0.0.0"))) {
             server.setSoTimeout(3_000);
             int port = server.getLocalPort();
 

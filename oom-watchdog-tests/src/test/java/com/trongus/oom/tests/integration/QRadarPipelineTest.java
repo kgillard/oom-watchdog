@@ -41,7 +41,7 @@ import static org.junit.Assert.*;
  * no network or QRadar installation is required.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.13.26
+ * @version 1.7.13.27
  * @since 1.7.10
  */
 public class QRadarPipelineTest {
@@ -100,12 +100,15 @@ public class QRadarPipelineTest {
     // ── TCP capture helper ────────────────────────────────────────────────────
 
     /**
-     * Binds a TCP server on loopback, creates the channel (which auto-upgrades to TCP
-     * for local destinations), runs the supplied action, and returns the first frame received.
+     * Binds a TCP server on all interfaces, creates the channel (which auto-upgrades to TCP
+     * for local destinations and connects to the real NIC IP), runs the supplied action,
+     * and returns the first frame received.
      */
     private String captureOneTcpFrame(ThrowingRunnable action) throws Exception {
         ExecutorService ex = Executors.newSingleThreadExecutor();
-        try (ServerSocket server = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
+        // Bind on 0.0.0.0 so the channel's TCP connect to the resolved real NIC address
+        // (not loopback) is accepted by this test server socket.
+        try (ServerSocket server = new ServerSocket(0, 1, InetAddress.getByName("0.0.0.0"))) {
             server.setSoTimeout(5_000);
             Future<String> receiver = ex.submit(() -> {
                 try (Socket conn = server.accept();
@@ -252,7 +255,7 @@ public class QRadarPipelineTest {
     @Test
     public void testOkLevelProducesNoQRadarEvent() throws Exception {
         ExecutorService ex = Executors.newSingleThreadExecutor();
-        try (ServerSocket server = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
+        try (ServerSocket server = new ServerSocket(0, 1, InetAddress.getByName("0.0.0.0"))) {
             server.setSoTimeout(400);
             int port = server.getLocalPort();
 
