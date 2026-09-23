@@ -80,7 +80,7 @@ import java.util.logging.Logger;
  * (guaranteed delivery) via the constructor.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.13.27
+ * @version 1.7.13.28
  * @since 1.0.0
  * @see AlertChannel
  * @see com.trongus.oom.model.JvmSnapshot
@@ -118,7 +118,7 @@ public final class QRadarAlertChannel implements AlertChannel {
      * {@code 127.0.0.1}.  This field holds the first non-loopback IPv4 address found on
      * any up interface (falling back to {@link #qradarHost} if none can be resolved), so
      * the TCP connection actually reaches the syslog listener.
-     * @since 1.7.13.27
+     * @since 1.7.13.28
      */
     private final String    effectiveTcpHost;
 

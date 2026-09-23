@@ -168,6 +168,14 @@ import java.util.logging.Logger;
  *     <td>{@code false}</td>
  *     <td>Displays the command-line usage manual and exits.</td>
  *   </tr>
+ *   <tr>
+ *     <td>{@code --silent}</td>
+ *     <td>Flag (boolean)</td>
+ *     <td>{@code false}</td>
+ *     <td>Suppresses all console (stderr) output and the startup banner.
+ *         Log records are still written to {@code --log-file} when configured.
+ *         Use when running as a background service (nohup, systemd, cron).</td>
+ *   </tr>
  * </table>
  *
  * <h2>Usage Examples</h2>
@@ -190,7 +198,7 @@ import java.util.logging.Logger;
  * }</pre>
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.13.27
+ * @version 1.7.13.28
  * @since 1.0.0
  * @see com.trongus.oom.config.WatchdogConfig
  * @see com.trongus.oom.monitor.OomWatchdog
@@ -237,7 +245,9 @@ public final class WatchdogMain {
         // Initialise structured JUL logging before any other component is created.
         // Pass logFile so diagnostic output (including LEEF send confirmations) is
         // written to --log-file in both self-monitoring and daemon mode.
-        WatchdogLogger.initialise(cli.logLevel, cli.logFile);
+        // When --silent is set, the ConsoleHandler is omitted entirely so nothing
+        // is written to stderr; the file log is still active if --log-file is set.
+        WatchdogLogger.initialise(cli.logLevel, cli.logFile, cli.silent);
 
         // ── Configuration ─────────────────────────────────────────────────────
         // Construct the immutable WatchdogConfig instance from parsed arguments
@@ -312,7 +322,9 @@ public final class WatchdogMain {
                     new Thread(daemon::stop, "oom-daemon-shutdown"));
 
             daemon.start();
-            printDaemonSummary(targets, config, cli);
+            if (!cli.silent) {
+                printDaemonSummary(targets, config, cli);
+            }
 
             // ── Metrics HTTPS server for daemon mode ──────────────────────────
             if (cli.metricsPort > 0) {
@@ -373,7 +385,9 @@ public final class WatchdogMain {
             }
         }
 
-        printStartupSummary(config, cli);
+        if (!cli.silent) {
+            printStartupSummary(config, cli);
+        }
 
         // ── Test mode ─────────────────────────────────────────────────────────
         // If test mode is enabled, trigger OomSimulator
@@ -583,6 +597,11 @@ public final class WatchdogMain {
           + "  --test-mode                   Run OOM simulator to exercise all alert levels\n"
           + "  --test-leak-secs <s>          Slow-leak phase seconds in test mode (default: 20)\n"
           + "  --help                        Print this help and exit\n"
+          + "  --silent                      Suppress all console/stderr output and the startup\n"
+          + "                                banner. Log records are still written to --log-file\n"
+          + "                                when configured. Use when running as a background\n"
+          + "                                service (nohup, systemd, cron) to avoid polluting\n"
+          + "                                the terminal or system journal with routine output.\n"
           + "\n"
           + "Quick test (triggers WARNING → CRITICAL → OOM_FIRING on a 64 MB heap):\n"
           + "  java -Xmx64m -jar oom-watchdog.jar \\\n"
@@ -623,7 +642,7 @@ public final class WatchdogMain {
      * applying defaults and basic range validation.
      *
      * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
-     * @version 1.7.13.27
+     * @version 1.7.13.28
      * @since 1.0.0
      * @see WatchdogMain
      */
@@ -712,6 +731,14 @@ public final class WatchdogMain {
         boolean help = false;
 
         /**
+         * When {@code true}, suppress all console (stderr) output and the startup banner.
+         * Log records are still written to {@code --log-file} when configured.
+         * Intended for use when running as a background service where console noise is
+         * undesirable (e.g. {@code nohup}, {@code systemd}, or {@code cron}).
+         */
+        boolean silent = false;
+
+        /**
          * {@code true} when {@code --warn-threshold} or {@code --crit-threshold} was explicitly
          * supplied on the command line.  In daemon mode this forces the CLI values onto
          * <em>every</em> target, overriding per-target thresholds from {@code targets.properties}.
@@ -734,6 +761,7 @@ public final class WatchdogMain {
                 String arg = list.get(i);
                 switch (arg) {
                     case "--help":          c.help = true;                                    break;
+                    case "--silent":        c.silent = true;                                  break;
                     case "--daemon":        c.daemon = true;                                  break;
                     case "--test-mode":     c.testMode = true;                                break;
                     case "--qradar-tcp":    c.qradarTcp = true;                               break;

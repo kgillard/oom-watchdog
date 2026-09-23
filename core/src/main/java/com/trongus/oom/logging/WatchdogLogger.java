@@ -45,7 +45,7 @@ import java.util.logging.Logger;
  * All other methods delegate directly to thread-safe JUL infrastructure.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.13.27
+ * @version 1.7.13.28
  * @since 1.6.0
  * @see WatchdogLogFormatter
  */
@@ -93,7 +93,7 @@ public final class WatchdogLogger {
      *              {@link Level#FINE} for debug, or {@link Level#FINEST} for trace output.
      */
     public static synchronized void initialise(Level level) {
-        initialise(level, null);
+        initialise(level, null, false);
     }
 
     /**
@@ -109,9 +109,29 @@ public final class WatchdogLogger {
      *
      * @param level   the minimum log level to capture; must not be {@code null}
      * @param logFile path to the log file; {@code null} or blank disables file logging
-     * @since 1.7.13.27
+     * @since 1.7.13.28
      */
     public static synchronized void initialise(Level level, String logFile) {
+        initialise(level, logFile, false);
+    }
+
+    /**
+     * Full initialisation overload — installs handlers, sets the log level, and optionally
+     * suppresses all console (stderr) output when {@code silent} is {@code true}.
+     *
+     * <p>When {@code silent} is {@code true} the {@link ConsoleHandler} is omitted entirely.
+     * Log records are still written to {@code logFile} (if configured) so the file log is
+     * always preserved. Use this when running as a background service where console noise
+     * is undesirable.
+     *
+     * <p>This method is idempotent: calling it more than once has no effect.
+     *
+     * @param level   the minimum log level to capture; must not be {@code null}
+     * @param logFile path to the log file; {@code null} or blank disables file logging
+     * @param silent  when {@code true}, suppress the {@link ConsoleHandler} (no stderr output)
+     * @since 1.7.13.28
+     */
+    public static synchronized void initialise(Level level, String logFile, boolean silent) {
         if (initialised) return;
 
         Logger root = Logger.getLogger(ROOT_LOGGER_NAME);
@@ -125,11 +145,13 @@ public final class WatchdogLogger {
             root.removeHandler(h);
         }
 
-        // Install a structured console handler that writes to System.err
-        ConsoleHandler consoleHandler = new ConsoleHandler();
-        consoleHandler.setFormatter(new WatchdogLogFormatter());
-        consoleHandler.setLevel(Level.ALL);
-        root.addHandler(consoleHandler);
+        // Install a structured console handler unless --silent was requested.
+        if (!silent) {
+            ConsoleHandler consoleHandler = new ConsoleHandler();
+            consoleHandler.setFormatter(new WatchdogLogFormatter());
+            consoleHandler.setLevel(Level.ALL);
+            root.addHandler(consoleHandler);
+        }
 
         // Optionally mirror all log output to a file — critical for daemon mode where
         // the console may not be visible and --log-file is the only persistent record.
@@ -140,8 +162,10 @@ public final class WatchdogLogger {
                 fileHandler.setLevel(Level.ALL);
                 root.addHandler(fileHandler);
             } catch (Exception e) {
-                // Log to console; don't crash startup over a file-logging failure
-                root.warning("Failed to open log file [" + logFile + "]: " + e.getMessage());
+                if (!silent) {
+                    // Only log to console if not in silent mode
+                    root.warning("Failed to open log file [" + logFile + "]: " + e.getMessage());
+                }
             }
         }
 

@@ -165,7 +165,7 @@ import java.util.logging.Logger;
  * they respond with {@code 503 Service Unavailable}.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.13.27
+ * @version 1.7.13.28
  * @since 1.7.3
  * @see TlsConfig
  * @see GcHistoryStore
