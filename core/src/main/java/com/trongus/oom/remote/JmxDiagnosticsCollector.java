@@ -51,11 +51,14 @@ import java.util.logging.Logger;
  * <ul>
  *   <li>Establishes connection lazily on the first {@link #collect()} invocation.</li>
  *   <li>Caches remote MXBean proxies across collections while connection remains healthy.</li>
- *   <li>If a connection drops or cannot be established, performs up to 3 automatic retries
- *       with a 2-second back-off between attempts.</li>
- *   <li>If all retries fail, returns a degraded snapshot with {@link OomRiskLevel#OOM_FIRING}
- *       and {@code targetName} populated, ensuring that unreachable targets generate immediate
- *       operational alerts without crashing the collector or monitoring scheduler.</li>
+ *   <li>If a connection cannot be established, a single bounded attempt is made (timeout:
+ *       5 s) and the poll task returns immediately on failure.  The natural poll interval
+ *       provides the back-off between reconnection attempts, so the poll thread is never
+ *       blocked for more than one connect timeout per cycle.</li>
+ *   <li>On failure, returns a degraded snapshot with {@link OomRiskLevel#OOM_FIRING}
+ *       and {@code targetName} populated, ensuring that unreachable targets generate an
+ *       immediate LEEF alert on every poll cycle without crashing the collector or
+ *       blocking the monitoring scheduler.</li>
  *   <li>Sets {@code processName} in the generated {@link JvmSnapshot} to
  *       {@code "<targetName> (<remotePid@host>)"}, or {@code targetName} alone when
  *       remote runtime info is unavailable.</li>
@@ -103,7 +106,7 @@ import java.util.logging.Logger;
  * allow safe use from multiple threads if required.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.13.2
+ * @version 1.7.13.21
  * @since 1.7.0
  * @see TargetDescriptor
  * @see JvmDiagnosticsCollector
@@ -112,8 +115,10 @@ public final class JmxDiagnosticsCollector implements JvmDiagnosticsCollector, C
 
     private static final Logger LOG = WatchdogLogger.forClass(JmxDiagnosticsCollector.class);
 
-    private static final int MAX_CONNECT_RETRIES = 3;
-    private static final long RETRY_BACKOFF_MS   = 2_000L;
+    /** Connect timeout for each JMX RMI attempt (ms). Prevents blocking the poll thread
+     *  indefinitely when a target is down. One attempt per poll cycle; the poll interval
+     *  itself provides the back-off between reconnection tries. */
+    private static final int JMX_CONNECT_TIMEOUT_MS = 5_000;
 
     private final TargetDescriptor descriptor;
     private final WatchdogConfig   config;
@@ -192,7 +197,7 @@ public final class JmxDiagnosticsCollector implements JvmDiagnosticsCollector, C
      * <p>The target's {@code leefCategory} and {@code leefTags} are stamped onto the snapshot
      * so that alert channels can emit them without accessing the descriptor directly.
      *
-     * <p>If connection fails after retries, a degraded snapshot with
+     * <p>If the connection fails, a degraded snapshot with
      * {@link OomRiskLevel#OOM_FIRING} is returned (never {@code null}).
      *
      * @return a fully populated (or degraded-unreachable) {@link JvmSnapshot}; never {@code null}
@@ -202,7 +207,7 @@ public final class JmxDiagnosticsCollector implements JvmDiagnosticsCollector, C
         long now = System.currentTimeMillis();
 
         if (!ensureConnected()) {
-            return buildUnreachableSnapshot(now, "Failed to connect to target JMX endpoint after retries");
+            return buildUnreachableSnapshot(now, "Failed to connect to target JMX endpoint");
         }
 
         try {
@@ -389,52 +394,54 @@ public final class JmxDiagnosticsCollector implements JvmDiagnosticsCollector, C
     }
 
     /**
-     * Attempts connection establishment with retry logic.
+     * Attempts a single JMX connection to the target.
      *
-     * @return true if connected successfully, false if all retries failed
+     * <p>One attempt is made per call with a bounded connect timeout
+     * ({@value #JMX_CONNECT_TIMEOUT_MS} ms) so the poll thread is never
+     * blocked indefinitely. The natural poll interval acts as the back-off
+     * between successive reconnection attempts across poll cycles.
+     *
+     * @return {@code true} if already connected or connection succeeded;
+     *         {@code false} if this attempt failed
      */
     private boolean ensureConnected() {
         if (mbsc != null) {
             return true;
         }
 
-        for (int attempt = 1; attempt <= MAX_CONNECT_RETRIES; attempt++) {
-            try {
-                WatchdogLogger.fine(LOG, "Connecting to JMX target [{0}] at {1} (attempt {2}/{3})...",
-                        descriptor.getName(), descriptor.getJmxUrl(), attempt, MAX_CONNECT_RETRIES);
+        try {
+            WatchdogLogger.fine(LOG, "Connecting to JMX target [{0}] at {1}...",
+                    descriptor.getName(), descriptor.getJmxUrl());
 
-                JMXServiceURL url = new JMXServiceURL(descriptor.getJmxUrl());
-                Map<String, Object> env = new HashMap<>();
+            JMXServiceURL url = new JMXServiceURL(descriptor.getJmxUrl());
+            Map<String, Object> env = new HashMap<>();
 
-                if (descriptor.getUsername() != null && !descriptor.getUsername().isEmpty()) {
-                    String[] credentials = new String[]{
-                            descriptor.getUsername(),
-                            descriptor.getPassword() != null ? descriptor.getPassword() : ""
-                    };
-                    env.put(JMXConnector.CREDENTIALS, credentials);
-                }
+            // Bound the RMI connect time so a down target doesn't block the poll thread.
+            env.put("sun.rmi.transport.connectionTimeout",
+                    String.valueOf(JMX_CONNECT_TIMEOUT_MS));
+            env.put("sun.rmi.transport.tcp.responseTimeout",
+                    String.valueOf(JMX_CONNECT_TIMEOUT_MS));
 
-                connector = JMXConnectorFactory.connect(url, env);
-                mbsc = connector.getMBeanServerConnection();
-                WatchdogLogger.info(LOG, "Connected successfully to remote JMX target [{0}] at {1}",
-                        descriptor.getName(), descriptor.getJmxUrl());
-                return true;
-
-            } catch (Exception e) {
-                WatchdogLogger.warning(LOG, "Failed to connect to JMX target [{0}] (attempt {1}/{2}): {3}",
-                        descriptor.getName(), attempt, MAX_CONNECT_RETRIES, e.getMessage());
-                disconnect();
-                if (attempt < MAX_CONNECT_RETRIES) {
-                    try {
-                        Thread.sleep(RETRY_BACKOFF_MS);
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                        return false;
-                    }
-                }
+            if (descriptor.getUsername() != null && !descriptor.getUsername().isEmpty()) {
+                String[] credentials = new String[]{
+                        descriptor.getUsername(),
+                        descriptor.getPassword() != null ? descriptor.getPassword() : ""
+                };
+                env.put(JMXConnector.CREDENTIALS, credentials);
             }
+
+            connector = JMXConnectorFactory.connect(url, env);
+            mbsc = connector.getMBeanServerConnection();
+            WatchdogLogger.info(LOG, "Connected successfully to remote JMX target [{0}] at {1}",
+                    descriptor.getName(), descriptor.getJmxUrl());
+            return true;
+
+        } catch (Exception e) {
+            WatchdogLogger.warning(LOG, "Failed to connect to JMX target [{0}]: {1}",
+                    descriptor.getName(), e.getMessage());
+            disconnect();
+            return false;
         }
-        return false;
     }
 
     private void disconnect() {
