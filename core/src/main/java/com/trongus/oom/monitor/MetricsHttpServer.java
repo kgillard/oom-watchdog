@@ -143,7 +143,8 @@ import java.util.logging.Logger;
  *       <td>JSON array — one live-metrics entry per monitored target</td></tr>
  *   <tr><td>{@code /gc/history}</td><td>GET</td>
  *       <td>JSON array — historical GC records from disk.
- *           Query params: {@code target} (name), {@code limit} (max records, default 8640)</td></tr>
+ *           Query params: {@code target} (name), {@code limit} (max records,
+ *           default {@value GcHistoryStore#DEFAULT_MAX_LINES}; pass {@code 0} for all)</td></tr>
  *   <tr><td>{@code /dump/thread}</td><td>POST</td>
  *       <td>JSON — triggers a thread dump; returns {@code {"ok":true,"path":"…"}} or
  *           {@code {"ok":false,"error":"…"}}</td></tr>
@@ -164,7 +165,7 @@ import java.util.logging.Logger;
  * they respond with {@code 503 Service Unavailable}.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.13.17
+ * @version 1.7.13.26
  * @since 1.7.3
  * @see TlsConfig
  * @see GcHistoryStore
@@ -441,8 +442,8 @@ public final class MetricsHttpServer {
      *   <li>{@code target} — target name as configured in {@code targets.properties}.
      *       Required.</li>
      *   <li>{@code limit} — maximum number of records to return.  Defaults to
-     *       {@value GcHistoryStore#DEFAULT_MAX_LINES}.  Capped at
-     *       {@value GcHistoryStore#DEFAULT_MAX_LINES}.</li>
+     *       {@value GcHistoryStore#DEFAULT_MAX_LINES}.  Pass {@code 0} (or omit) to
+     *       return all records without any limit.</li>
      * </ul>
      *
      * <p>Responds with {@code 400 Bad Request} when the {@code target} parameter
@@ -473,7 +474,7 @@ public final class MetricsHttpServer {
         if (limitParam != null && !limitParam.isEmpty()) {
             try {
                 int parsed = Integer.parseInt(limitParam);
-                if (parsed > 0 && parsed <= GcHistoryStore.DEFAULT_MAX_LINES) {
+                if (parsed >= 0) {   // 0 = unlimited; any positive = exact cap
                     limit = parsed;
                 }
             } catch (NumberFormatException ignored) { /* keep default */ }

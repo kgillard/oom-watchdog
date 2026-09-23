@@ -53,7 +53,7 @@ import java.util.logging.Logger;
  * parallel; concurrent writes to the same target are serialised.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.13.17
+ * @version 1.7.13.26
  * @since 1.7.13.2
  * @see MetricsHttpServer
  */
@@ -134,11 +134,12 @@ public final class GcHistoryStore {
      * <p>Returns {@code "[]"} when no history is available or the file cannot be read.
      *
      * @param targetName logical name of the monitored target
-     * @param limit      maximum number of records to return; must be &ge; 1
+     * @param limit      maximum number of records to return; values &lt; 1 mean
+     *                   "return all records without any limit"
      * @return JSON array of history record objects
      */
     public String readHistory(String targetName, int limit) {
-        if (limit < 1) limit = DEFAULT_MAX_LINES;
+        if (limit < 1) limit = Integer.MAX_VALUE;   // 0 or negative = read everything
         String slug = slugify(targetName);
         Path file = baseDir.resolve(slug + ".jsonl");
         Object lock = locks.computeIfAbsent(slug, k -> new Object());
@@ -321,15 +322,15 @@ public final class GcHistoryStore {
      * Reads the last {@code n} non-empty lines from a file without loading the whole file.
      */
     private static List<String> readTail(Path file, int n) throws IOException {
-        // For simplicity use an ArrayList ring-buffer: read all, take tail
-        List<String> all = new ArrayList<>(n + 100);
+        // n == Integer.MAX_VALUE means "read everything" — avoid overflow on capacity hint
+        List<String> all = new ArrayList<>(n < 65_536 ? n + 100 : 256);
         try (BufferedReader br = new BufferedReader(new FileReader(file.toFile()))) {
             String line;
             while ((line = br.readLine()) != null) {
                 if (!line.isEmpty()) all.add(line);
             }
         }
-        if (all.size() <= n) return all;
+        if (n == Integer.MAX_VALUE || all.size() <= n) return all;
         return all.subList(all.size() - n, all.size());
     }
 

@@ -29,7 +29,7 @@ import static org.junit.Assert.*;
  * touching the physical NIC.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.13.25
+ * @version 1.7.13.26
  * @since 1.7.1
  */
 public class QRadarAlertChannelTest {
