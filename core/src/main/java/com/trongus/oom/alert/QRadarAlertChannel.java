@@ -5,8 +5,10 @@ import com.trongus.oom.model.JvmSnapshot;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.NetworkInterface;
 import java.net.Socket;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
@@ -14,6 +16,7 @@ import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Date;
+import java.util.Enumeration;
 import java.util.Locale;
 import java.util.TimeZone;
 import java.util.logging.Logger;
@@ -77,7 +80,7 @@ import java.util.logging.Logger;
  * (guaranteed delivery) via the constructor.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.13.3
+ * @version 1.7.13.22
  * @since 1.0.0
  * @see AlertChannel
  * @see com.trongus.oom.model.JvmSnapshot
@@ -268,6 +271,11 @@ public final class QRadarAlertChannel implements AlertChannel {
     /**
      * Sends a LEEF payload over UDP, truncating to {@link #MAX_UDP_PAYLOAD} bytes if necessary.
      *
+     * <p>When the destination resolves to a loopback address (e.g. {@code 127.0.0.1}),
+     * the socket is explicitly bound to the machine's first non-loopback interface address
+     * so that QRadar sees the real host IP as the UDP source — loopback-sourced syslog
+     * datagrams are silently discarded by QRadar's log-source auto-discovery engine.
+     *
      * @param payload UTF-8 encoded syslog message bytes
      * @throws IOException if the datagram socket cannot be created or the packet cannot be sent
      */
@@ -281,11 +289,21 @@ public final class QRadarAlertChannel implements AlertChannel {
         InetAddress[] addrs = InetAddress.getAllByName(qradarHost);
         IOException lastEx = null;
         for (InetAddress addr : addrs) {
-            // Open a socket whose address family matches the destination.
-            // DatagramSocket() defaults to IPv4; an IPv6 destination needs an IPv6 socket.
-            DatagramSocket socket = (addr instanceof java.net.Inet6Address)
-                    ? new DatagramSocket(new InetSocketAddress("::", 0))
-                    : new DatagramSocket();
+            // When the destination is loopback, bind the socket to the real non-loopback
+            // interface so the UDP source IP is not 127.0.0.1. QRadar uses the source IP
+            // for log-source matching and discards datagrams sourced from loopback.
+            InetAddress bindAddr = addr.isLoopbackAddress()
+                    ? resolveNonLoopbackAddress(addr instanceof Inet6Address)
+                    : null;
+
+            DatagramSocket socket;
+            if (bindAddr != null) {
+                socket = new DatagramSocket(new InetSocketAddress(bindAddr, 0));
+            } else if (addr instanceof Inet6Address) {
+                socket = new DatagramSocket(new InetSocketAddress("::", 0));
+            } else {
+                socket = new DatagramSocket();
+            }
             try (DatagramSocket s = socket) {
                 DatagramPacket pkt = new DatagramPacket(safe, safe.length, addr, qradarPort);
                 s.send(pkt);
@@ -296,6 +314,35 @@ public final class QRadarAlertChannel implements AlertChannel {
         }
         // All addresses failed — rethrow the last exception so the caller can log it.
         if (lastEx != null) throw lastEx;
+    }
+
+    /**
+     * Returns the first non-loopback, non-link-local IP address of the matching address
+     * family found on any up network interface, or {@code null} if none is found.
+     *
+     * @param ipv6 {@code true} to look for an IPv6 address; {@code false} for IPv4
+     * @return a non-loopback bind address, or {@code null} to fall back to the wildcard
+     * @since 1.7.13.22
+     */
+    private static InetAddress resolveNonLoopbackAddress(boolean ipv6) {
+        try {
+            Enumeration<NetworkInterface> ifaces = NetworkInterface.getNetworkInterfaces();
+            while (ifaces != null && ifaces.hasMoreElements()) {
+                NetworkInterface iface = ifaces.nextElement();
+                if (!iface.isUp() || iface.isLoopback()) continue;
+                Enumeration<InetAddress> iaddrs = iface.getInetAddresses();
+                while (iaddrs.hasMoreElements()) {
+                    InetAddress a = iaddrs.nextElement();
+                    boolean isV6 = a instanceof Inet6Address;
+                    if (isV6 != ipv6) continue;
+                    if (a.isLoopbackAddress() || a.isLinkLocalAddress()) continue;
+                    return a;
+                }
+            }
+        } catch (Exception ignored) {
+            // Fall through: return null and let the caller use the wildcard bind
+        }
+        return null;
     }
 
     /**

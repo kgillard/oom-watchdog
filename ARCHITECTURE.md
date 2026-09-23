@@ -222,6 +222,8 @@ classDiagram
         +QRadarAlertChannel(String, int, Transport)
         +alert(JvmSnapshot)
         +channelName() String
+        -sendUdp(byte[]) void
+        -resolveNonLoopbackAddress(boolean) InetAddress
     }
 
     class Transport {
@@ -551,7 +553,7 @@ flowchart TD
 ## Module Structure
 
 ```
-oom-watchdog/                  Maven multi-module root (v1.7.13.21)
+oom-watchdog/                  Maven multi-module root (v1.7.13.22)
 ├── core/                      oom-watchdog.jar  (fat jar via maven-shade-plugin)
 │   └── src/main/java/com/trongus/oom/
 │       ├── WatchdogMain.java  CLI entry point (local + daemon modes)
@@ -598,7 +600,7 @@ oom-watchdog/                  Maven multi-module root (v1.7.13.21)
 │       ├── BuiltInHeapExhauster.java
 │       └── HarnessAlertRecorder.java      (CopyOnWriteArrayList + AtomicInteger)
 │
-└── oom-watchdog-tests/        JUnit 4 test suite (242 tests)
+└── oom-watchdog-tests/        JUnit 4 test suite (267 tests)
     └── src/test/java/com/trongus/oom/tests/
         ├── OomWatchdogTestSuite.java
         ├── model/             OomRiskLevelTest, JvmSnapshotTest
@@ -690,7 +692,7 @@ The following table shows exactly where OOM Watchdog alert output appears for ev
 | `TargetDescriptor.dumpDirectory` defaults to `null` | Inherits the global `--dump-dir` CLI value; only overridden when `dump-dir` is explicitly set per-target in `targets.properties`, preventing silent default path override |
 | `QRadarAlertChannel` logs at INFO on success, FINE on build start, FINEST for raw LEEF payload | Keeps high-volume payload bytes off the default log level while preserving full observability at `FINEST`; operators see delivery confirmation at INFO without noise |
 | `MetricsHttpServer.resolveBindAddress()` prefers IPv6 (`::` / `::1`) with IPv4 fallback | Single `::` socket serves both address families on dual-stack Linux kernels; automatic `0.0.0.0`/`127.0.0.1` fallback on IPv4-only stacks; respects `-Djava.net.preferIPv4Stack=true` |
-| `QRadarAlertChannel.sendUdp()` matches socket family to destination via `instanceof Inet6Address` | Opens a `::` datagram socket for IPv6 destinations and a default `DatagramSocket` for IPv4; resolves all A+AAAA records for the host with `InetAddress.getAllByName()` |
+| `QRadarAlertChannel.sendUdp()` matches socket family to destination via `instanceof Inet6Address`; binds to the real host IP when the destination is loopback | Opens a `::` datagram socket for IPv6 destinations and a default `DatagramSocket` for IPv4; resolves all A+AAAA records via `InetAddress.getAllByName()`; when the destination resolves to a loopback address (e.g. `127.0.0.1`), `resolveNonLoopbackAddress()` enumerates `NetworkInterface` to find the machine's first up, non-loopback, non-link-local address and binds the `DatagramSocket` to it — prevents QRadar from silently discarding syslog datagrams sourced from `127.0.0.1` |
 | Dashboard auto-reconnects on page refresh | Last-used server URL, polling interval, and active target tab are persisted to `localStorage`; `startPolling()` is called automatically on `window.load` when a saved URL exists |
 
 ---
@@ -727,8 +729,8 @@ Pass 5 identified and fixed 4 issues in the remote JMX monitoring subsystem.
 
 ## Release Artefacts
 
-The v1.7.13.21 release publishes two executable fat JARs built with `maven-shade-plugin`.
-Both will be attached to the [GitHub release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.13.21).
+The v1.7.13.22 release publishes two executable fat JARs built with `maven-shade-plugin`.
+Both will be attached to the [GitHub release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.13.22).
 
 | Artefact | Main class | Contents | Size (approx) |
 |----------|-----------|----------|---------------|
