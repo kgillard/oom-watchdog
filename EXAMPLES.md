@@ -96,7 +96,7 @@ java -cp oom-watchdog.jar com.trongus.oom.examples.Example11CauseAnalysisAndI18n
 
 ```bash
 curl -L -o oom-watchdog.jar \
-  https://github.com/kgillard/oom-watchdog/releases/download/v1.7.13.24/oom-watchdog.jar
+  https://github.com/kgillard/oom-watchdog/releases/download/v1.7.13.25/oom-watchdog.jar
 ```
 
 No installation, no classpath setup — the JAR is a self-contained fat JAR with no

@@ -190,7 +190,7 @@ import java.util.logging.Logger;
  * }</pre>
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.13.0
+ * @version 1.7.13.25
  * @since 1.0.0
  * @see com.trongus.oom.config.WatchdogConfig
  * @see com.trongus.oom.monitor.OomWatchdog
@@ -234,8 +234,10 @@ public final class WatchdogMain {
         }
 
         // ── Logging ───────────────────────────────────────────────────────────
-        // Initialise structured JUL logging before any other component is created
-        WatchdogLogger.initialise(cli.logLevel);
+        // Initialise structured JUL logging before any other component is created.
+        // Pass logFile so diagnostic output (including LEEF send confirmations) is
+        // written to --log-file in both self-monitoring and daemon mode.
+        WatchdogLogger.initialise(cli.logLevel, cli.logFile);
 
         // ── Configuration ─────────────────────────────────────────────────────
         // Construct the immutable WatchdogConfig instance from parsed arguments
@@ -621,7 +623,7 @@ public final class WatchdogMain {
      * applying defaults and basic range validation.
      *
      * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
-     * @version 1.7.13.0
+     * @version 1.7.13.25
      * @since 1.0.0
      * @see WatchdogMain
      */

@@ -1,6 +1,7 @@
 package com.trongus.oom.logging;
 
 import java.util.logging.ConsoleHandler;
+import java.util.logging.FileHandler;
 import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
@@ -44,7 +45,7 @@ import java.util.logging.Logger;
  * All other methods delegate directly to thread-safe JUL infrastructure.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.13.0
+ * @version 1.7.13.25
  * @since 1.6.0
  * @see WatchdogLogFormatter
  */
@@ -92,6 +93,25 @@ public final class WatchdogLogger {
      *              {@link Level#FINE} for debug, or {@link Level#FINEST} for trace output.
      */
     public static synchronized void initialise(Level level) {
+        initialise(level, null);
+    }
+
+    /**
+     * Installs the {@link WatchdogLogFormatter} on a {@link ConsoleHandler} (and optionally
+     * a {@link FileHandler}) attached to the root watchdog logger, and sets the effective level.
+     *
+     * <p>When {@code logFile} is non-null and non-blank, all log records at or above
+     * {@code level} are also written to that file in addition to the console. This ensures
+     * that diagnostic output (including "LEEF event sent" / "Failed to send" confirmations)
+     * is captured in the log file even in daemon mode.
+     *
+     * <p>This method is idempotent: calling it more than once has no effect.
+     *
+     * @param level   the minimum log level to capture; must not be {@code null}
+     * @param logFile path to the log file; {@code null} or blank disables file logging
+     * @since 1.7.13.25
+     */
+    public static synchronized void initialise(Level level, String logFile) {
         if (initialised) return;
 
         Logger root = Logger.getLogger(ROOT_LOGGER_NAME);
@@ -110,6 +130,20 @@ public final class WatchdogLogger {
         consoleHandler.setFormatter(new WatchdogLogFormatter());
         consoleHandler.setLevel(Level.ALL);
         root.addHandler(consoleHandler);
+
+        // Optionally mirror all log output to a file — critical for daemon mode where
+        // the console may not be visible and --log-file is the only persistent record.
+        if (logFile != null && !logFile.trim().isEmpty()) {
+            try {
+                FileHandler fileHandler = new FileHandler(logFile, true); // append
+                fileHandler.setFormatter(new WatchdogLogFormatter());
+                fileHandler.setLevel(Level.ALL);
+                root.addHandler(fileHandler);
+            } catch (Exception e) {
+                // Log to console; don't crash startup over a file-logging failure
+                root.warning("Failed to open log file [" + logFile + "]: " + e.getMessage());
+            }
+        }
 
         root.setLevel(level);
 

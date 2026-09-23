@@ -7,18 +7,18 @@
 [![Security Audit](https://img.shields.io/badge/security%20audit-4%20passes%20clean-brightgreen)]()
 [![JDK](https://img.shields.io/badge/JDK-8%20%E2%80%93%2026%2B-blue)]()
 [![Vendors](https://img.shields.io/badge/JVM-HotSpot%20%7C%20OpenJ9%20%7C%20GraalVM-blue)]()
-[![Release](https://img.shields.io/badge/release-v1.7.13.24-blue)](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.13.24)
+[![Release](https://img.shields.io/badge/release-v1.7.13.25-blue)](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.13.25)
 
 ---
 
 ## Download
 
-Pre-built JARs are available in the [v1.7.13.24 release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.13.24):
+Pre-built JARs are available in the [v1.7.13.25 release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.13.25):
 
 | Artefact | Description | Size |
 |----------|-------------|------|
-| [`oom-watchdog.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.7.13.24/oom-watchdog.jar) | Fat JAR — monitoring agent + CLI entry point | ~157 KB |
-| [`test-harness.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.7.13.24/test-harness.jar) | Fat JAR — interactive OOM test harness | ~171 KB |
+| [`oom-watchdog.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.7.13.25/oom-watchdog.jar) | Fat JAR — monitoring agent + CLI entry point | ~157 KB |
+| [`test-harness.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.7.13.25/test-harness.jar) | Fat JAR — interactive OOM test harness | ~171 KB |
 
 ---
 
@@ -49,7 +49,7 @@ OOM Watchdog provides real-time health monitoring, per-process logging named aft
 ```bash
 # Download the release JAR or self-extracting installer
 curl -L -o oom-watchdog.jar \
-  https://github.com/kgillard/oom-watchdog/releases/download/v1.7.13.24/oom-watchdog.jar
+  https://github.com/kgillard/oom-watchdog/releases/download/v1.7.13.25/oom-watchdog.jar
 
 # Run in multi-target daemon mode (monitors external JVMs over JMX)
 java -jar oom-watchdog.jar --daemon --targets-file /etc/oom-watchdog/targets.properties
@@ -116,7 +116,7 @@ chmod +x oom-watchdog-installer.sh
 | `--poll-ms <ms>` | `5000` | Poll interval in milliseconds (minimum: 100) |
 | `--dump-dir <path>` | `./oom-watchdog` | Output directory for dump artefacts |
 | `--dump-types <list>` | _(none)_ | Comma-separated: `HEAP,THREAD,CLASS_HISTOGRAM,CORE` |
-| `--log-file <path>` | `./oom-watchdog.log` | Append structured alerts to this file |
+| `--log-file <path>` | `./oom-watchdog.log` | Append structured alerts and internal diagnostic logs to this file (supported in both daemon and self-monitoring mode) |
 | `--log-level <level>` | `INFO` | Internal diagnostic log level: `FINEST` (full trace incl. LEEF payloads), `FINE` (debug — per-poll and per-channel events), `CONFIG`, `INFO`, `WARNING`, `SEVERE` |
 | `--qradar-host <host>` | _(disabled)_ | QRadar / syslog target hostname or IP. **Must be the physical interface IP of the QRadar Event Processor** (e.g. `9.60.246.81`) — not `127.0.0.1`. QRadar's syslog listener binds to the physical NIC, not loopback; UDP packets sent to `127.0.0.1:514` are delivered to the loopback interface and never reach QRadar. <strong>As of v1.7.13.24</strong>, when the host resolves to a local interface address (including loopback or the host's own NIC IP), UDP is automatically upgraded to TCP — use `--qradar-tcp` to suppress this warning. |
 | `--qradar-port <port>` | `514` | QRadar / syslog target port (1–65535) |
