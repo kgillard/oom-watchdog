@@ -433,6 +433,32 @@ classDiagram
         +format(String, Object...) String
     }
 
+    class WatchdogLogger {
+        <<static utility>>
+        +ROOT_LOGGER_NAME$ String
+        +forClass(Class) Logger$
+        +initialise(Level)$
+        +initialise(Level, String)$
+        +initialise(Level, String, boolean)$
+        +config(Logger, String, Object...)$
+        +info(Logger, String, Object...)$
+        +warning(Logger, String, Object...)$
+        +warning(Logger, Throwable, String, Object...)$
+        +severe(Logger, String, Object...)$
+        +severe(Logger, Throwable, String, Object...)$
+        +fine(Logger, String, Object...)$
+        +finest(Logger, String, Object...)$
+    }
+
+    class WatchdogLogFormatter {
+        <<package-private>>
+        +format(LogRecord) String
+        -abbreviateLevel(Level) String
+        -shortClassName(String) String
+        -padRight(String, int) String
+        -stackTraceOf(Throwable, String) String
+    }
+
     OomWatchdog --> JvmDiagnosticsCollector
     OomWatchdog --> RiskAssessor
     OomWatchdog --> AlertChannel
@@ -476,6 +502,16 @@ classDiagram
     OomWatchdog --> GcHistoryStore
     TlsConfig --> Mode
     WatchdogDaemon --> MetricsHttpServer
+
+    WatchdogLogger --> WatchdogLogFormatter : installs on ConsoleHandler / FileHandler
+    OomWatchdog ..> WatchdogLogger : logs via
+    WatchdogDaemon ..> WatchdogLogger : logs via
+    JmxDiagnosticsCollector ..> WatchdogLogger : logs via
+    QRadarAlertChannel ..> WatchdogLogger : logs via
+    MetricsHttpServer ..> WatchdogLogger : logs via
+    CompositeDumpService ..> WatchdogLogger : logs via
+    ThresholdRiskAssessor ..> WatchdogLogger : logs via
+    MxBeanDiagnosticsCollector ..> WatchdogLogger : logs via
 ```
 
 ---
