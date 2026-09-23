@@ -80,7 +80,7 @@ import java.util.logging.Logger;
  * (guaranteed delivery) via the constructor.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.13.22
+ * @version 1.7.13.23
  * @since 1.0.0
  * @see AlertChannel
  * @see com.trongus.oom.model.JvmSnapshot
@@ -284,14 +284,16 @@ public final class QRadarAlertChannel implements AlertChannel {
         byte[] safe = payload.length > MAX_UDP_PAYLOAD
                 ? Arrays.copyOf(payload, MAX_UDP_PAYLOAD)
                 : payload;
-        // Resolve all addresses for the host — the hostname may have both A and AAAA records,
-        // or the user may pass a literal IPv4 or IPv6 address.
         InetAddress[] addrs = InetAddress.getAllByName(qradarHost);
         IOException lastEx = null;
         for (InetAddress addr : addrs) {
-            // When the destination is loopback, bind the socket to the real non-loopback
-            // interface so the UDP source IP is not 127.0.0.1. QRadar uses the source IP
-            // for log-source matching and discards datagrams sourced from loopback.
+            // When the destination is loopback, bind the source socket to the machine's real
+            // non-loopback interface address so the UDP source IP visible to QRadar is the
+            // actual host IP, not 127.0.0.1. QRadar uses the source IP for log-source matching
+            // and will discard datagrams sourced from loopback.
+            // NOTE: the destination address is always the configured qradarHost. If QRadar's
+            // syslog listener does not bind to 127.0.0.1 (it typically binds to the physical
+            // interface IP), use --qradar-host <real-ip> instead of 127.0.0.1.
             InetAddress bindAddr = addr.isLoopbackAddress()
                     ? resolveNonLoopbackAddress(addr instanceof Inet6Address)
                     : null;

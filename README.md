@@ -7,18 +7,18 @@
 [![Security Audit](https://img.shields.io/badge/security%20audit-4%20passes%20clean-brightgreen)]()
 [![JDK](https://img.shields.io/badge/JDK-8%20%E2%80%93%2026%2B-blue)]()
 [![Vendors](https://img.shields.io/badge/JVM-HotSpot%20%7C%20OpenJ9%20%7C%20GraalVM-blue)]()
-[![Release](https://img.shields.io/badge/release-v1.7.13.22-blue)](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.13.22)
+[![Release](https://img.shields.io/badge/release-v1.7.13.23-blue)](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.13.23)
 
 ---
 
 ## Download
 
-Pre-built JARs are available in the [v1.7.13.22 release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.13.22):
+Pre-built JARs are available in the [v1.7.13.23 release](https://github.com/kgillard/oom-watchdog/releases/tag/v1.7.13.23):
 
 | Artefact | Description | Size |
 |----------|-------------|------|
-| [`oom-watchdog.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.7.13.22/oom-watchdog.jar) | Fat JAR — monitoring agent + CLI entry point | ~157 KB |
-| [`test-harness.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.7.13.22/test-harness.jar) | Fat JAR — interactive OOM test harness | ~171 KB |
+| [`oom-watchdog.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.7.13.23/oom-watchdog.jar) | Fat JAR — monitoring agent + CLI entry point | ~157 KB |
+| [`test-harness.jar`](https://github.com/kgillard/oom-watchdog/releases/download/v1.7.13.23/test-harness.jar) | Fat JAR — interactive OOM test harness | ~171 KB |
 
 ---
 
@@ -49,7 +49,7 @@ OOM Watchdog provides real-time health monitoring, per-process logging named aft
 ```bash
 # Download the release JAR or self-extracting installer
 curl -L -o oom-watchdog.jar \
-  https://github.com/kgillard/oom-watchdog/releases/download/v1.7.13.22/oom-watchdog.jar
+  https://github.com/kgillard/oom-watchdog/releases/download/v1.7.13.23/oom-watchdog.jar
 
 # Run in multi-target daemon mode (monitors external JVMs over JMX)
 java -jar oom-watchdog.jar --daemon --targets-file /etc/oom-watchdog/targets.properties
@@ -118,7 +118,7 @@ chmod +x oom-watchdog-installer.sh
 | `--dump-types <list>` | _(none)_ | Comma-separated: `HEAP,THREAD,CLASS_HISTOGRAM,CORE` |
 | `--log-file <path>` | `./oom-watchdog.log` | Append structured alerts to this file |
 | `--log-level <level>` | `INFO` | Internal diagnostic log level: `FINEST` (full trace incl. LEEF payloads), `FINE` (debug — per-poll and per-channel events), `CONFIG`, `INFO`, `WARNING`, `SEVERE` |
-| `--qradar-host <host>` | _(disabled)_ | QRadar / syslog target hostname |
+| `--qradar-host <host>` | _(disabled)_ | QRadar / syslog target hostname or IP. **Must be the physical interface IP of the QRadar Event Processor** (e.g. `9.60.246.81`) — not `127.0.0.1`. QRadar's syslog listener binds to the physical NIC, not loopback; UDP packets sent to `127.0.0.1:514` are delivered to the loopback interface and never reach QRadar. |
 | `--qradar-port <port>` | `514` | QRadar / syslog target port (1–65535) |
 | `--qradar-tcp` | _(off)_ | Use TCP instead of UDP for QRadar |
 | `--metrics-port <port>` | _(disabled)_ | Start HTTPS metrics server for `dashboard.html` |
@@ -693,6 +693,23 @@ The steps below apply to QRadar 7.4 and 7.5 (SIEM and XDR editions). Screenshots
 ##### Step 1 — Confirm the syslog port is reachable
 
 OOM Watchdog sends syslog to the host and port you supply via `--qradar-host` / `--qradar-port`. That host must be a QRadar **All-in-One**, **Event Processor**, or **QRadar Event Collector** (not a Console-only appliance).
+
+> **⚠ Use the physical interface IP, not `127.0.0.1`**
+>
+> QRadar's syslog listener binds to the physical NIC address (e.g. `9.60.246.81` on `ens3`),
+> not the loopback interface. A UDP packet sent to `127.0.0.1:514` is delivered to the OS
+> loopback stack and **never reaches QRadar**. Always pass `--qradar-host <real-ip>`:
+>
+> ```bash
+> # Find the QRadar Event Processor's primary interface IP
+> ip addr show ens3   # or: hostname -I | awk '{print $1}'
+>
+> # Use that IP, not 127.0.0.1
+> --qradar-host 9.60.246.81
+> ```
+>
+> You can verify delivery with `tcpdump -i ens3 -n udp port 514` on the QRadar host
+> while sending a test event — packets must appear on the physical interface.
 
 Verify connectivity from the watchdog host before creating the log source:
 

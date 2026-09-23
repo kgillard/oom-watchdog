@@ -106,7 +106,7 @@ import java.util.logging.Logger;
  * allow safe use from multiple threads if required.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.13.22
+ * @version 1.7.13.23
  * @since 1.7.0
  * @see TargetDescriptor
  * @see JvmDiagnosticsCollector

@@ -96,7 +96,7 @@ java -cp oom-watchdog.jar com.trongus.oom.examples.Example11CauseAnalysisAndI18n
 
 ```bash
 curl -L -o oom-watchdog.jar \
-  https://github.com/kgillard/oom-watchdog/releases/download/v1.7.13.22/oom-watchdog.jar
+  https://github.com/kgillard/oom-watchdog/releases/download/v1.7.13.23/oom-watchdog.jar
 ```
 
 No installation, no classpath setup — the JAR is a self-contained fat JAR with no
@@ -183,7 +183,7 @@ You should see output like:
 | `--dump-dir` | `path` | `./oom-watchdog` | Output directory for dump artefacts |
 | `--dump-types` | CSV | _(none)_ | `HEAP`, `THREAD`, `CLASS_HISTOGRAM`, `CORE` |
 | `--log-file` | `path` | `./oom-watchdog.log` | Append structured alerts to this file |
-| `--qradar-host` | `host/IP` | _(disabled)_ | QRadar syslog receiver hostname |
+| `--qradar-host` | `host/IP` | _(disabled)_ | QRadar syslog receiver hostname or IP. Must be the physical interface IP (e.g. `9.60.246.81`), **not** `127.0.0.1` — QRadar's listener binds to the physical NIC, not loopback. |
 | `--qradar-port` | `int` 1–65535 | `514` | QRadar syslog port |
 | `--qradar-tcp` | flag | _(off — UDP)_ | Use TCP transport for QRadar |
 | `--test-mode` | flag | _(off)_ | Run the OomSimulator |
@@ -1439,7 +1439,7 @@ For Liberty 8.5.5.x (older feature names):
 
 ## 16. Multi-Target Daemon Mode and Remote JMX Monitoring
 
-### 15.1 Overview (v1.7.13.22)
+### 15.1 Overview (v1.7.13.23)
 
 In enterprise deployments such as IBM QRadar or multi-tier WebSphere clusters, multiple JVMs run concurrently on a single appliance or host. `WatchdogDaemon` allows a single lightweight watchdog process to monitor all target JVMs simultaneously over standard JMX (JSR-160 RMI).
 
@@ -1478,9 +1478,14 @@ target.liberty.dump-types     = heap,thread
 java -jar oom-watchdog.jar \
     --daemon \
     --targets-file /etc/oom-watchdog/targets.properties \
-    --qradar-host 127.0.0.1 \
+    --qradar-host 9.60.246.81 \
     --qradar-port 514
 ```
+
+> **⚠ Use the physical interface IP, not `127.0.0.1`**
+> QRadar's syslog listener binds to the physical NIC (e.g. `9.60.246.81` on `ens3`),
+> not the loopback interface. UDP packets sent to `127.0.0.1:514` never reach QRadar.
+> Run `ip addr show ens3` on the QRadar host to find the correct IP.
 
 ### 15.4 IPv6 and Dual-Stack Configuration
 
