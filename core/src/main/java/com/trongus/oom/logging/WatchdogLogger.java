@@ -45,7 +45,7 @@ import java.util.logging.Logger;
  * All other methods delegate directly to thread-safe JUL infrastructure.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.13.29
+ * @version 1.7.13.30
  * @since 1.6.0
  * @see WatchdogLogFormatter
  */
@@ -109,7 +109,7 @@ public final class WatchdogLogger {
      *
      * @param level   the minimum log level to capture; must not be {@code null}
      * @param logFile path to the log file; {@code null} or blank disables file logging
-     * @since 1.7.13.29
+     * @since 1.7.13.30
      */
     public static synchronized void initialise(Level level, String logFile) {
         initialise(level, logFile, false);
@@ -129,7 +129,7 @@ public final class WatchdogLogger {
      * @param level   the minimum log level to capture; must not be {@code null}
      * @param logFile path to the log file; {@code null} or blank disables file logging
      * @param silent  when {@code true}, suppress the {@link ConsoleHandler} (no stderr output)
-     * @since 1.7.13.29
+     * @since 1.7.13.30
      */
     public static synchronized void initialise(Level level, String logFile, boolean silent) {
         if (initialised) return;
