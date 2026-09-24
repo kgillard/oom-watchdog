@@ -300,9 +300,12 @@ def setup_log_source(host, token, watchdog_host, sending_ip, log_source_name, dr
             warn(f"  sending_ip is '{existing['sending_ip']}' but should be '{sending_ip}'")
             info("  Updating sending_ip …")
             if not dry_run:
+                # PUT requires the full resource body — merge the change in
+                updated_body = dict(existing)
+                updated_body["sending_ip"] = sending_ip
                 patched = qradar_request(host, token, "PUT",
                     f"/config/event_sources/log_source_management/log_sources/{existing['id']}",
-                    {"sending_ip": sending_ip})
+                    updated_body)
                 if "id" in patched:
                     ok(f"  Updated sending_ip to {sending_ip}")
                 else:
@@ -311,16 +314,26 @@ def setup_log_source(host, token, watchdog_host, sending_ip, log_source_name, dr
 
     # Create the log source
     info(f"Log source '{log_source_name}' not found — creating …")
+    # Discover the default event collector id so we don't hardcode 7
+    ec_id = 7   # sensible default for single-appliance installs
+    try:
+        ecs = qradar_request(host, token, "GET",
+            "/config/event_sources/event_collectors")
+        if isinstance(ecs, list) and ecs:
+            ec_id = ecs[0]["id"]
+    except Exception:
+        pass   # fall back to 7
+
     payload = {
-        "name":                    log_source_name,
-        "type_id":                 UNIVERSAL_LEEF_TYPE_ID,
-        "protocol_type_id":        SYSLOG_PROTOCOL_ID,
-        "sending_ip":              sending_ip,
-        "enabled":                 True,
-        "coalesce_events":         False,
-        "store_event_payload":     True,
-        "credibility":             5,
-        "target_event_collector_id": 7,
+        "name":                      log_source_name,
+        "type_id":                   UNIVERSAL_LEEF_TYPE_ID,
+        "protocol_type_id":          SYSLOG_PROTOCOL_ID,
+        "sending_ip":                sending_ip,
+        "enabled":                   True,
+        "coalesce_events":           False,
+        "store_event_payload":       True,
+        "credibility":               5,
+        "target_event_collector_id": ec_id,
         "protocol_parameters": [
             {"name": "identifier", "id": 0, "value": watchdog_host},
             {"name": "incomingPayloadEncoding", "id": 1, "value": "UTF-8"},
@@ -416,9 +429,12 @@ def scan_interfering_sources(host, token, sending_ip, our_log_source_id, dry_run
 
     if answer == "y":
         for s in conflicts:
-            result = qradar_request(host, token, "POST",
+            # PUT requires full body — merge the change in
+            updated = dict(s)
+            updated["enabled"] = False
+            result = qradar_request(host, token, "PUT",
                 f"/config/event_sources/log_source_management/log_sources/{s['id']}",
-                {"enabled": False})
+                updated)
             if isinstance(result, dict) and result.get("enabled") is False:
                 ok(f"  Disabled '{s['name']}' (id={s['id']})")
             else:
