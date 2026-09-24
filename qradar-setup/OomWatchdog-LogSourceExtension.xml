@@ -1,29 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!--
-  OOM Watchdog - QRadar Log Source Extension
-  ===========================================
-  Upload this file via:
-    Admin -> Log Source Extensions -> Add
-      Name:        OomWatchdog
-      Description: OOM Watchdog LEEF 2.0 event ID to QID mapping
-      Upload:      this file
-    Save, then:
-    Admin -> Log Sources -> open "QRadar_OOM @ <hostname>"
-      Set "Log Source Extension" = OomWatchdog
-    Save, then Admin -> Deploy Changes.
-
-  PREREQUISITES: run oom-watchdog-qradar-setup.py first to create QID records:
-    OOM-Watchdog-Warning    (qid=2000001, severity=5,  category=System/Warning)
-    OOM-Watchdog-Critical   (qid=2000002, severity=9,  category=System/Critical)
-    OOM-Watchdog-OOM-Firing (qid=2000003, severity=10, category=System/Emergency)
-    OOM-Watchdog            (qid=2000004, severity=7,  category=System/Alert)
--->
 <DeviceExtension>
   <MatchGroups>
-
-    <!-- OOM_WARNING -> OOM-Watchdog-Warning (severity 5, System/Warning) -->
-    <MatchGroup name="OOM_WARNING" order="1"
-                description="JVM heap approaching OOM threshold">
+    <MatchGroup name="OOM_WARNING" order="1" description="JVM heap approaching OOM threshold">
       <MatchList>
         <SingleMatch>
           <MatchElement name="EventID" type="EQ">OOM_WARNING</MatchElement>
@@ -34,10 +12,7 @@
         <Description>JVM heap approaching OOM threshold</Description>
       </QIDRecord>
     </MatchGroup>
-
-    <!-- OOM_CRITICAL -> OOM-Watchdog-Critical (severity 9, System/Critical) -->
-    <MatchGroup name="OOM_CRITICAL" order="2"
-                description="JVM heap at critical level - OOM imminent">
+    <MatchGroup name="OOM_CRITICAL" order="2" description="JVM heap at critical level - OOM imminent">
       <MatchList>
         <SingleMatch>
           <MatchElement name="EventID" type="EQ">OOM_CRITICAL</MatchElement>
@@ -48,10 +23,7 @@
         <Description>JVM heap at critical level - OOM imminent</Description>
       </QIDRecord>
     </MatchGroup>
-
-    <!-- OOM_FIRING -> OOM-Watchdog-OOM-Firing (severity 10, System/Emergency) -->
-    <MatchGroup name="OOM_FIRING" order="3"
-                description="JVM out-of-memory kill is occurring or imminent">
+    <MatchGroup name="OOM_FIRING" order="3" description="JVM out-of-memory kill is occurring or imminent">
       <MatchList>
         <SingleMatch>
           <MatchElement name="EventID" type="EQ">OOM_FIRING</MatchElement>
@@ -62,10 +34,7 @@
         <Description>JVM out-of-memory kill is occurring or imminent</Description>
       </QIDRecord>
     </MatchGroup>
-
-    <!-- Catch-all -> OOM-Watchdog (severity 7, System/Alert) -->
-    <MatchGroup name="OOM_CATCHALL" order="4"
-                description="Catch-all for any OOM Watchdog event not matched above">
+    <MatchGroup name="OOM_CATCHALL" order="4" description="Catch-all for any OOM Watchdog event not matched above">
       <MatchList>
         <SingleMatch>
           <MatchElement name="EventID" type="MATCHES">.*</MatchElement>
@@ -76,30 +45,5 @@
         <Description>OOM Watchdog alert - inspect riskLevel attribute for details</Description>
       </QIDRecord>
     </MatchGroup>
-
   </MatchGroups>
 </DeviceExtension>
-
-<!--
-  SINGLE-QID VARIANT
-  ==================
-  To show all OOM Watchdog events under one name "OOM-Watchdog" (regardless of
-  risk level), replace the entire DeviceExtension block above with this:
-
-  <DeviceExtension>
-    <MatchGroups>
-      <MatchGroup name="OOM_ALL" order="1"
-                  description="All OOM Watchdog events">
-        <MatchList>
-          <SingleMatch>
-            <MatchElement name="EventID" type="MATCHES">.*</MatchElement>
-          </SingleMatch>
-        </MatchList>
-        <QIDRecord category="8060" severity="7">
-          <Name>OOM-Watchdog</Name>
-          <Description>OOM Watchdog alert - inspect riskLevel attribute for details</Description>
-        </QIDRecord>
-      </MatchGroup>
-    </MatchGroups>
-  </DeviceExtension>
--->
