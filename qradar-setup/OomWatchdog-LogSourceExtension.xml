@@ -1,48 +1,20 @@
-<DeviceExtension>
-  <MatchGroups>
-    <MatchGroup name="OOM_WARNING" order="1" description="JVM heap approaching OOM threshold">
-      <MatchList>
-        <SingleMatch>
-          <MatchElement name="EventID" type="EQ">OOM_WARNING</MatchElement>
-        </SingleMatch>
-      </MatchList>
-      <QIDRecord category="8054" severity="5">
-        <Name>OOM-Watchdog-Warning</Name>
-        <Description>JVM heap approaching OOM threshold</Description>
-      </QIDRecord>
-    </MatchGroup>
-    <MatchGroup name="OOM_CRITICAL" order="2" description="JVM heap at critical level - OOM imminent">
-      <MatchList>
-        <SingleMatch>
-          <MatchElement name="EventID" type="EQ">OOM_CRITICAL</MatchElement>
-        </SingleMatch>
-      </MatchList>
-      <QIDRecord category="8056" severity="9">
-        <Name>OOM-Watchdog-Critical</Name>
-        <Description>JVM heap at critical level - OOM imminent</Description>
-      </QIDRecord>
-    </MatchGroup>
-    <MatchGroup name="OOM_FIRING" order="3" description="JVM out-of-memory kill is occurring or imminent">
-      <MatchList>
-        <SingleMatch>
-          <MatchElement name="EventID" type="EQ">OOM_FIRING</MatchElement>
-        </SingleMatch>
-      </MatchList>
-      <QIDRecord category="8061" severity="10">
-        <Name>OOM-Watchdog-OOM-Firing</Name>
-        <Description>JVM out-of-memory kill is occurring or imminent</Description>
-      </QIDRecord>
-    </MatchGroup>
-    <MatchGroup name="OOM_CATCHALL" order="4" description="Catch-all for any OOM Watchdog event not matched above">
-      <MatchList>
-        <SingleMatch>
-          <MatchElement name="EventID" type="MATCHES">.*</MatchElement>
-        </SingleMatch>
-      </MatchList>
-      <QIDRecord category="8060" severity="7">
-        <Name>OOM-Watchdog</Name>
-        <Description>OOM Watchdog alert - inspect riskLevel attribute for details</Description>
-      </QIDRecord>
-    </MatchGroup>
-  </MatchGroups>
-</DeviceExtension>
+<ns2:device-extension xmlns:ns2="event_parsing/device_extension">
+    <match-group event-name-filter="OOM_WARNING" order="1">
+        <event-match-single force-qidmap-lookup-on-fixup="true"
+            send-identity="OverrideAndAlwaysSendOnlySpecifiedFields"
+            device-event-category="OOM_WARNING"
+            event-name="OOM-Watchdog-Warning"/>
+    </match-group>
+    <match-group event-name-filter="OOM_CRITICAL" order="2">
+        <event-match-single force-qidmap-lookup-on-fixup="true"
+            send-identity="OverrideAndAlwaysSendOnlySpecifiedFields"
+            device-event-category="OOM_CRITICAL"
+            event-name="OOM-Watchdog-Critical"/>
+    </match-group>
+    <match-group event-name-filter="OOM_FIRING" order="3">
+        <event-match-single force-qidmap-lookup-on-fixup="true"
+            send-identity="OverrideAndAlwaysSendOnlySpecifiedFields"
+            device-event-category="OOM_FIRING"
+            event-name="OOM-Watchdog-OOM-Firing"/>
+    </match-group>
+</ns2:device-extension>
