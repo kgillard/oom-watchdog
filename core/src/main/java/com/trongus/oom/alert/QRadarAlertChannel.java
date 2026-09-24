@@ -80,7 +80,7 @@ import java.util.logging.Logger;
  * (guaranteed delivery) via the constructor.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.13.31
+ * @version 1.7.13.32
  * @since 1.0.0
  * @see AlertChannel
  * @see com.trongus.oom.model.JvmSnapshot
@@ -262,8 +262,15 @@ public final class QRadarAlertChannel implements AlertChannel {
         String syslogTimestamp = rfc3164Timestamp(snap.getTimestampMs());
         String syslogHeader    = String.format("<%d>%s %s ", SYSLOG_PRIORITY, syslogTimestamp, localHostname);
 
-        // LEEF 2.0 header
-        String eventId   = "OOM_" + snap.getRiskLevel().name();
+        // LEEF 2.0 header — EventID must match the QRadar custom QID record name exactly so
+        // QRadar maps incoming events to the right event name/category instead of "unknown".
+        // OomRiskLevel.WARNING → "OOM_WARNING", CRITICAL → "OOM_CRITICAL",
+        // OOM_FIRING → "OOM_FIRING" (already prefixed; avoid "OOM_OOM_FIRING").
+        String eventId;
+        switch (snap.getRiskLevel()) {
+            case OOM_FIRING: eventId = "OOM_FIRING";  break;
+            default:         eventId = "OOM_" + snap.getRiskLevel().name(); break;
+        }
         String leefHeader = String.format("LEEF:2.0|%s|%s|%s|%s|", VENDOR, PRODUCT, VERSION, eventId);
 
         // Severity mapping (QRadar scale 1–10)
