@@ -10,15 +10,22 @@ already exists before creating or modifying it.
 
 What it does
 ────────────
-  1.  Creates (or verifies) three custom QID event records so QRadar
-      correctly names and categorises incoming LEEF events instead of
-      showing them as "unknown":
+  1.  Creates (or verifies) four custom QID event records:
 
-        EventID        QID name      Severity  Category
-        ─────────────  ────────────  ────────  ─────────────────────────────
-        OOM_WARNING    OOM_WARNING   5         System / Warning
-        OOM_CRITICAL   OOM_CRITICAL  9         System / Critical
-        OOM_FIRING     OOM_FIRING    10        System / Emergency
+        QID name       QID      Severity  Category
+        ─────────────  ───────  ────────  ─────────────────────────────
+        OOM_WARNING    2000001  5         System / Warning
+        OOM_CRITICAL   2000002  9         System / Critical
+        OOM_FIRING     2000003  10        System / Emergency
+        OOM-Watchdog   2000004  7         System / Alert  ← catch-all
+
+      IMPORTANT: QRadar's Universal LEEF DSM (type_id=212) does NOT
+      use dsm_event_mappings for EventID lookup — it always assigns
+      QID 55000002 ("unknown") to every event.  The three per-risk-level
+      QIDs above are used only when the Log Source Extension XML is
+      attached (see Step 4 below and OomWatchdog-LogSourceExtension.xml).
+      Without the extension, all events show as "OOM-Watchdog" once the
+      extension is attached with the catch-all match.
 
   2.  Creates (or verifies) the log source "QRadar_OOM @ <hostname>"
       of type Universal LEEF (type_id=212) with the correct sending_ip
@@ -31,6 +38,19 @@ What it does
       is NOT Universal LEEF — these will intercept OOM Watchdog events
       before the correct log source can match them.  You are given the
       choice to disable them.
+
+  4.  (Manual — requires QRadar Console UI)
+      Upload OomWatchdog-LogSourceExtension.xml as a Log Source Extension
+      and attach it to the log source.  This is the ONLY way to make
+      QRadar's Universal LEEF DSM assign named QIDs per EventID.
+
+      Steps:
+        Admin → Log Source Extensions → Add
+          Name: OomWatchdog
+          Upload: qradar-setup/OomWatchdog-LogSourceExtension.xml
+        Admin → Log Sources → open "QRadar_OOM @ <host>"
+          Set "Log Source Extension" = OomWatchdog → Save
+        Admin → Deploy Changes
 
 Usage
 ─────
@@ -70,7 +90,14 @@ import ssl
 # These are standard built-in categories present on every QRadar deployment.
 #   8054 = "Warning"   under high-level category "System" (8000)
 #   8056 = "Critical"  under high-level category "System" (8000)
+#   8060 = "Alert"     under high-level category "System" (8000)
 #   8061 = "Emergency" under high-level category "System" (8000)
+#
+# NOTE: QRadar's Universal LEEF DSM (type_id=212) does NOT consult the
+# dsm_event_mappings table for EventID-based QID lookup — it always assigns
+# QID 55000002 ("unknown").  The QID records below are referenced by the
+# OomWatchdog-LogSourceExtension.xml file which overrides this behaviour
+# when uploaded via the QRadar Console UI (Admin → Log Source Extensions).
 # ─────────────────────────────────────────────────────────────────────────────
 QID_DEFINITIONS = [
     {
@@ -90,6 +117,12 @@ QID_DEFINITIONS = [
         "description":        "JVM out-of-memory kill is occurring or imminent",
         "severity":           10,
         "low_level_category_id": 8061,   # System / Emergency
+    },
+    {
+        "name":                "OOM-Watchdog",
+        "description":        "JVM OOM risk alert from OOM Watchdog. Inspect riskLevel, heapPct, and msg attributes.",
+        "severity":           7,
+        "low_level_category_id": 8060,   # System / Alert (catch-all)
     },
 ]
 
@@ -153,19 +186,26 @@ def setup_qid_records(host, token, dry_run):
     print("""
   WHY THIS MATTERS
   ────────────────
-  QRadar maps incoming LEEF events to a named event type (QID record) by
-  matching the LEEF 'EventID' field against the 'name' column of the
-  data_classification/qid_records table.
+  QRadar stores named event types in QID records.  Each incoming event is
+  assigned a QID which determines the Event Name, category, and default
+  severity shown in Log Activity.
 
-  OOM Watchdog sends three EventID values:
+  OOM Watchdog sends three LEEF EventID values:
     • OOM_WARNING  — heap is above the warning threshold
     • OOM_CRITICAL — heap is above the critical threshold
     • OOM_FIRING   — the JVM is actively being killed by the OS
 
-  Without matching QID records, ALL three fall through to QID 55000002
-  which has name="unknown" and category="Unknown".  This makes every
-  OOM Watchdog alert appear as a generic unknown event in Log Activity,
-  making it impossible to write meaningful offense rules or searches.
+  IMPORTANT LIMITATION: QRadar's Universal LEEF DSM (type_id=212) does NOT
+  use the dsm_event_mappings table for LEEF EventID → QID lookup.  It always
+  hardcodes QID 55000002 ("unknown") for every event regardless of EventID.
+
+  The QID records created here are prerequisites for the Log Source Extension
+  XML (OomWatchdog-LogSourceExtension.xml) which DOES perform the correct
+  per-EventID mapping when attached via the QRadar Console UI.
+
+  A fourth catch-all QID "OOM-Watchdog" is also created.  If you choose not
+  to install the Log Source Extension, you can use the catch-all match in
+  the XML variant to show "OOM-Watchdog" for all events instead of "unknown".
 """)
 
     # Fetch all existing QID records to check for name collisions
@@ -376,7 +416,7 @@ def scan_interfering_sources(host, token, sending_ip, our_log_source_id, dry_run
 
     if answer == "y":
         for s in conflicts:
-            result = qradar_request(host, token, "PUT",
+            result = qradar_request(host, token, "POST",
                 f"/config/event_sources/log_source_management/log_sources/{s['id']}",
                 {"enabled": False})
             if isinstance(result, dict) and result.get("enabled") is False:
@@ -395,23 +435,46 @@ def scan_interfering_sources(host, token, sending_ip, our_log_source_id, dry_run
 def print_summary(watchdog_host, sending_ip, log_source_name):
     h1("Summary — QRadar configuration checklist")
     print(f"""
-  ✅  QID records created/verified:
+  ✅  QID records created/verified (via API):
         OOM_WARNING   (qid=2000001, severity=5,  category=System/Warning)
         OOM_CRITICAL  (qid=2000002, severity=9,  category=System/Critical)
         OOM_FIRING    (qid=2000003, severity=10, category=System/Emergency)
+        OOM-Watchdog  (qid=2000004, severity=7,  category=System/Alert)
 
-  ✅  Log source created/verified:
+  ✅  Log source created/verified (via API):
         Name:         {log_source_name}
         Type:         Universal LEEF (type_id=212)
         Sending IP:   {sending_ip}
         Identifier:   {watchdog_host}
 
-  After running this script:
+  ⚠️   MANUAL STEP REQUIRED — Log Source Extension (QRadar Console UI):
   ─────────────────────────────────────────────────────────────────────────
-  1.  In QRadar console: Admin → Deploy Changes  (if log source was created)
+  QRadar's Universal LEEF DSM always assigns QID 55000002 ("unknown") to
+  every event.  The dsm_event_mappings API does NOT override this — the DSM
+  bypasses the mapping table entirely.
 
-  2.  Start OOM Watchdog on {watchdog_host}:
+  To get named event types (OOM_WARNING / OOM_CRITICAL / OOM_FIRING) or a
+  friendly catch-all name (OOM-Watchdog), you must attach a Log Source
+  Extension XML to the log source via the QRadar Console UI:
 
+    1.  Admin → Log Source Extensions → Add
+          Name:        OomWatchdog
+          Description: OOM Watchdog LEEF EventID to QID mapping
+          Upload:      qradar-setup/OomWatchdog-LogSourceExtension.xml
+        → Save
+
+    2.  Admin → Log Sources → find "{log_source_name}"
+          Log Source Extension: OomWatchdog
+        → Save
+
+    3.  Admin → Deploy Changes
+
+  After deploy, events will show:
+    OOM_WARNING / OOM_CRITICAL / OOM_FIRING  (three distinct event names)
+  or "OOM-Watchdog" for all events if you use the SingleQID variant in the XML.
+
+  Start OOM Watchdog on {watchdog_host}:
+  ─────────────────────────────────────────────────────────────────────────
         java -jar oom-watchdog.jar \\
             --daemon \\
             --targets-file targets.properties \\
@@ -421,23 +484,20 @@ def print_summary(watchdog_host, sending_ip, log_source_name):
             --warn-threshold 0.80 \\
             --crit-threshold 0.90
 
-  3.  Verify in QRadar Log Activity:
-        Filter: Log Source = "{log_source_name}"
-        Expected Event Name column values:
-          OOM_WARNING / OOM_CRITICAL / OOM_FIRING  (not "unknown")
-
-  4.  Create an offense rule (optional) — QRadar: Offenses → Rules → Add:
+  Create an offense rule (optional) — Offenses → Rules → Add:
+  ─────────────────────────────────────────────────────────────────────────
         Type:   Event
         When:   Event Name contains "OOM_CRITICAL" OR "OOM_FIRING"
+              (or "OOM-Watchdog" if using the single-QID XML variant)
         Action: Assign Magnitude=8, enable Notify
 
   Troubleshooting
   ─────────────────────────────────────────────────────────────────────────
-  Events still "unknown"?
-    → Re-run this script: the QID records may not have been created.
-    → Check OOM Watchdog log: "LEEF event sent" line should show /TCP.
-    → Confirm log source 'sending_ip' matches what QRadar sees as the
-      source IP (check /var/log/qradar.log on the Event Processor).
+  Events still "unknown" after attaching the extension?
+    → Confirm Deploy Changes completed (Admin → System Notifications).
+    → Verify the extension is attached: Admin → Log Sources → open the
+      log source → check "Log Source Extension" field is set to "OomWatchdog".
+    → Re-run this script to confirm the QID records (2000001–2000004) exist.
 
   Events not appearing at all?
     → Re-run step 3 of this script — another log source may be intercepting.

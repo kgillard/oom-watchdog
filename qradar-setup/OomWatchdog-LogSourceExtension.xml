@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  OOM Watchdog — QRadar Log Source Extension
+  ───────────────────────────────────────────
+  This XML file instructs QRadar how to map incoming LEEF events from
+  OOM Watchdog to named event types (QIDs) instead of "unknown".
+
+  HOW TO INSTALL (one-time, per QRadar environment):
+  ─────────────────────────────────────────────────
+  1.  Log in to the QRadar Console as an administrator.
+  2.  Click the Admin tab → scroll to "Data Sources" → click "Log Source Extensions".
+  3.  Click "Add" (top-left toolbar button).
+  4.  Fill in:
+        Name:        OomWatchdog
+        Description: OOM Watchdog LEEF 2.0 event ID to QID mapping
+  5.  Under "Log Source Extension Document", click "Browse" and upload this file.
+  6.  Click "Save".
+  7.  Go to Admin → Log Sources → find "QRadar_OOM @ <hostname>".
+  8.  Open the log source, set "Log Source Extension" to "OomWatchdog".
+  9.  Click "Save", then Admin → "Deploy Changes".
+
+  WHAT THIS DOES:
+  ───────────────
+  QRadar's Universal LEEF DSM (type_id=212) always assigns every incoming LEEF
+  event to QID 55000002 ("unknown") regardless of the LEEF EventID field.
+  This extension overrides that behaviour for the attached log source by
+  matching the EventID (OOM_WARNING / OOM_CRITICAL / OOM_FIRING) and routing
+  each one to a named custom QID with the correct severity and category.
+
+  PREREQUISITES:
+  ──────────────
+  Run oom-watchdog-qradar-setup.py first to create the three QID records:
+    OOM_WARNING  (qid=2000001, severity=5,  category=System/Warning)
+    OOM_CRITICAL (qid=2000002, severity=9,  category=System/Critical)
+    OOM_FIRING   (qid=2000003, severity=10, category=System/Emergency)
+
+  If you want a single event name ("OOM-Watchdog") for all risk levels instead
+  of three separate names, use the SingleQID variant in the comment at the bottom.
+-->
+<LogSourceExtension name="OomWatchdog" id="com.trongus.oom.watchdog" version="1.0.0"
+                    use_condition="ALWAYS">
+
+  <!--
+    Match OOM_WARNING events.
+    Severity 5 · Category: System / Warning
+    QID 2000001 must exist — create it with oom-watchdog-qradar-setup.py first.
+  -->
+  <Match order="1">
+    <DeviceEventCategory>OOM_WARNING</DeviceEventCategory>
+    <QIDRecord>
+      <Name>OOM_WARNING</Name>
+      <QID>2000001</QID>
+    </QIDRecord>
+  </Match>
+
+  <!--
+    Match OOM_CRITICAL events.
+    Severity 9 · Category: System / Critical
+    QID 2000002 must exist — create it with oom-watchdog-qradar-setup.py first.
+  -->
+  <Match order="2">
+    <DeviceEventCategory>OOM_CRITICAL</DeviceEventCategory>
+    <QIDRecord>
+      <Name>OOM_CRITICAL</Name>
+      <QID>2000002</QID>
+    </QIDRecord>
+  </Match>
+
+  <!--
+    Match OOM_FIRING events.
+    Severity 10 · Category: System / Emergency
+    QID 2000003 must exist — create it with oom-watchdog-qradar-setup.py first.
+  -->
+  <Match order="3">
+    <DeviceEventCategory>OOM_FIRING</DeviceEventCategory>
+    <QIDRecord>
+      <Name>OOM_FIRING</Name>
+      <QID>2000003</QID>
+    </QIDRecord>
+  </Match>
+
+  <!--
+    Catch-all: any OOM Watchdog event that doesn't match the above
+    (e.g. future risk levels) maps to "OOM-Watchdog" rather than "unknown".
+    QID 2000004 is created by oom-watchdog-qradar-setup.py.
+  -->
+  <Match order="4">
+    <DeviceEventCategory>.*</DeviceEventCategory>
+    <QIDRecord>
+      <Name>OOM-Watchdog</Name>
+      <QID>2000004</QID>
+    </QIDRecord>
+  </Match>
+
+</LogSourceExtension>
+
+<!--
+  ═══════════════════════════════════════════════════════════════════════════
+  SINGLE-QID VARIANT
+  ═══════════════════════════════════════════════════════════════════════════
+  If you want ALL OOM Watchdog events (regardless of risk level) to appear
+  under a single event name "OOM-Watchdog" in Log Activity, replace the
+  entire <LogSourceExtension> block above with this simpler version.
+
+  The riskLevel, heapPct, and msg LEEF attributes are still fully parsed and
+  searchable — you just get one event name in the Event Name column.
+
+  <LogSourceExtension name="OomWatchdog" id="com.trongus.oom.watchdog" version="1.0.0"
+                      use_condition="ALWAYS">
+    <Match order="1">
+      <DeviceEventCategory>.*</DeviceEventCategory>
+      <QIDRecord>
+        <Name>OOM-Watchdog</Name>
+        <QID>2000004</QID>
+      </QIDRecord>
+    </Match>
+  </LogSourceExtension>
+-->
