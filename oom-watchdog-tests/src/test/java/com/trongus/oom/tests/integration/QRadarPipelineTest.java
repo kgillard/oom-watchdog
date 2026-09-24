@@ -41,7 +41,7 @@ import static org.junit.Assert.*;
  * no network or QRadar installation is required.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.13.30
+ * @version 1.7.13.31
  * @since 1.7.10
  */
 public class QRadarPipelineTest {

@@ -80,7 +80,7 @@ import java.util.logging.Logger;
  * (guaranteed delivery) via the constructor.
  *
  * @author <a href="mailto:kristen.gillard@gmail.com">Kristen Gillard</a>
- * @version 1.7.13.30
+ * @version 1.7.13.31
  * @since 1.0.0
  * @see AlertChannel
  * @see com.trongus.oom.model.JvmSnapshot
@@ -111,18 +111,24 @@ public final class QRadarAlertChannel implements AlertChannel {
     private final Transport transport;
 
     /**
-     * The hostname placed in the RFC 3164 syslog header and used as the TCP destination
-     * when {@link #localDestination} is {@code true}.
+     * The local hostname placed in the RFC 3164 syslog header.
      *
-     * <p>QRadar matches incoming events to a log source by comparing the syslog header
-     * hostname against the log source's {@code identifier} field.  When the log source
-     * identifier is set to an IP address (e.g. {@code 9.60.246.81}), the syslog header
-     * hostname must also be that IP address, not the OS hostname (e.g. {@code ollie}).
+     * <p>QRadar matches incoming events to a log source by comparing this value against
+     * the log source {@code identifier} protocol parameter.  The log source identifier
+     * must be set to the fully-qualified domain name or hostname that
+     * {@link InetAddress#getLocalHost()} returns on the machine running oom-watchdog
+     * (e.g. {@code ollie.dev.fyre.ibm.com}).
      *
-     * <p>For same-host deployments (where {@link #localDestination} is {@code true}) this
-     * field is set to the machine's first non-loopback IPv4 address so both the TCP
-     * destination and the syslog header hostname equal the NIC IP.  For remote deployments
-     * it equals {@link #qradarHost}.
+     * @since 1.0.0
+     */
+    private final String    localHostname;
+
+    /**
+     * The effective TCP destination address used when {@link #localDestination} is
+     * {@code true}.  Equals the machine's first non-loopback IPv4 NIC address so the
+     * TCP connection reaches QRadar's {@code ecs} syslog listener on the physical
+     * interface.  Distinct from {@link #localHostname} — used only for routing,
+     * not placed in the syslog header.
      *
      * @since 1.7.13.27
      */
@@ -149,6 +155,7 @@ public final class QRadarAlertChannel implements AlertChannel {
         this.qradarHost       = qradarHost;
         this.qradarPort       = qradarPort;
         this.transport        = transport;
+        this.localHostname    = resolveLocalHostname();
         this.localDestination = isLocalAddress(qradarHost);
         if (this.localDestination) {
             // When the configured qradar-host is a loopback address (e.g. 127.0.0.1), QRadar's
@@ -249,10 +256,11 @@ public final class QRadarAlertChannel implements AlertChannel {
     private String buildLeefMessage(JvmSnapshot snap) {
         long mb = 1024L * 1024L;
 
-        // RFC 3164 syslog header — use effectiveTcpHost as the hostname field so it matches
-        // the log source identifier in QRadar (which is set to the NIC IP, not the OS hostname).
+        // RFC 3164 syslog header — hostname must match the log source identifier in QRadar.
+        // The log source identifier should be set to this machine's FQDN/hostname
+        // (i.e. the value of InetAddress.getLocalHost().getHostName()).
         String syslogTimestamp = rfc3164Timestamp(snap.getTimestampMs());
-        String syslogHeader    = String.format("<%d>%s %s ", SYSLOG_PRIORITY, syslogTimestamp, effectiveTcpHost);
+        String syslogHeader    = String.format("<%d>%s %s ", SYSLOG_PRIORITY, syslogTimestamp, localHostname);
 
         // LEEF 2.0 header
         String eventId   = "OOM_" + snap.getRiskLevel().name();
@@ -448,6 +456,24 @@ public final class QRadarAlertChannel implements AlertChannel {
         return sdf.format(new Date(epochMs));
     }
 
+
+    /**
+     * Resolves the local hostname for use in the RFC 3164 syslog header.
+     *
+     * <p>The returned value is used as the {@code HOSTNAME} field in every outgoing syslog
+     * frame.  The QRadar log source {@code identifier} must be configured to this same value
+     * (e.g. {@code ollie.dev.fyre.ibm.com}) for QRadar to map incoming events to the log source.
+     *
+     * @return FQDN or short hostname of the local machine; falls back to {@code "localhost"}
+     *         if resolution fails
+     */
+    private static String resolveLocalHostname() {
+        try {
+            return InetAddress.getLocalHost().getHostName();
+        } catch (Exception e) {
+            return "localhost";
+        }
+    }
 
     /**
      * Returns {@code true} if {@code host} resolves to any IP address currently assigned
