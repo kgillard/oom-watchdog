@@ -101,19 +101,19 @@ import ssl
 # ─────────────────────────────────────────────────────────────────────────────
 QID_DEFINITIONS = [
     {
-        "name":                "OOM_WARNING",
+        "name":                "OOM-Watchdog-Warning",
         "description":        "JVM heap approaching OOM threshold",
         "severity":           5,
         "low_level_category_id": 8054,   # System / Warning
     },
     {
-        "name":                "OOM_CRITICAL",
+        "name":                "OOM-Watchdog-Critical",
         "description":        "JVM heap at critical level - OOM imminent",
         "severity":           9,
         "low_level_category_id": 8056,   # System / Critical
     },
     {
-        "name":                "OOM_FIRING",
+        "name":                "OOM-Watchdog-OOM-Firing",
         "description":        "JVM out-of-memory kill is occurring or imminent",
         "severity":           10,
         "low_level_category_id": 8061,   # System / Emergency
@@ -436,10 +436,10 @@ def print_summary(watchdog_host, sending_ip, log_source_name):
     h1("Summary — QRadar configuration checklist")
     print(f"""
   ✅  QID records created/verified (via API):
-        OOM_WARNING   (qid=2000001, severity=5,  category=System/Warning)
-        OOM_CRITICAL  (qid=2000002, severity=9,  category=System/Critical)
-        OOM_FIRING    (qid=2000003, severity=10, category=System/Emergency)
-        OOM-Watchdog  (qid=2000004, severity=7,  category=System/Alert)
+        OOM-Watchdog-Warning    (qid=2000001, severity=5,  category=System/Warning)
+        OOM-Watchdog-Critical   (qid=2000002, severity=9,  category=System/Critical)
+        OOM-Watchdog-OOM-Firing (qid=2000003, severity=10, category=System/Emergency)
+        OOM-Watchdog            (qid=2000004, severity=7,  category=System/Alert)
 
   ✅  Log source created/verified (via API):
         Name:         {log_source_name}
@@ -470,7 +470,7 @@ def print_summary(watchdog_host, sending_ip, log_source_name):
     3.  Admin → Deploy Changes
 
   After deploy, events will show:
-    OOM_WARNING / OOM_CRITICAL / OOM_FIRING  (three distinct event names)
+    OOM-Watchdog-Warning / OOM-Watchdog-Critical / OOM-Watchdog-OOM-Firing
   or "OOM-Watchdog" for all events if you use the SingleQID variant in the XML.
 
   Start OOM Watchdog on {watchdog_host}:
@@ -487,7 +487,7 @@ def print_summary(watchdog_host, sending_ip, log_source_name):
   Create an offense rule (optional) — Offenses → Rules → Add:
   ─────────────────────────────────────────────────────────────────────────
         Type:   Event
-        When:   Event Name contains "OOM_CRITICAL" OR "OOM_FIRING"
+        When:   Event Name contains "OOM-Watchdog-Critical" OR "OOM-Watchdog-OOM-Firing"
               (or "OOM-Watchdog" if using the single-QID XML variant)
         Action: Assign Magnitude=8, enable Notify
 

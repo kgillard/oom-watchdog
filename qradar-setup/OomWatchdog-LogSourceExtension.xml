@@ -29,52 +29,53 @@
 
   PREREQUISITES:
   ──────────────
-  Run oom-watchdog-qradar-setup.py first to create the three QID records:
-    OOM_WARNING  (qid=2000001, severity=5,  category=System/Warning)
-    OOM_CRITICAL (qid=2000002, severity=9,  category=System/Critical)
-    OOM_FIRING   (qid=2000003, severity=10, category=System/Emergency)
+  Run oom-watchdog-qradar-setup.py first to create the QID records:
+    OOM-Watchdog-Warning   (qid=2000001, severity=5,  category=System/Warning)
+    OOM-Watchdog-Critical  (qid=2000002, severity=9,  category=System/Critical)
+    OOM-Watchdog-OOM-Firing(qid=2000003, severity=10, category=System/Emergency)
+    OOM-Watchdog           (qid=2000004, severity=7,  category=System/Alert)
 
-  If you want a single event name ("OOM-Watchdog") for all risk levels instead
-  of three separate names, use the SingleQID variant in the comment at the bottom.
+  If you want ALL events under a single name ("OOM-Watchdog") instead of three
+  separate names, use the SingleQID variant in the comment at the bottom.
 -->
 <LogSourceExtension name="OomWatchdog" id="com.trongus.oom.watchdog" version="1.0.0"
                     use_condition="ALWAYS">
 
   <!--
     Match OOM_WARNING events.
-    Severity 5 · Category: System / Warning
+    Event Name: OOM-Watchdog-Warning  ·  Severity 5  ·  Category: System / Warning
     QID 2000001 must exist — create it with oom-watchdog-qradar-setup.py first.
   -->
   <Match order="1">
     <DeviceEventCategory>OOM_WARNING</DeviceEventCategory>
     <QIDRecord>
-      <Name>OOM_WARNING</Name>
+      <Name>OOM-Watchdog-Warning</Name>
       <QID>2000001</QID>
     </QIDRecord>
   </Match>
 
   <!--
     Match OOM_CRITICAL events.
-    Severity 9 · Category: System / Critical
+    Event Name: OOM-Watchdog-Critical  ·  Severity 9  ·  Category: System / Critical
     QID 2000002 must exist — create it with oom-watchdog-qradar-setup.py first.
   -->
   <Match order="2">
     <DeviceEventCategory>OOM_CRITICAL</DeviceEventCategory>
     <QIDRecord>
-      <Name>OOM_CRITICAL</Name>
+      <Name>OOM-Watchdog-Critical</Name>
       <QID>2000002</QID>
     </QIDRecord>
   </Match>
 
   <!--
     Match OOM_FIRING events.
-    Severity 10 · Category: System / Emergency
+    Event Name: OOM-Watchdog-OOM-Firing  ·  Severity 10  ·  Category: System / Emergency
     QID 2000003 must exist — create it with oom-watchdog-qradar-setup.py first.
   -->
   <Match order="3">
     <DeviceEventCategory>OOM_FIRING</DeviceEventCategory>
     <QIDRecord>
-      <Name>OOM_FIRING</Name>
+      <Name>OOM-Watchdog-OOM-Firing</Name>
       <QID>2000003</QID>
     </QIDRecord>
   </Match>
