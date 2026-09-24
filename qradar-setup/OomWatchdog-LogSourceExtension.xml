@@ -1,20 +1,98 @@
-<ns2:device-extension xmlns:ns2="event_parsing/device_extension">
-    <match-group event-name-filter="OOM_WARNING" order="1">
-        <event-match-single force-qidmap-lookup-on-fixup="true"
-            send-identity="OverrideAndAlwaysSendOnlySpecifiedFields"
-            device-event-category="OOM_WARNING"
-            event-name="OOM-Watchdog-Warning"/>
-    </match-group>
-    <match-group event-name-filter="OOM_CRITICAL" order="2">
-        <event-match-single force-qidmap-lookup-on-fixup="true"
-            send-identity="OverrideAndAlwaysSendOnlySpecifiedFields"
-            device-event-category="OOM_CRITICAL"
-            event-name="OOM-Watchdog-Critical"/>
-    </match-group>
-    <match-group event-name-filter="OOM_FIRING" order="3">
-        <event-match-single force-qidmap-lookup-on-fixup="true"
-            send-identity="OverrideAndAlwaysSendOnlySpecifiedFields"
-            device-event-category="OOM_FIRING"
-            event-name="OOM-Watchdog-OOM-Firing"/>
-    </match-group>
-</ns2:device-extension>
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  OOM Watchdog -- QRadar Log Source Extension
+  ============================================
+  Maps LEEF EventID values (OOM_WARNING / OOM_CRITICAL / OOM_FIRING) to
+  named QRadar event types instead of showing "unknown" in Log Activity.
+
+  HOW TO INSTALL (one-time, per QRadar environment):
+  --------------------------------------------------
+  1. Log in to the QRadar Console as an administrator.
+  2. Click Admin tab > Data Sources > Log Source Extensions.
+  3. Click "Add" (top-left toolbar).
+  4. Fill in:
+       Name:        OomWatchdog
+       Description: OOM Watchdog LEEF 2.0 event ID to QID mapping
+  5. Under "Log Source Extension Document", browse and upload this file.
+  6. Click "Save".
+  7. Go to Admin > Log Sources > find "QRadar_OOM @ hostname".
+  8. Open the log source, set "Log Source Extension" to "OomWatchdog".
+  9. Click "Save", then Admin > "Deploy Changes".
+
+  PREREQUISITES:
+  --------------
+  Run qradar-setup/oom-watchdog-qradar-setup.py first to create the QID
+  records that event-match-single looks up by event-name:
+    OOM-Watchdog-Warning   (qid=2000001, severity=5,  category=8054)
+    OOM-Watchdog-Critical  (qid=2000002, severity=9,  category=8056)
+    OOM-Watchdog-OOM-Firing (qid=2000003, severity=10, category=8061)
+    OOM-Watchdog            (qid=2000004, severity=7,  category=8060)
+-->
+<device-extension xmlns="event_parsing/device_extension">
+
+  <!-- Patterns: each captures the full EventID token as group 1 -->
+  <pattern id="OOM_WARNING_Pat">(OOM_WARNING)</pattern>
+  <pattern id="OOM_CRITICAL_Pat">(OOM_CRITICAL)</pattern>
+  <pattern id="OOM_FIRING_Pat">(OOM_FIRING)</pattern>
+  <!-- Catch-all: matches any non-empty EventID -->
+  <pattern id="OOM_ANY_Pat">([A-Za-z0-9_]+)</pattern>
+
+  <!--
+    Match group 1: OOM_WARNING
+    The matcher parses EventName from the LEEF payload (matching OOM_WARNING).
+    The event-match-single then looks up QID by event-name "OOM-Watchdog-Warning".
+  -->
+  <match-group order="1" description="OOM Watchdog - Warning threshold">
+    <matcher field="EventName" order="1"
+             pattern-id="OOM_WARNING_Pat" capture-group="1"/>
+    <event-match-single
+        event-name="OOM-Watchdog-Warning"
+        force-qidmap-lookup-on-fixup="true"
+        device-event-category="OOM_WARNING"
+        send-identity="OverrideAndAlwaysSendOnlySpecifiedFields"/>
+  </match-group>
+
+  <!--
+    Match group 2: OOM_CRITICAL
+    Parses EventName matching OOM_CRITICAL, maps to "OOM-Watchdog-Critical".
+  -->
+  <match-group order="2" description="OOM Watchdog - Critical threshold">
+    <matcher field="EventName" order="1"
+             pattern-id="OOM_CRITICAL_Pat" capture-group="1"/>
+    <event-match-single
+        event-name="OOM-Watchdog-Critical"
+        force-qidmap-lookup-on-fixup="true"
+        device-event-category="OOM_CRITICAL"
+        send-identity="OverrideAndAlwaysSendOnlySpecifiedFields"/>
+  </match-group>
+
+  <!--
+    Match group 3: OOM_FIRING
+    Parses EventName matching OOM_FIRING, maps to "OOM-Watchdog-OOM-Firing".
+  -->
+  <match-group order="3" description="OOM Watchdog - OOM is firing">
+    <matcher field="EventName" order="1"
+             pattern-id="OOM_FIRING_Pat" capture-group="1"/>
+    <event-match-single
+        event-name="OOM-Watchdog-OOM-Firing"
+        force-qidmap-lookup-on-fixup="true"
+        device-event-category="OOM_FIRING"
+        send-identity="OverrideAndAlwaysSendOnlySpecifiedFields"/>
+  </match-group>
+
+  <!--
+    Match group 4: catch-all
+    Any OOM Watchdog event not matched above (e.g. future risk levels)
+    maps to the generic "OOM-Watchdog" QID rather than "unknown".
+  -->
+  <match-group order="4" description="OOM Watchdog - catch-all">
+    <matcher field="EventName" order="1"
+             pattern-id="OOM_ANY_Pat" capture-group="1"/>
+    <event-match-single
+        event-name="OOM-Watchdog"
+        force-qidmap-lookup-on-fixup="true"
+        device-event-category="OOM_WATCHDOG"
+        send-identity="OverrideAndAlwaysSendOnlySpecifiedFields"/>
+  </match-group>
+
+</device-extension>
