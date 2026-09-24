@@ -1,4 +1,3 @@
-<?xml version="1.0"?>
 <DeviceExtension>
   <MatchGroups>
     <MatchGroup name="OOM_WARNING" order="1" description="JVM heap approaching OOM threshold">
