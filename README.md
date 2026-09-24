@@ -691,6 +691,37 @@ Before OOM Watchdog events appear in QRadar offenses or searches, QRadar must ha
 
 The steps below apply to QRadar 7.4 and 7.5 (SIEM and XDR editions). Screenshots differ slightly between versions, but the field names are identical.
 
+##### Automated setup (recommended)
+
+A ready-to-run Python script in [`qradar-setup/oom-watchdog-qradar-setup.py`](qradar-setup/oom-watchdog-qradar-setup.py) automates all three of the configuration tasks described in this section.  Run it once on every new QRadar environment — it is **idempotent** (safe to re-run).
+
+```bash
+python3 qradar-setup/oom-watchdog-qradar-setup.py \
+    --qradar-host  <QRADAR_EP_IP>           \
+    --token        <QRADAR_API_TOKEN>        \
+    --watchdog-host <WATCHDOG_HOSTNAME_FQDN>
+
+# Same-host (OOM Watchdog runs on the QRadar box itself):
+python3 qradar-setup/oom-watchdog-qradar-setup.py \
+    --qradar-host  9.60.246.81 \
+    --token        <QRADAR_API_TOKEN> \
+    --watchdog-host ollie.dev.fyre.ibm.com \
+    --sending-ip   127.0.0.1
+
+# Preview changes without making them:
+python3 qradar-setup/oom-watchdog-qradar-setup.py ... --dry-run
+```
+
+The script:
+
+1. **Creates custom QID records** (`OOM_WARNING`, `OOM_CRITICAL`, `OOM_FIRING`) so events are named and categorised instead of showing as _"unknown"_.
+2. **Creates the log source** (`Universal LEEF`, correct `sending_ip` and `identifier`) if it doesn't already exist.
+3. **Scans for interfering log sources** — auto-discovered sources (McAfee NSP, Cisco ASA, generic Syslog) that share the same `sending_ip` and have `parsing_order=1` will intercept all events before the correct log source sees them.  The script identifies them and offers to disable them interactively.
+
+The manual steps below explain _why_ each of these things matters.
+
+---
+
 ##### Step 1 — Confirm the syslog port is reachable
 
 OOM Watchdog sends syslog to the host and port you supply via `--qradar-host` / `--qradar-port`. That host must be a QRadar **All-in-One**, **Event Processor**, or **QRadar Event Collector** (not a Console-only appliance).
